@@ -29,6 +29,11 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewRescheduleEventTool() mcp.Tool {
 	return mcp.NewTool("calendar_reschedule_event",
+		mcp.WithTitleAnnotation("Reschedule Event"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Move an event to a new time, preserving its original duration. "+
 				"Only the new start time is required; the end time is computed automatically. "+

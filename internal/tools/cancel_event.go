@@ -27,6 +27,11 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewCancelEventTool() mcp.Tool {
 	return mcp.NewTool("calendar_cancel_event",
+		mcp.WithTitleAnnotation("Cancel Calendar Event"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Cancel a meeting and send a cancellation message to all attendees. "+
 				"Only the meeting organizer can cancel; non-organizers will receive an "+

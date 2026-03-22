@@ -36,6 +36,11 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewAddAccountTool() mcp.Tool {
 	return mcp.NewTool("account_add",
+		mcp.WithTitleAnnotation("Add Account"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Add and authenticate a new Microsoft account. "+
 				"Creates a per-account credential with isolated token cache and auth record.",

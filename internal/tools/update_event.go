@@ -28,6 +28,11 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewUpdateEventTool() mcp.Tool {
 	return mcp.NewTool("calendar_update_event",
+		mcp.WithTitleAnnotation("Update Calendar Event"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Update an existing calendar event. Only specified fields are changed "+
 				"(PATCH semantics). Automatically sends update notifications to "+

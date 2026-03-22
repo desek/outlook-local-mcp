@@ -75,7 +75,11 @@ KQL syntax reference:
 - Combine with AND/OR: subject:"Sprint" AND from:alice@contoso.com
 
 Note: $search cannot be combined with $filter or $orderby. Results are ranked by relevance, not chronologically. For chronological listing with structured filters, use mail_list_messages instead.`),
+		mcp.WithTitleAnnotation("Search Email Messages"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("query",
 			mcp.Required(),
 			mcp.Description("KQL search string (e.g., subject:\"Design Review\" from:alice@contoso.com). See tool description for syntax reference."),

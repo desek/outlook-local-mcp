@@ -27,7 +27,11 @@ import (
 func NewStatusTool() mcp.Tool {
 	return mcp.NewTool("status",
 		mcp.WithDescription("Return server health summary: version, timezone, account authentication state, and uptime. No parameters required. Does not call Graph API."),
+		mcp.WithTitleAnnotation("Server Status"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("output",
 			mcp.Description("Output mode: 'text' (default) returns plain-text health summary, 'summary' returns compact JSON with full config, 'raw' returns full JSON with all config groups."),
 			mcp.Enum("text", "summary", "raw"),

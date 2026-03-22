@@ -1,14 +1,15 @@
 ---
 id: "CR-0052"
-status: "proposed"
+status: "completed"
 date: 2026-03-22
+completed-date: 2026-03-22
 requestor: Daniel Grenemark
 stakeholders:
   - Daniel Grenemark
 priority: "high"
 target-version: "0.2.0"
-source-branch: fix-manifest
-source-commit: beddb37
+source-branch: feat/cr-0052-tool-annotations
+source-commit: ca866c8
 ---
 
 # MCP Tool Annotations for Directory Compliance
@@ -322,20 +323,20 @@ Then the build succeeds
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
-- [ ] Any linter exceptions are documented with justification
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
+- [x] Any linter exceptions are documented with justification
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new annotation tests pass
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new annotation tests pass
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 

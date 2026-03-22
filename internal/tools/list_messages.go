@@ -68,7 +68,11 @@ var listMessagesFullSelectFields = []string{
 func NewListMessagesTool() mcp.Tool {
 	return mcp.NewTool("mail_list_messages",
 		mcp.WithDescription("List email messages in a mail folder or across all folders. Supports filtering by date range, sender, and conversation ID via OData $filter. Use mail_list_folders to discover folder IDs. For full-text search, use mail_search_messages instead."),
+		mcp.WithTitleAnnotation("List Email Messages"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("folder_id",
 			mcp.Description("Mail folder ID to list messages from. If omitted, lists from all folders. Use mail_list_folders to discover folder IDs."),
 		),

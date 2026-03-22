@@ -26,6 +26,11 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewDeleteEventTool() mcp.Tool {
 	return mcp.NewTool("calendar_delete_event",
+		mcp.WithTitleAnnotation("Delete Calendar Event"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Delete a calendar event by ID. When the organizer deletes a meeting, "+
 				"cancellation notices are automatically sent to all attendees. When an "+

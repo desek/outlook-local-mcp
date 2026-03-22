@@ -38,6 +38,11 @@ const maxAttendees = 500
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewCreateEventTool() mcp.Tool {
 	return mcp.NewTool("calendar_create_event",
+		mcp.WithTitleAnnotation("Create Calendar Event"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Create a new calendar event. Supports attendees (sends invitations "+
 				"automatically), Teams online meetings, recurrence, and all standard "+

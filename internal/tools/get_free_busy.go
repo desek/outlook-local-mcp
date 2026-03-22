@@ -44,7 +44,11 @@ func NewGetFreeBusyTool() mcp.Tool {
 				"(events where showAs is not 'free') with start, end, status, and subject. "+
 				"Provide either 'date' for day/week shorthand, or explicit start/end datetimes.",
 		),
+		mcp.WithTitleAnnotation("Get Free/Busy Schedule"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("date",
 			mcp.Description("Date shorthand: 'today', 'tomorrow', 'this_week', 'next_week', or ISO 8601 date (YYYY-MM-DD). Expands to start/end boundaries in the configured timezone. When start_datetime/end_datetime are also provided, they take precedence."),
 		),
