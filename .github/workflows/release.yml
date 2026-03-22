@@ -1,0 +1,124 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  build-desktop:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            deps: libsecret-1-dev
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+    runs-on: ${{ matrix.os }}
+    env:
+      MISE_AUTO_INSTALL: "false"
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: jdx/mise-action@v4
+        with:
+          install_args: "go goreleaser"
+      - name: Install C dependencies
+        if: matrix.deps != ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ${{ matrix.deps }}
+      - name: Build desktop binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: goreleaser build --single-target --id desktop --clean
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-desktop-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/
+          retention-days: 1
+
+  release:
+    needs: [release-please, build-desktop]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v4
+        with:
+          install_args: "npm:@anthropic-ai/mcpb"
+      - name: Download desktop artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: dist-desktop-*
+          path: dist-parts/
+      - name: Create archives and checksums
+        run: |
+          RELEASE_DIR="$PWD/dist/release"
+          mkdir -p "$RELEASE_DIR"
+          for part in dist-parts/*/; do
+            for dir in "$part"desktop_*/; do
+              [ -d "$dir" ] || continue
+              name=$(basename "$dir")
+              os=$(echo "$name" | cut -d_ -f2)
+              arch=$(echo "$name" | cut -d_ -f3)
+              if [ "$os" = "windows" ]; then
+                (cd "$dir" && zip "$RELEASE_DIR/outlook-local-mcp-${os}-${arch}.zip" outlook-local-mcp.exe)
+              else
+                tar -czf "$RELEASE_DIR/outlook-local-mcp-${os}-${arch}.tar.gz" -C "$dir" outlook-local-mcp
+              fi
+            done
+          done
+          (cd "$RELEASE_DIR" && sha256sum * > checksums.txt)
+      - name: Prepare MCPB extension
+        run: |
+          mkdir -p extension/bin
+          DARWIN_ARM64=$(find dist-parts -path "*darwin_arm64*/outlook-local-mcp" -type f)
+          WINDOWS_AMD64=$(find dist-parts -path "*windows_amd64*/outlook-local-mcp.exe" -type f)
+          cp "$DARWIN_ARM64" extension/bin/outlook-local-mcp-darwin-arm64
+          cp "$WINDOWS_AMD64" extension/bin/outlook-local-mcp-win32-x64.exe
+          chmod +x extension/bin/outlook-local-mcp-darwin-arm64
+      - name: Inject version into manifest
+        run: |
+          VERSION="${{ needs.release-please.outputs.tag_name }}"
+          VERSION="${VERSION#v}"
+          jq --arg v "$VERSION" '.version = $v' extension/manifest.json > extension/manifest.tmp.json
+          mv extension/manifest.tmp.json extension/manifest.json
+      - name: Validate MCPB manifest
+        run: mcpb validate extension/manifest.json
+      - name: Pack MCPB bundle
+        run: mcpb pack extension/ outlook-local-mcp.mcpb
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload ${{ needs.release-please.outputs.tag_name }} \
+            dist/release/* \
+            outlook-local-mcp.mcpb \
+            --clobber

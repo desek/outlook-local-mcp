@@ -1,0 +1,55 @@
+{
+  "$schema": "https://raw.githubusercontent.com/desek/outlook-local-mcp/main/infra/app-registration.schema.json",
+  "_comment": "Master definition for the Outlook Local MCP Azure AD app registration. Apply with: ./infra/apply-app-registration.sh",
+  "_appId": "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3",
+  "_objectId": "34e5f032-8c6d-4991-a82e-8dfb31a9c464",
+
+  "displayName": "Outlook Local MCP",
+  "description": "A local Model Context Protocol (MCP) server providing calendar management tools via Microsoft Graph API. Runs as a single Go binary on your machine. Requires delegated permissions: Calendars.ReadWrite and User.Read.",
+  "notes": "Project: outlook-local-mcp | Multi-tenant app registration for the Outlook Local MCP Server | Supports auth_code (default), browser, and device_code OAuth flows | Client ID friendly name: outlook-local-mcp | Repo: https://github.com/desek/outlook-local-mcp",
+  "signInAudience": "AzureADMultipleOrgs",
+  "isFallbackPublicClient": true,
+  "tags": [
+    "mcp-server",
+    "calendar",
+    "microsoft-graph",
+    "outlook"
+  ],
+
+  "info": {
+    "marketingUrl": "https://github.com/desek/outlook-local-mcp",
+    "supportUrl": "https://github.com/desek/outlook-local-mcp/issues",
+    "privacyStatementUrl": "https://github.com/desek/outlook-local-mcp#privacy",
+    "termsOfServiceUrl": "https://github.com/desek/outlook-local-mcp#license"
+  },
+
+  "publicClient": {
+    "redirectUris": [
+      "http://localhost",
+      "https://login.microsoftonline.com/common/oauth2/nativeclient"
+    ]
+  },
+
+  "requiredResourceAccess": [
+    {
+      "resourceAppId": "00000003-0000-0000-c000-000000000000",
+      "resourceAccess": [
+        {
+          "id": "e1fe6dd8-ba31-4d61-89e7-88639da4683d",
+          "type": "Scope",
+          "_name": "Calendars.ReadWrite"
+        },
+        {
+          "id": "1ec239c2-d7c9-4623-a91a-a9775856bb36",
+          "type": "Scope",
+          "_name": "User.Read"
+        },
+        {
+          "id": "570282fd-fa5c-430d-a7fd-fc8dc98a9dca",
+          "type": "Scope",
+          "_name": "Mail.Read"
+        }
+      ]
+    }
+  ]
+}

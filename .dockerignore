@@ -1,0 +1,14 @@
+.git
+.github
+.claude
+.agents
+docs/
+*.md
+!go.sum
+*_test.go
+outlook-local-mcp
+*.out
+*.test
+.gitignore
+.deepwiki
+skills-lock.json

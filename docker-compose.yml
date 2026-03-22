@@ -1,0 +1,29 @@
+# Docker Compose configuration for local development of the Outlook Local
+# MCP Server.
+#
+# First-run authentication:
+#   docker compose run outlook-local-mcp
+#   (Follow the device code prompt printed to stderr)
+#
+# Subsequent runs:
+#   docker compose up --build
+
+services:
+  outlook-local-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # stdin_open and tty are required for the device code authentication flow
+    # on first run. The server prints a URL and code to stderr; the operator
+    # must open the URL in a browser and enter the code to complete sign-in.
+    stdin_open: true
+    tty: true
+    volumes:
+      - ./data/auth:/data/auth
+    environment:
+      - OUTLOOK_MCP_CLIENT_ID=${OUTLOOK_MCP_CLIENT_ID:-d3590ed6-52b3-4102-aeff-aad2292ab01c}
+      - OUTLOOK_MCP_TENANT_ID=${OUTLOOK_MCP_TENANT_ID:-common}
+      - OUTLOOK_MCP_DEFAULT_TIMEZONE=${OUTLOOK_MCP_DEFAULT_TIMEZONE:-UTC}
+      - OUTLOOK_MCP_LOG_LEVEL=${OUTLOOK_MCP_LOG_LEVEL:-info}
+      - OUTLOOK_MCP_LOG_FORMAT=${OUTLOOK_MCP_LOG_FORMAT:-json}
+    restart: "no"

@@ -1,0 +1,13 @@
+min_version = "2025.7.7"
+
+[tools]
+go = "1.25.8"
+golangci-lint = "2.7.2"
+"go:golang.org/x/tools/cmd/goimports" = "latest"
+"go:golang.org/x/vuln/cmd/govulncheck" = "latest"
+syft = "latest"
+grype = "latest"
+"github:anchore/grant" = "latest"
+goreleaser = "2"
+"npm:@anthropic-ai/mcpb" = "2.1"
+"npm:agent-browser" = "latest"

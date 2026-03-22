@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "checkpoint-commit": {
+      "source": "desek/governance",
+      "sourceType": "github",
+      "computedHash": "1bd2ca0f8427515ca2e4a761d78317500a73adff4256e192c0d790ce12fbc250"
+    },
+    "checkpoint-read": {
+      "source": "desek/governance",
+      "sourceType": "github",
+      "computedHash": "5603a6c2d452d3ac331a1692bf5fd3d00e3bfa98e7de6eb85276145f207ed3c7"
+    },
+    "electron": {
+      "source": "vercel-labs/agent-browser",
+      "sourceType": "github",
+      "computedHash": "587f7d9187c237d909b9f446cf3ac357184342d54ceb7c430dec56fdbac6816c"
+    },
+    "governance": {
+      "source": "desek/governance",
+      "sourceType": "github",
+      "computedHash": "b25baa1a0b923266c466c27459816f74ad6603a35fbacc8ffd850db37764827d"
+    }
+  }
+}

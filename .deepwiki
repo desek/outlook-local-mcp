@@ -1,0 +1,16 @@
+# deepwiki repositories
+
+- `modelcontextprotocol/mcpb` - MCP Bundles (formerly DXT); CLI toolchain for packaging MCP servers as .mcpb bundles, manifest validation, signing, variable substitution, cross-platform distribution
+- `mark3labs/mcp-go` - Model Context Protocol Go SDK; server framework, tool registration, middleware, elicitation API
+- `Azure/azure-sdk-for-go` - Azure SDK for Go; azcore, azidentity (auth flows, token cache, device code), azidentity/cache (persistent token storage)
+- `microsoftgraph/msgraph-sdk-go` - Microsoft Graph API SDK for Go; calendar operations, event CRUD, free/busy, request builders
+- `microsoft/kiota-abstractions-go` - Kiota abstraction layer; request adapters, serialization, authentication providers
+- `open-telemetry/opentelemetry-go` - OpenTelemetry Go SDK; metrics, tracing, OTLP gRPC exporters
+- `golangci/golangci-lint` - Go linter aggregator; configuration, custom rules, CI integration
+- `googleapis/release-please` - Google's release automation; Conventional Commits-based versioning, changelog generation, release PRs
+- `anchore/syft` - SBOM generator; CycloneDX and SPDX output, binary scanning, Go dependency extraction
+- `anchore/grype` - Vulnerability scanner; SBOM-based CVE detection, severity thresholds, CI integration
+- `anchore/grant` - License compliance checker; SBOM-based license evaluation, policy files, allowlist/denylist
+- `jdx/mise` - Polyglot version manager; .mise.toml configuration, tool installation, GitHub Actions integration (mise-action)
+- `jdx/mise-action` - GitHub Actions integration for mise; shim-based PATH setup, install/reshim inputs, does NOT add GOPATH/bin
+- `goreleaser/goreleaser` - Go release automation; declarative builds, cross-compilation, checksums, SBOMs, GitHub Release uploads, Homebrew taps

@@ -1,0 +1,40 @@
+# macOS metadata
+.DS_Store
+
+# Go binary artifacts
+/outlook-local-mcp
+/outlook-local-mcp-*
+/cmd/outlook-local-mcp/outlook-local-mcp
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.log
+
+# Go test binary artifacts
+*.test
+
+# Go coverage output
+*.out
+
+# SBOM artifacts
+*.cdx.json
+*.spdx.json
+
+# Node modules (commitlint)
+node_modules/
+
+# Docker volume data
+data/
+
+# Environment-specific MCP config (contains local paths)
+.mcp.json
+
+# GoReleaser build artifacts
+dist/
+
+# MCPB extension build artifacts
+extension/bin/
+*.mcpb
+.local/

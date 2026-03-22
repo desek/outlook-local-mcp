@@ -1,0 +1,68 @@
+# Kubernetes Deployment for the Outlook Local MCP Server.
+#
+# The MCP server communicates over stdio (stdin/stdout), so it is not a typical
+# HTTP service. This Deployment runs a single replica for use with tools that
+# attach to the container's stdin/stdout streams.
+#
+# First-run authentication (headless / device code):
+#   Containers lack a desktop browser, so set OUTLOOK_MCP_AUTH_METHOD=device_code
+#   in the ConfigMap. On first run, attach to the pod to complete authentication:
+#
+#     kubectl attach -it deploy/outlook-local-mcp
+#
+#   Note: The Docker image is built from scratch (no shell), so kubectl exec
+#   with /bin/sh is not available. Use kubectl attach or kubectl logs instead.
+#
+#   The server prints a URL and code to stderr. Open the URL in a browser,
+#   enter the code, and sign in. The auth record is persisted to /data/auth
+#   via the PersistentVolumeClaim so subsequent restarts use silent auth.
+#
+# Resource limits are set conservatively; adjust based on observed usage.
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: outlook-local-mcp
+  labels:
+    app: outlook-local-mcp
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: outlook-local-mcp
+  template:
+    metadata:
+      labels:
+        app: outlook-local-mcp
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: outlook-local-mcp
+          image: ghcr.io/desek/outlook-local-mcp:latest
+          stdin: true
+          tty: true
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+          envFrom:
+            - configMapRef:
+                name: outlook-local-mcp-config
+            - secretRef:
+                name: outlook-local-mcp-secret
+          volumeMounts:
+            - name: auth-data
+              mountPath: /data/auth
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "100m"
+            limits:
+              memory: "64Mi"
+              cpu: "100m"
+      volumes:
+        - name: auth-data
+          persistentVolumeClaim:
+            claimName: outlook-local-mcp-auth

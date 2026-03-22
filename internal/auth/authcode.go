@@ -1,0 +1,500 @@
+package auth
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"log/slog"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
+	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
+	msalcache "github.com/AzureAD/microsoft-authentication-library-for-go/apps/cache"
+	"github.com/AzureAD/microsoft-authentication-library-for-go/apps/public"
+)
+
+// nativeclientRedirectURI is the Microsoft-registered redirect URI for native
+// desktop applications that cannot host a local HTTP server. The Microsoft
+// Office first-party app registration includes this URI, making it suitable
+// for the authorization code flow with PKCE without requiring a custom app
+// registration.
+const nativeclientRedirectURI = "https://login.microsoftonline.com/common/oauth2/nativeclient"
+
+// AuthCodeFlow is the interface for credentials that support the manual
+// authorization code flow. AuthCodeCredential implements this interface.
+// The middleware and add_account tool use this interface to drive the
+// auth code flow without concrete type assertions against AuthCodeCredential.
+type AuthCodeFlow interface {
+	// AuthCodeURL returns the authorization URL for the user to visit in
+	// their browser. The URL includes PKCE code_challenge parameters
+	// generated internally by MSAL Go.
+	//
+	// Parameters:
+	//   - ctx: context for the operation.
+	//   - scopes: OAuth scopes to request (e.g., "Calendars.ReadWrite").
+	//
+	// Returns the authorization URL string, or an error if URL construction
+	// fails.
+	AuthCodeURL(ctx context.Context, scopes []string) (string, error)
+
+	// ExchangeCode extracts the authorization code from the redirect URL and
+	// exchanges it for tokens via MSAL Go's AcquireTokenByAuthCode.
+	//
+	// Parameters:
+	//   - ctx: context for the token exchange network call.
+	//   - redirectURL: the full URL from the browser's address bar after
+	//     authentication, starting with the nativeclient redirect URI.
+	//   - scopes: OAuth scopes to request.
+	//
+	// Returns an error if the URL is invalid, the code is missing, or the
+	// token exchange fails.
+	ExchangeCode(ctx context.Context, redirectURL string, scopes []string) error
+}
+
+// NewAuthCodeCredentialOption is a functional option for NewAuthCodeCredential.
+type NewAuthCodeCredentialOption func(*authCodeCredentialOptions)
+
+// authCodeCredentialOptions holds optional configuration for NewAuthCodeCredential.
+type authCodeCredentialOptions struct {
+	// cacheAccessor is the MSAL-compatible cache accessor for persistent token
+	// storage. When non-nil, it is passed to the MSAL public.Client via
+	// public.WithCache.
+	cacheAccessor msalcache.ExportReplace
+}
+
+// WithCacheAccessor returns a NewAuthCodeCredentialOption that configures the
+// MSAL public.Client with a persistent token cache accessor. The accessor must
+// implement the MSAL cache.ExportReplace interface. Use InitMSALCache to
+// create a suitable accessor backed by OS keychain storage.
+//
+// Parameters:
+//   - accessor: the MSAL-compatible cache accessor for persistent token storage.
+func WithCacheAccessor(cacheAccessor msalcache.ExportReplace) NewAuthCodeCredentialOption {
+	return func(o *authCodeCredentialOptions) {
+		o.cacheAccessor = cacheAccessor
+	}
+}
+
+// AuthCodeCredential wraps MSAL Go's public.Client to implement the OAuth 2.0
+// authorization code flow with PKCE using the nativeclient redirect URI. It
+// satisfies both azcore.TokenCredential (for the Graph SDK) and Authenticator
+// (for the AuthMiddleware), as well as AuthCodeFlow (for the add_account tool
+// and complete_auth tool).
+//
+// The credential lifecycle is:
+//  1. AuthCodeURL generates the authorization URL for the user.
+//  2. The user authenticates in their browser and copies the redirect URL.
+//  3. ExchangeCode exchanges the authorization code for tokens.
+//  4. GetToken returns cached tokens via AcquireTokenSilent.
+//
+// Thread safety: AuthCodeCredential is safe for concurrent use. The MSAL
+// public.Client is itself thread-safe; the credential adds a sync.RWMutex
+// to protect the cached account field.
+type AuthCodeCredential struct {
+	// msalClient is the MSAL Go public client used for token acquisition.
+	msalClient public.Client
+
+	// clientID is the OAuth 2.0 application (client) ID, passed to AuthCodeURL.
+	clientID string
+
+	// redirectURI is the redirect URI for authorization requests. Always set
+	// to nativeclientRedirectURI.
+	redirectURI string
+
+	// account is the MSAL account obtained after a successful token exchange.
+	// Used by AcquireTokenSilent for silent token renewal.
+	account public.Account
+
+	// hasAccount indicates whether account has been populated by a successful
+	// ExchangeCode call.
+	hasAccount bool
+
+	// codeVerifier holds the PKCE code verifier generated by AuthCodeURL.
+	// It is consumed by ExchangeCode and passed to AcquireTokenByAuthCode
+	// via WithChallenge. A new verifier is generated on each AuthCodeURL call.
+	codeVerifier string
+
+	// mu protects account, hasAccount, and codeVerifier from concurrent access.
+	mu sync.RWMutex
+}
+
+// Compile-time interface compliance checks.
+var (
+	_ azcore.TokenCredential = (*AuthCodeCredential)(nil)
+	_ Authenticator          = (*AuthCodeCredential)(nil)
+	_ AuthCodeFlow           = (*AuthCodeCredential)(nil)
+)
+
+// NewAuthCodeCredential constructs an AuthCodeCredential wrapping a new MSAL
+// public.Client configured with the specified client ID and tenant ID.
+//
+// Parameters:
+//   - clientID: the OAuth 2.0 application (client) ID.
+//   - tenantID: the Azure AD tenant identifier (e.g., "common" or a GUID).
+//   - opts: functional options for configuring cache and other settings.
+//
+// Returns the constructed AuthCodeCredential, or an error if the MSAL
+// public.Client cannot be created.
+func NewAuthCodeCredential(clientID, tenantID string, opts ...NewAuthCodeCredentialOption) (*AuthCodeCredential, error) {
+	options := &authCodeCredentialOptions{}
+	for _, o := range opts {
+		o(options)
+	}
+
+	authority := "https://login.microsoftonline.com/" + tenantID
+
+	msalOpts := []public.Option{
+		public.WithAuthority(authority),
+	}
+
+	if options.cacheAccessor != nil {
+		msalOpts = append(msalOpts, public.WithCache(options.cacheAccessor))
+	}
+
+	client, err := public.New(clientID, msalOpts...)
+	if err != nil {
+		return nil, fmt.Errorf("create MSAL public client: %w", err)
+	}
+
+	return &AuthCodeCredential{
+		msalClient:  client,
+		clientID:    clientID,
+		redirectURI: nativeclientRedirectURI,
+	}, nil
+}
+
+// AuthCodeURL returns the authorization URL for the user to visit in their
+// browser. The URL includes PKCE code_challenge and code_challenge_method=S256
+// parameters. A new PKCE code verifier is generated on each call and stored
+// for use by the subsequent ExchangeCode call.
+//
+// Parameters:
+//   - ctx: context for the operation.
+//   - scopes: OAuth scopes to request (e.g., "Calendars.ReadWrite").
+//
+// Returns the authorization URL string, or an error if URL construction or
+// PKCE generation fails.
+func (c *AuthCodeCredential) AuthCodeURL(ctx context.Context, scopes []string) (string, error) {
+	verifier, challenge, err := generatePKCE()
+	if err != nil {
+		return "", fmt.Errorf("generate PKCE: %w", err)
+	}
+
+	authURL, err := c.msalClient.AuthCodeURL(ctx, c.clientID, c.redirectURI, scopes)
+	if err != nil {
+		return "", fmt.Errorf("construct authorization URL: %w", err)
+	}
+
+	// Append PKCE parameters. MSAL Go's public AuthCodeURL does not include
+	// PKCE; it is only added internally by AcquireTokenInteractive. For the
+	// manual auth code flow, we generate PKCE ourselves.
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		return "", fmt.Errorf("parse authorization URL: %w", err)
+	}
+	q := parsed.Query()
+	q.Set("code_challenge", challenge)
+	q.Set("code_challenge_method", "S256")
+	parsed.RawQuery = q.Encode()
+
+	c.mu.Lock()
+	c.codeVerifier = verifier
+	c.mu.Unlock()
+
+	return parsed.String(), nil
+}
+
+// ExchangeCode extracts the authorization code from the redirect URL and
+// exchanges it for tokens via MSAL Go's AcquireTokenByAuthCode. On success,
+// the resulting MSAL account is stored for subsequent silent token acquisition.
+//
+// Parameters:
+//   - ctx: context for the token exchange network call.
+//   - redirectURL: the full URL from the browser's address bar after
+//     authentication, which must start with the nativeclient redirect URI.
+//   - scopes: OAuth scopes to request.
+//
+// Returns an error if the URL does not start with the nativeclient redirect
+// URI, does not contain a "code" query parameter, is malformed, or if the
+// token exchange fails.
+//
+// Side effects: stores the MSAL account on success.
+func (c *AuthCodeCredential) ExchangeCode(ctx context.Context, redirectURL string, scopes []string) error {
+	if !strings.HasPrefix(redirectURL, nativeclientRedirectURI) {
+		return fmt.Errorf("invalid redirect URL: must start with %s", nativeclientRedirectURI)
+	}
+
+	parsed, err := url.Parse(redirectURL)
+	if err != nil {
+		return fmt.Errorf("malformed redirect URL: %w", err)
+	}
+
+	code := parsed.Query().Get("code")
+	if code == "" {
+		return fmt.Errorf("no authorization code found in redirect URL query parameters")
+	}
+
+	c.mu.RLock()
+	verifier := c.codeVerifier
+	c.mu.RUnlock()
+
+	var acquireOpts []public.AcquireByAuthCodeOption
+	if verifier != "" {
+		acquireOpts = append(acquireOpts, public.WithChallenge(verifier))
+	}
+
+	result, err := c.msalClient.AcquireTokenByAuthCode(ctx, code, c.redirectURI, scopes, acquireOpts...)
+	if err != nil {
+		return fmt.Errorf("exchange authorization code: %w", err)
+	}
+
+	c.mu.Lock()
+	c.account = result.Account
+	c.hasAccount = true
+	c.mu.Unlock()
+
+	return nil
+}
+
+// GetToken acquires an access token for the requested scopes. It first
+// attempts silent acquisition using the cached MSAL account. If no account
+// is cached or silent acquisition fails, it returns an error that the
+// AuthMiddleware recognizes as an authentication error, triggering the
+// interactive auth code flow.
+//
+// Parameters:
+//   - ctx: context for the token acquisition call.
+//   - options: token request options specifying scopes.
+//
+// Returns an azcore.AccessToken on success, or an error when authentication
+// is required.
+//
+// GetToken implements azcore.TokenCredential.
+func (c *AuthCodeCredential) GetToken(ctx context.Context, options policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	c.mu.RLock()
+	hasAcct := c.hasAccount
+	acct := c.account
+	c.mu.RUnlock()
+
+	if !hasAcct {
+		return azcore.AccessToken{}, fmt.Errorf("AuthCodeCredential: authentication required")
+	}
+
+	result, err := c.msalClient.AcquireTokenSilent(ctx, options.Scopes, public.WithSilentAccount(acct))
+	if err != nil {
+		return azcore.AccessToken{}, fmt.Errorf("AuthCodeCredential: authentication required: %w", err)
+	}
+
+	return azcore.AccessToken{
+		Token:     result.AccessToken,
+		ExpiresOn: result.ExpiresOn.UTC(),
+	}, nil
+}
+
+// Authenticate is provided for compatibility with the Authenticator interface
+// used by the AuthMiddleware. For the auth_code method, actual authentication
+// is driven by the AuthCodeFlow interface (AuthCodeURL + ExchangeCode) rather
+// than this method. Authenticate returns an empty AuthenticationRecord and an
+// error indicating that the auth_code flow must be used instead.
+//
+// Parameters:
+//   - ctx: context for the authentication call.
+//   - opts: token request options (unused for auth_code).
+//
+// Returns a zero-value AuthenticationRecord and an error.
+func (c *AuthCodeCredential) Authenticate(_ context.Context, _ *policy.TokenRequestOptions) (azidentity.AuthenticationRecord, error) {
+	return azidentity.AuthenticationRecord{}, fmt.Errorf(
+		"AuthCodeCredential: authentication required: use AuthCodeURL and ExchangeCode for the auth_code flow")
+}
+
+// SetAccount sets the cached MSAL account for silent token acquisition. This
+// is used by Phase 2 account persistence to restore the account from disk on
+// startup without requiring re-authentication.
+//
+// Parameters:
+//   - account: the MSAL account to cache.
+func (c *AuthCodeCredential) SetAccount(account public.Account) {
+	c.mu.Lock()
+	c.account = account
+	c.hasAccount = true
+	c.mu.Unlock()
+}
+
+// Account returns the cached MSAL account and whether one has been set. This
+// is used by Phase 2 account persistence to save the account to disk after
+// successful authentication.
+//
+// Returns the cached account and true if an account has been set, or a
+// zero-value account and false otherwise.
+func (c *AuthCodeCredential) Account() (public.Account, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.account, c.hasAccount
+}
+
+// persistedAccount is the JSON-serializable representation of a public.Account
+// for file-based persistence. Only the fields needed to reconstruct a
+// public.Account for AcquireTokenSilent are included.
+type persistedAccount struct {
+	// HomeAccountID is the unique identifier for the account across tenants.
+	HomeAccountID string `json:"home_account_id"`
+
+	// Environment is the Azure AD environment (e.g., "login.microsoftonline.com").
+	Environment string `json:"environment"`
+
+	// Realm is the tenant in which the account authenticated.
+	Realm string `json:"realm"`
+
+	// PreferredUsername is the user's preferred username (typically email).
+	PreferredUsername string `json:"preferred_username"`
+}
+
+// saveAuthCodeAccount serializes a public.Account to JSON and writes it to the
+// file at path. The parent directory is created with permissions 0700 if it
+// does not exist. The file is written with permissions 0600 (owner read/write
+// only).
+//
+// Parameters:
+//   - path: absolute filesystem path where the account will be saved.
+//   - account: the MSAL account to persist.
+//
+// Returns an error if directory creation, JSON marshaling, or file writing
+// fails.
+//
+// Side effects: creates directories and writes a file to disk.
+func saveAuthCodeAccount(path string, account public.Account) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return fmt.Errorf("create account directory %s: %w", dir, err)
+	}
+
+	p := persistedAccount{
+		HomeAccountID:     account.HomeAccountID,
+		Environment:       account.Environment,
+		Realm:             account.Realm,
+		PreferredUsername: account.PreferredUsername,
+	}
+
+	data, err := json.Marshal(p)
+	if err != nil {
+		return fmt.Errorf("marshal account: %w", err)
+	}
+
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		return fmt.Errorf("write account to %s: %w", path, err)
+	}
+
+	slog.Info("auth code account saved", "path", path)
+	return nil
+}
+
+// loadAuthCodeAccount reads and deserializes a JSON-encoded public.Account from
+// the file at path.
+//
+// Parameters:
+//   - path: absolute filesystem path to the account JSON file.
+//
+// Returns the deserialized account, a boolean indicating whether the file was
+// found and contained valid JSON, and any error. When the file is missing,
+// returns a zero-value account, false, and nil error. When the file contains
+// invalid JSON, returns a zero-value account, false, and nil error (the
+// corrupt file is treated as absent). Other I/O errors are returned as-is.
+func loadAuthCodeAccount(path string) (public.Account, bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return public.Account{}, false, nil
+		}
+		return public.Account{}, false, fmt.Errorf("read account from %s: %w", path, err)
+	}
+
+	var p persistedAccount
+	if err := json.Unmarshal(data, &p); err != nil {
+		slog.Warn("auth code account file contains invalid JSON, treating as absent",
+			"path", path, "error", err)
+		return public.Account{}, false, nil
+	}
+
+	account := public.Account{
+		HomeAccountID:     p.HomeAccountID,
+		Environment:       p.Environment,
+		Realm:             p.Realm,
+		PreferredUsername: p.PreferredUsername,
+	}
+
+	slog.Info("auth code account loaded", "path", path)
+	return account, true, nil
+}
+
+// LoadPersistedAccount loads a previously persisted MSAL account from disk and
+// sets it on the credential for silent token acquisition. If the file does not
+// exist or contains invalid data, the credential remains without a cached
+// account (requiring fresh authentication).
+//
+// Parameters:
+//   - path: absolute filesystem path to the persisted account JSON file.
+//
+// Returns an error only for unexpected I/O failures. Missing or corrupt files
+// are handled gracefully.
+//
+// Side effects: sets the credential's cached account on success.
+func (c *AuthCodeCredential) LoadPersistedAccount(path string) error {
+	account, found, err := loadAuthCodeAccount(path)
+	if err != nil {
+		return err
+	}
+	if found {
+		c.SetAccount(account)
+	}
+	return nil
+}
+
+// PersistAccount saves the credential's current MSAL account to disk for
+// restoration on future runs. If no account has been set (i.e., authentication
+// has not completed), this is a no-op.
+//
+// Parameters:
+//   - path: absolute filesystem path where the account will be saved.
+//
+// Returns an error if the account cannot be written to disk.
+//
+// Side effects: writes the account to disk.
+func (c *AuthCodeCredential) PersistAccount(path string) error {
+	account, hasAccount := c.Account()
+	if !hasAccount {
+		return nil
+	}
+	return saveAuthCodeAccount(path, account)
+}
+
+// pkceVerifierLength is the number of random bytes used to generate the PKCE
+// code verifier. 32 bytes produces a 43-character base64url string, which is
+// within the 43-128 character range required by RFC 7636.
+const pkceVerifierLength = 32
+
+// generatePKCE generates a PKCE code verifier and its corresponding
+// code challenge using the S256 method (SHA-256 hash, base64url-encoded
+// without padding), as specified in RFC 7636.
+//
+// Returns the code verifier, code challenge, and any error from random
+// byte generation.
+func generatePKCE() (verifier, challenge string, err error) {
+	buf := make([]byte, pkceVerifierLength)
+	if _, err := rand.Read(buf); err != nil {
+		return "", "", fmt.Errorf("generate random bytes for PKCE: %w", err)
+	}
+
+	verifier = base64.RawURLEncoding.EncodeToString(buf)
+	h := sha256.Sum256([]byte(verifier))
+	challenge = base64.RawURLEncoding.EncodeToString(h[:])
+
+	return verifier, challenge, nil
+}

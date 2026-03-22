@@ -1,0 +1,169 @@
+{
+  "manifest_version": "0.3",
+  "name": "outlook-local-mcp",
+  "version": "0.0.0",
+  "display_name": "Local Outlook MCP",
+  "description": "Manage Microsoft Outlook calendars, events, and email directly from Claude. Runs entirely on your local machine — data stays on your device.",
+  "long_description": "A local MCP server that connects Claude to your Microsoft Outlook account via the Microsoft Graph API.\n\n## Features\n\n- **Calendar management**: list, create, update, delete, cancel, reschedule, and respond to events\n- **Free/busy lookup**: check availability across time ranges\n- **Email access**: list folders, search messages, read full message details\n- **Multi-account**: add and switch between multiple Microsoft accounts\n- **Recurrence support**: create and expand recurring events (daily, weekly, monthly, yearly)\n- **Teams integration**: create events with automatic Teams online meeting links\n\n## Privacy & Security\n\n- Runs as a single binary on your machine — no cloud relay, no proxy\n- OAuth tokens stored in your OS keychain (macOS Keychain / Windows Credential Manager)\n- Only connects to Microsoft Graph API with your explicit consent\n- Delegated permissions only: Calendars.ReadWrite, Mail.Read, User.Read",
+  "author": {
+    "name": "Daniel Grenemark",
+    "url": "https://github.com/desek"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/desek/outlook-local-mcp"
+  },
+  "homepage": "https://github.com/desek/outlook-local-mcp",
+  "documentation": "https://github.com/desek/outlook-local-mcp#readme",
+  "support": "https://github.com/desek/outlook-local-mcp/issues",
+  "privacy_policies": [
+    "https://github.com/desek/outlook-local-mcp/blob/main/PRIVACY.md"
+  ],
+  "keywords": [
+    "outlook",
+    "calendar",
+    "email",
+    "microsoft-graph",
+    "microsoft-365",
+    "office-365",
+    "scheduling",
+    "meetings",
+    "teams"
+  ],
+  "icon": "icon.png",
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/outlook-local-mcp-darwin-arm64",
+    "mcp_config": {
+      "command": "${__dirname}/bin/outlook-local-mcp-darwin-arm64",
+      "args": [],
+      "env": {
+        "OUTLOOK_MCP_CLIENT_ID": "${user_config.client_id}",
+        "OUTLOOK_MCP_TENANT_ID": "${user_config.tenant_id}",
+        "OUTLOOK_MCP_AUTH_METHOD": "${user_config.auth_method}",
+        "OUTLOOK_MCP_DEFAULT_TIMEZONE": "${user_config.timezone}"
+      },
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/bin/outlook-local-mcp-win32-x64.exe"
+        }
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "calendar_list",
+      "description": "List all calendars accessible to the authenticated user."
+    },
+    {
+      "name": "calendar_list_events",
+      "description": "List calendar events within a time range. Expands recurring events into individual occurrences."
+    },
+    {
+      "name": "calendar_get_event",
+      "description": "Get full details of a single calendar event by its ID."
+    },
+    {
+      "name": "calendar_search_events",
+      "description": "Search calendar events by subject text, importance, sensitivity, and other properties within a time range."
+    },
+    {
+      "name": "calendar_get_free_busy",
+      "description": "Get free/busy availability for a time range. Returns busy periods with start, end, status, and subject."
+    },
+    {
+      "name": "calendar_create_event",
+      "description": "Create a new calendar event. Supports attendees, Teams online meetings, recurrence, and all standard event properties."
+    },
+    {
+      "name": "calendar_update_event",
+      "description": "Update an existing calendar event. Only specified fields are changed (PATCH semantics)."
+    },
+    {
+      "name": "calendar_delete_event",
+      "description": "Delete a calendar event by ID. Organizer deletions send cancellation notices to attendees."
+    },
+    {
+      "name": "calendar_cancel_event",
+      "description": "Cancel a meeting and send a cancellation message to all attendees. Only the organizer can cancel."
+    },
+    {
+      "name": "calendar_respond_event",
+      "description": "Respond to a meeting invitation: accept, tentatively accept, or decline. Sends a response to the organizer."
+    },
+    {
+      "name": "calendar_reschedule_event",
+      "description": "Move an event to a new time, preserving its original duration. Sends update notifications to attendees if applicable."
+    },
+    {
+      "name": "mail_list_folders",
+      "description": "List the user's mail folders (Inbox, Sent Items, Drafts, etc.) with display name, unread count, and total count."
+    },
+    {
+      "name": "mail_list_messages",
+      "description": "List email messages in a mail folder or across all folders. Supports filtering by date range, sender, and conversation ID."
+    },
+    {
+      "name": "mail_search_messages",
+      "description": "Full-text search across email messages using Microsoft Graph KQL syntax. Returns messages ranked by relevance."
+    },
+    {
+      "name": "mail_get_message",
+      "description": "Get full details of a single email message by its ID. Returns body content, all recipients, headers, and attachment metadata."
+    },
+    {
+      "name": "account_add",
+      "description": "Add and authenticate a new Microsoft account with isolated token cache and auth record."
+    },
+    {
+      "name": "account_list",
+      "description": "List all registered accounts and their authentication status."
+    },
+    {
+      "name": "account_remove",
+      "description": "Remove a registered account. The default account cannot be removed."
+    },
+    {
+      "name": "status",
+      "description": "Get server health summary: version, detected timezone, per-account authentication state, and uptime. No parameters required."
+    },
+    {
+      "name": "complete_auth",
+      "description": "Complete an in-progress authorization code authentication by providing the redirect URL from the browser."
+    }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32"]
+  },
+  "user_config": {
+    "client_id": {
+      "type": "string",
+      "title": "Microsoft Application (Client) ID",
+      "description": "The app used to access Microsoft Graph. Default: 'outlook-desktop' (Microsoft Office, works out of the box with device_code auth). Use 'outlook-local-mcp' for the project's own app registration. To use browser auth, register your own app in Azure AD with http://localhost redirect URI and paste the client ID here.",
+      "required": false,
+      "default": "outlook-desktop"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Azure AD Tenant ID",
+      "description": "Your Azure AD tenant. Use 'common' (default) for any Microsoft account, 'organizations' for work/school only, or 'consumers' for personal accounts only. Advanced: paste a specific tenant GUID to restrict access to a single organization.",
+      "required": false,
+      "default": "common"
+    },
+    "auth_method": {
+      "type": "string",
+      "title": "Authentication Method",
+      "description": "How you sign in to Microsoft. 'device_code' (default): visit a URL and enter a code — works everywhere, no app registration needed. 'browser': opens your browser automatically — requires your own app registration with http://localhost redirect URI. 'auth_code': manual flow for headless/remote environments.",
+      "required": false,
+      "default": "device_code"
+    },
+    "timezone": {
+      "type": "string",
+      "title": "Timezone",
+      "description": "Your timezone for calendar operations (IANA format). Use 'auto' to detect from your system, or specify explicitly, e.g. 'America/New_York', 'Europe/London', 'Asia/Tokyo'. Defaults to 'auto'.",
+      "required": false,
+      "default": "auto"
+    }
+  }
+}
