@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.2](https://github.com/desek/outlook-local-mcp/compare/v0.0.1...v0.0.2) (2026-03-22)
+
+
+### Features
+
+* initial release ([dbf0375](https://github.com/desek/outlook-local-mcp/commit/dbf0375856a841e1c1ff91ec58cc4ab01bfaec3e))
+* outlook calendar and email MCP server ([6916f49](https://github.com/desek/outlook-local-mcp/commit/6916f496ef3f3def614c549d689536fb7a47e7e0))
+
 ## [Unreleased]
 
 ### Added
