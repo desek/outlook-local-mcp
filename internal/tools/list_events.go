@@ -43,7 +43,11 @@ var listEventsSelectFields = []string{
 func NewListEventsTool() mcp.Tool {
 	return mcp.NewTool("calendar_list_events",
 		mcp.WithDescription("List calendar events within a time range. Expands recurring events into individual occurrences."),
+		mcp.WithTitleAnnotation("List Calendar Events"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("date",
 			mcp.Description("Date shorthand: 'today', 'tomorrow', 'this_week', 'next_week', or ISO 8601 date (YYYY-MM-DD). Expands to start/end boundaries in the configured timezone. When start_datetime/end_datetime are also provided, they take precedence."),
 		),

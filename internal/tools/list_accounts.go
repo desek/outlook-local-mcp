@@ -23,7 +23,11 @@ import (
 func NewListAccountsTool() mcp.Tool {
 	return mcp.NewTool("account_list",
 		mcp.WithDescription("List all registered accounts and their authentication status."),
+		mcp.WithTitleAnnotation("List Accounts"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithString("output",
 			mcp.Description("Output mode: 'text' (default) returns plain-text listing, 'summary' returns compact JSON, 'raw' returns full Graph API fields."),
 			mcp.Enum("text", "summary", "raw"),

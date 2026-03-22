@@ -93,6 +93,18 @@ System tools (`status`, `complete_auth`) are exempt from domain prefixing.
 
 New tools **MUST** follow this convention. The tool name in `mcp.NewTool()` must match the name used in all middleware calls (`wrap`/`wrapWrite`, `WithObservability`, `AuditWrap`) in `server.go`.
 
+## MCP Tool Annotations
+
+All MCP tools **MUST** include the full set of five MCP annotations for Anthropic Software Directory compliance (see CR-0052):
+
+* `mcp.WithTitleAnnotation(string)` -- human-readable display name for UI tool pickers.
+* `mcp.WithReadOnlyHintAnnotation(bool)` -- `true` for read tools, `false` for write/delete tools.
+* `mcp.WithDestructiveHintAnnotation(bool)` -- `true` only for tools that irreversibly delete data or send cancellation notices (`calendar_delete_event`, `calendar_cancel_event`, `account_remove`).
+* `mcp.WithIdempotentHintAnnotation(bool)` -- `true` when calling with the same arguments produces the same result (e.g., GET, PATCH, DELETE); `false` for tools that create new resources each call.
+* `mcp.WithOpenWorldHintAnnotation(bool)` -- `true` for tools that call external APIs (Microsoft Graph); `false` for local-only tools (`account_list`, `account_remove`, `status`).
+
+Annotation values **MUST** be explicitly set even when they match MCP spec defaults. The complete annotation matrix is defined in CR-0052. New tools **MUST** add a corresponding annotation test in `internal/tools/tool_annotations_test.go`.
+
 ## MCP Tool Response Tiering
 
 All MCP tool responses **MUST** follow a three-tier output model to minimize token consumption for LLM consumers while preserving data access for programmatic use cases:

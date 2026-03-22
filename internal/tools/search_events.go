@@ -56,7 +56,11 @@ func NewSearchEventsTool(provenanceEnabled bool) mcp.Tool {
 				"and other properties within a time range. All parameters are optional. " +
 				"Defaults to searching the next 30 days from now.",
 		),
+		mcp.WithTitleAnnotation("Search Calendar Events"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("query",
 			mcp.Description("Text to search for in event subjects (case-insensitive)."),
 		),

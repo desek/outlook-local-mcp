@@ -28,7 +28,11 @@ import (
 func NewListCalendarsTool() mcp.Tool {
 	return mcp.NewTool("calendar_list",
 		mcp.WithDescription("List all calendars accessible to the authenticated user."),
+		mcp.WithTitleAnnotation("List Calendars"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("account",
 			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
 		),

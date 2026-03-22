@@ -43,7 +43,11 @@ var getEventSelectFields = []string{
 func NewGetEventTool() mcp.Tool {
 	return mcp.NewTool("calendar_get_event",
 		mcp.WithDescription("Get full details of a single calendar event by its ID. Default output includes bodyPreview (plain-text snippet); full HTML body is only available via output=raw."),
+		mcp.WithTitleAnnotation("Get Calendar Event"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("event_id",
 			mcp.Required(),
 			mcp.Description("The unique identifier of the event to retrieve."),

@@ -27,6 +27,11 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewCompleteAuthTool() mcp.Tool {
 	return mcp.NewTool("complete_auth",
+		mcp.WithTitleAnnotation("Complete Authentication"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Complete the authorization code flow by exchanging the redirect URL for tokens. "+
 				"After signing in via the browser, copy the full URL from the address bar "+

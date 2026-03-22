@@ -29,6 +29,11 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewRespondEventTool() mcp.Tool {
 	return mcp.NewTool("calendar_respond_event",
+		mcp.WithTitleAnnotation("Respond to Event"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Respond to a meeting invitation: accept, tentatively accept, or decline. "+
 				"Sends a response to the organizer. Only applicable to events where you "+

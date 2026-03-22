@@ -22,6 +22,11 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewRemoveAccountTool() mcp.Tool {
 	return mcp.NewTool("account_remove",
+		mcp.WithTitleAnnotation("Remove Account"),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(false),
 		mcp.WithDescription("Remove a registered account. The default account cannot be removed."),
 		mcp.WithString("label",
 			mcp.Required(),

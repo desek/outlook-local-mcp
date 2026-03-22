@@ -30,7 +30,11 @@ import (
 func NewListMailFoldersTool() mcp.Tool {
 	return mcp.NewTool("mail_list_folders",
 		mcp.WithDescription("List the user's mail folders (Inbox, Sent Items, Drafts, etc.) with display name, unread count, and total count."),
+		mcp.WithTitleAnnotation("List Mail Folders"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("account",
 			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
 		),

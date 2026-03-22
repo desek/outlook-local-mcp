@@ -59,7 +59,11 @@ var getMessageSummarySelectFields = []string{
 func NewGetMessageTool() mcp.Tool {
 	return mcp.NewTool("mail_get_message",
 		mcp.WithDescription("Get full details of a single email message by its ID. Default output includes bodyPreview (plain-text snippet); full HTML body and headers are only available via output=raw."),
+		mcp.WithTitleAnnotation("Get Email Message"),
 		mcp.WithReadOnlyHintAnnotation(true),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("message_id",
 			mcp.Required(),
 			mcp.Description("The unique identifier of the message to retrieve."),
