@@ -2,6 +2,41 @@
 
 A Model Context Protocol (MCP) server that provides calendar management tools backed by the Microsoft Graph API v1.0. Built as a single Go binary, it communicates over stdio (JSON-RPC) and authenticates using the OAuth 2.0 device code flow by default -- no Azure AD app registration required.
 
+<p align="center">
+  <img src="docs/assets/demo.gif" alt="outlook-local-mcp demo">
+</p>
+
+## Quick Start
+
+### Option 1: Go binary
+
+```bash
+go install github.com/desek/outlook-local-mcp/cmd/outlook-local-mcp@latest
+```
+
+Then add to your Claude Desktop or Claude Code config:
+
+```json
+{
+  "mcpServers": {
+    "outlook-local": {
+      "command": "outlook-local-mcp",
+      "env": {
+        "OUTLOOK_MCP_DEFAULT_TIMEZONE": "America/New_York"
+      }
+    }
+  }
+}
+```
+
+### Option 2: Claude Desktop extension
+
+Download the `.mcpb` file from the [latest release](https://github.com/desek/outlook-local-mcp/releases/latest) and open it in Claude Desktop (**Settings > Extensions > Install from file**). No manual configuration required.
+
+---
+
+On first tool call, sign in with a device code. No Azure AD app registration or admin consent needed.
+
 ## Features
 
 - **Up to 20 MCP tools** -- 11 calendar tools (list, get, search, free/busy, create, update, delete, cancel, respond, reschedule), 4 mail tools (list folders, list messages, search messages, get message; opt-in via `OUTLOOK_MCP_MAIL_ENABLED`), 3 account management tools (add, list, remove), 1 diagnostic tool (`status`), plus `complete_auth` (registered when using `auth_code` method). Without mail: 16 tools (15 without `complete_auth`)
