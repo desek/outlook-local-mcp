@@ -3,7 +3,7 @@
 A Model Context Protocol (MCP) server that provides calendar management tools backed by the Microsoft Graph API v1.0. Built as a single Go binary, it communicates over stdio (JSON-RPC) and authenticates using the OAuth 2.0 device code flow by default -- no Azure AD app registration required.
 
 <p align="center">
-  <img src="docs/assets/demo.gif" alt="outlook-local-mcp demo" width="800">
+  <img src="docs/assets/demo.gif" alt="outlook-local-mcp demo">
 </p>
 
 ## Quick Start
