@@ -114,11 +114,12 @@ tool.
 **`calendar_cancel_event`** -- append to existing description:
 
 ```
-IMPORTANT: Cancelling sends a cancellation notice to ALL attendees
-immediately. You MUST present a summary to the user showing the event
-subject, time, and full attendee list, then wait for explicit confirmation
-before calling this tool. If any attendee is external to the user's
-organization, add an explicit warning about external cancellation notices.
+IMPORTANT: When the event has attendees, cancelling sends a cancellation
+notice to ALL attendees immediately. You MUST present a summary to the
+user showing the event subject, time, and full attendee list, then wait
+for explicit confirmation before calling this tool. If any attendee is
+external to the user's organization, add an explicit warning about
+external cancellation notices.
 ```
 
 ### Proposed LLM-to-Tool Flow
@@ -163,7 +164,7 @@ sequenceDiagram
 4. The `calendar_update_event` tool description **MUST** instruct the LLM to present a draft summary of changes and wait for explicit confirmation before calling the tool when attendees are added or modified.
 5. The `calendar_update_event` tool description **MUST** instruct the LLM to add an explicit warning when any new attendee email domain differs from the user's own domain.
 6. The `calendar_reschedule_event` tool description **MUST** instruct the LLM to present a draft summary (event subject, current time, proposed new time, attendee list) and wait for explicit confirmation before calling the tool when the event has attendees.
-7. The `calendar_cancel_event` tool description **MUST** instruct the LLM to present a summary (event subject, time, attendee list) and wait for explicit confirmation before calling the tool.
+7. The `calendar_cancel_event` tool description **MUST** instruct the LLM to present a summary (event subject, time, attendee list) and wait for explicit confirmation before calling the tool when the event has attendees.
 8. The `calendar_cancel_event` tool description **MUST** instruct the LLM to add an explicit warning when any attendee is external to the user's organization.
 9. All confirmation instructions **MUST** use the keyword "MUST" (not "should" or "consider") to maximize LLM compliance.
 10. Events without attendees **MUST NOT** require user confirmation -- the confirmation instruction **MUST** be scoped to attendee-present scenarios only.
@@ -286,6 +287,9 @@ flowchart LR
 | `tool_description_test.go` | `TestRescheduleEvent_DescriptionContainsConfirmationGuidance` | Verify reschedule_event description contains user confirmation instruction | `NewRescheduleEventTool()` struct | Description contains "confirmation" and "MUST present" |
 | `tool_description_test.go` | `TestCancelEvent_DescriptionContainsConfirmationGuidance` | Verify cancel_event description contains user confirmation instruction | `NewCancelEventTool()` struct | Description contains "confirmation" and "MUST present" |
 | `tool_description_test.go` | `TestCancelEvent_DescriptionContainsExternalWarningGuidance` | Verify cancel_event description contains external attendee warning | `NewCancelEventTool()` struct | Description contains "external" |
+| `tool_description_test.go` | `TestCreateEvent_DescriptionContainsSummaryFields` | Verify create_event description specifies required summary fields (AC-7) | `NewCreateEventTool()` struct | Description contains "subject", "date/time", "attendee list", "location", and "body preview" |
+| `tool_description_test.go` | `TestConfirmationInstructions_ScopedToAttendees` | Verify all four confirmation instructions are conditional on attendee presence (AC-8) | All four `New*Tool()` structs | Each description contains attendee-scoping language before the confirmation directive |
+| `tool_description_test.go` | `TestConfirmationInstructions_UseMUSTKeyword` | Verify all four confirmation instructions use "MUST" keyword (AC-11) | All four `New*Tool()` structs | Each description contains "MUST" in the confirmation instruction |
 
 ### Tests to Modify
 
@@ -346,21 +350,30 @@ Then the tool description MUST contain an instruction to present a draft summary
 ```gherkin
 Given the MCP server is running
 When the client discovers the calendar_cancel_event tool
-Then the tool description MUST contain an instruction to present a summary to the user
+Then the tool description MUST contain an instruction to present a summary to the user when the event has attendees
   And the tool description MUST contain an instruction to wait for explicit confirmation
   And the tool description MUST contain an instruction to warn about external attendees
+  And the tool description MUST scope the confirmation requirement to events with attendees
 ```
 
-### AC-7: Events without attendees are unaffected
+### AC-7: create_event description specifies required summary fields
 
 ```gherkin
-Given a user asks the LLM to create an event without any attendees
-When the LLM reads the calendar_create_event tool description
-Then the confirmation instruction is scoped to attendee-present scenarios only
-  And the LLM is not instructed to seek confirmation for attendee-free events
+Given the MCP server is running
+When the client discovers the calendar_create_event tool
+Then the tool description MUST specify that the draft summary includes subject, date/time, attendee list, location, and body preview
 ```
 
-### AC-8: Existing CR-0039 guidance preserved
+### AC-8: Events without attendees are unaffected
+
+```gherkin
+Given the updated tool descriptions for all four affected tools
+When the description text is inspected
+Then every confirmation instruction MUST be conditional on the presence of attendees
+  And the description text MUST NOT instruct the LLM to seek confirmation for events without attendees
+```
+
+### AC-9: Existing CR-0039 guidance preserved
 
 ```gherkin
 Given the updated tool descriptions for calendar_create_event and calendar_update_event
@@ -369,7 +382,7 @@ Then all existing tests MUST continue to pass
   And the descriptions MUST still contain attendee quality guidance about body and location
 ```
 
-### AC-9: All quality checks pass
+### AC-10: All quality checks pass
 
 ```gherkin
 Given all description changes and new tests are applied
@@ -377,6 +390,14 @@ When make ci is executed
 Then the build succeeds
   And all linter checks pass
   And all tests pass including new confirmation description tests
+```
+
+### AC-11: Confirmation instructions use MUST keyword
+
+```gherkin
+Given the updated tool descriptions for all four affected tools
+When the confirmation instruction text is inspected
+Then every confirmation instruction MUST use the keyword "MUST" (not "should" or "consider") for the confirmation directive
 ```
 
 ## Quality Standards Compliance
@@ -472,3 +493,54 @@ Alternatives considered:
 * CR-0039 -- Event Quality Guardrails (established tool description guidance pattern for attendee events)
 * CR-0052 -- MCP Tool Annotations (current annotation values; not modified by this CR)
 * CR-0031 -- Elicitation Fallback (established that elicitation is not universally available)
+
+<!--
+## CR Review Summary (2026-03-26)
+
+**Reviewer:** Agent 2 (CR Reviewer)
+
+**Findings: 7 | Fixes applied: 7 | Unresolvable: 0**
+
+### Findings and fixes applied:
+
+1. **Contradiction: FR-7 vs FR-10 (cancel_event scoping)**
+   FR-7 did not scope the cancel_event confirmation to attendee-present scenarios,
+   contradicting FR-10 which requires all confirmations be scoped to attendee-present
+   events only. Fixed: added "when the event has attendees" to FR-7.
+
+2. **Contradiction: cancel_event proposed description not scoped**
+   The proposed cancel_event description text unconditionally triggered confirmation.
+   Fixed: added "When the event has attendees" scoping to the proposed description.
+
+3. **Ambiguity: AC-7 used vague passive language**
+   AC-7 used "is scoped to" and "is not instructed" instead of precise MUST language.
+   Fixed: rewrote AC-7 (now AC-8) with "MUST" and "MUST NOT" directives.
+
+4. **Coverage gap: FR-2 had no dedicated AC**
+   FR-2 (create_event summary must include specific fields) was not exercised by any AC.
+   Fixed: added AC-7 (create_event description specifies required summary fields) and
+   corresponding test row.
+
+5. **Coverage gap: FR-9 had no dedicated AC**
+   FR-9 (all instructions must use MUST keyword) was not exercised by any AC.
+   Fixed: added AC-11 (confirmation instructions use MUST keyword) and corresponding
+   test row.
+
+6. **Coverage gap: AC-7/AC-8/AC-9 had no test rows**
+   Old AC-7 (attendee scoping), AC-8 (CR-0039 preservation), and AC-9 (quality checks)
+   had no entries in the Test Strategy table. Fixed: added test rows for AC-8
+   (scoping) and AC-11 (MUST keyword). AC-9 and AC-10 are covered by existing tests
+   and make ci respectively.
+
+7. **AC-6 not aligned with scoped cancel_event description**
+   AC-6 did not reflect the attendee scoping requirement for cancel_event.
+   Fixed: added attendee scoping assertion to AC-6.
+
+### AC renumbering:
+- AC-1 through AC-6: unchanged
+- AC-7: NEW (create_event summary field requirements, covers FR-2)
+- AC-8: was AC-7 (events without attendees unaffected, reworded)
+- AC-9: was AC-8 (existing CR-0039 guidance preserved)
+- AC-10: was AC-9 (all quality checks pass)
+- AC-11: NEW (MUST keyword requirement, covers FR-9)
+-->
