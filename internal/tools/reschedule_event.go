@@ -37,7 +37,11 @@ func NewRescheduleEventTool() mcp.Tool {
 		mcp.WithDescription(
 			"Move an event to a new time, preserving its original duration. "+
 				"Only the new start time is required; the end time is computed automatically. "+
-				"Sends update notifications to attendees if applicable.",
+				"Sends update notifications to attendees if applicable.\n\n"+
+				"IMPORTANT: When the event has attendees, rescheduling sends update "+
+				"notifications to all attendees. You MUST present a draft summary to the "+
+				"user showing the event subject, current time, proposed new time, and "+
+				"attendee list, then wait for explicit confirmation before calling this tool.",
 		),
 		mcp.WithString("event_id", mcp.Required(),
 			mcp.Description("The unique identifier of the event to reschedule."),

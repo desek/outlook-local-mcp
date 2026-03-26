@@ -37,7 +37,13 @@ func NewCancelEventTool() mcp.Tool {
 				"Only the meeting organizer can cancel; non-organizers will receive an "+
 				"access denied error. Cancelling a series master cancels all future "+
 				"instances. For non-meeting events or when no custom cancellation "+
-				"message is needed, use calendar_delete_event instead.",
+				"message is needed, use calendar_delete_event instead.\n\n"+
+				"IMPORTANT: When the event has attendees, cancelling sends a cancellation "+
+				"notice to ALL attendees immediately. You MUST present a summary to the "+
+				"user showing the event subject, time, and full attendee list, then wait "+
+				"for explicit confirmation before calling this tool. If any attendee is "+
+				"external to the user's organization, add an explicit warning about "+
+				"external cancellation notices.",
 		),
 		mcp.WithString("event_id",
 			mcp.Required(),

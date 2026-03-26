@@ -53,7 +53,13 @@ func NewCreateEventTool() mcp.Tool {
 				"IMPORTANT: When attendees are included, always provide a body "+
 				"(agenda or description) and location so recipients understand the "+
 				"purpose and place of the meeting. Ask the user for these details "+
-				"or suggest appropriate values before creating the event.",
+				"or suggest appropriate values before creating the event.\n\n"+
+				"IMPORTANT: When the event includes attendees, you MUST present a draft "+
+				"summary to the user and wait for explicit confirmation before calling "+
+				"this tool. The summary MUST include: subject, date/time, attendee list, "+
+				"location, and body preview. If any attendee email domain differs from the "+
+				"user's own domain, add an explicit warning that external recipients will "+
+				"receive the invitation. Only call this tool after the user confirms.",
 		),
 		mcp.WithString("subject", mcp.Required(),
 			mcp.Description("Event title"),
