@@ -72,6 +72,162 @@ func TestUpdateEvent_DescriptionContainsAttendeeGuidance(t *testing.T) {
 	}
 }
 
+// TestCreateEvent_DescriptionContainsConfirmationGuidance verifies that the
+// create_event tool description contains user confirmation instruction text
+// added by CR-0053.
+func TestCreateEvent_DescriptionContainsConfirmationGuidance(t *testing.T) {
+	tool := tools.NewCreateEventTool()
+
+	if !strings.Contains(tool.Description, "confirmation") {
+		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "MUST present") {
+		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
+	}
+}
+
+// TestCreateEvent_DescriptionContainsExternalWarningGuidance verifies that the
+// create_event tool description contains external attendee warning text
+// added by CR-0053.
+func TestCreateEvent_DescriptionContainsExternalWarningGuidance(t *testing.T) {
+	tool := tools.NewCreateEventTool()
+
+	if !strings.Contains(tool.Description, "external") {
+		t.Errorf("tool description missing 'external':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "domain") {
+		t.Errorf("tool description missing 'domain':\n  got: %s", tool.Description)
+	}
+}
+
+// TestUpdateEvent_DescriptionContainsConfirmationGuidance verifies that the
+// update_event tool description contains user confirmation instruction text
+// added by CR-0053.
+func TestUpdateEvent_DescriptionContainsConfirmationGuidance(t *testing.T) {
+	tool := tools.NewUpdateEventTool()
+
+	if !strings.Contains(tool.Description, "confirmation") {
+		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "MUST present") {
+		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
+	}
+}
+
+// TestUpdateEvent_DescriptionContainsExternalWarningGuidance verifies that the
+// update_event tool description contains external attendee warning text
+// added by CR-0053.
+func TestUpdateEvent_DescriptionContainsExternalWarningGuidance(t *testing.T) {
+	tool := tools.NewUpdateEventTool()
+
+	if !strings.Contains(tool.Description, "external") {
+		t.Errorf("tool description missing 'external':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "domain") {
+		t.Errorf("tool description missing 'domain':\n  got: %s", tool.Description)
+	}
+}
+
+// TestRescheduleEvent_DescriptionContainsConfirmationGuidance verifies that the
+// reschedule_event tool description contains user confirmation instruction text
+// added by CR-0053.
+func TestRescheduleEvent_DescriptionContainsConfirmationGuidance(t *testing.T) {
+	tool := tools.NewRescheduleEventTool()
+
+	if !strings.Contains(tool.Description, "confirmation") {
+		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "MUST present") {
+		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
+	}
+}
+
+// TestCancelEvent_DescriptionContainsConfirmationGuidance verifies that the
+// cancel_event tool description contains user confirmation instruction text
+// added by CR-0053.
+func TestCancelEvent_DescriptionContainsConfirmationGuidance(t *testing.T) {
+	tool := tools.NewCancelEventTool()
+
+	if !strings.Contains(tool.Description, "confirmation") {
+		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "MUST present") {
+		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
+	}
+}
+
+// TestCancelEvent_DescriptionContainsExternalWarningGuidance verifies that the
+// cancel_event tool description contains external attendee warning text
+// added by CR-0053.
+func TestCancelEvent_DescriptionContainsExternalWarningGuidance(t *testing.T) {
+	tool := tools.NewCancelEventTool()
+
+	if !strings.Contains(tool.Description, "external") {
+		t.Errorf("tool description missing 'external':\n  got: %s", tool.Description)
+	}
+}
+
+// TestCreateEvent_DescriptionContainsSummaryFields verifies that the
+// create_event tool description specifies all required summary fields
+// per CR-0053 AC-7.
+func TestCreateEvent_DescriptionContainsSummaryFields(t *testing.T) {
+	tool := tools.NewCreateEventTool()
+
+	requiredFields := []string{"subject", "date/time", "attendee list", "location", "body preview"}
+	for _, field := range requiredFields {
+		if !strings.Contains(tool.Description, field) {
+			t.Errorf("tool description missing required summary field %q:\n  got: %s", field, tool.Description)
+		}
+	}
+}
+
+// TestConfirmationInstructions_ScopedToAttendees verifies that all four
+// confirmation instructions are conditional on attendee presence per CR-0053
+// AC-8. Each description must scope its confirmation directive to scenarios
+// where attendees are involved.
+func TestConfirmationInstructions_ScopedToAttendees(t *testing.T) {
+	tests := []struct {
+		name   string
+		tool   mcp.Tool
+		scoped string
+	}{
+		{"calendar_create_event", tools.NewCreateEventTool(), "When the event includes attendees"},
+		{"calendar_update_event", tools.NewUpdateEventTool(), "When the update adds or modifies attendees"},
+		{"calendar_reschedule_event", tools.NewRescheduleEventTool(), "When the event has attendees"},
+		{"calendar_cancel_event", tools.NewCancelEventTool(), "When the event has attendees"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !strings.Contains(tt.tool.Description, tt.scoped) {
+				t.Errorf("description missing attendee-scoping language %q:\n  got: %s", tt.scoped, tt.tool.Description)
+			}
+		})
+	}
+}
+
+// TestConfirmationInstructions_UseMUSTKeyword verifies that all four
+// confirmation instructions use the "MUST" keyword per CR-0053 AC-11.
+func TestConfirmationInstructions_UseMUSTKeyword(t *testing.T) {
+	tests := []struct {
+		name string
+		tool mcp.Tool
+	}{
+		{"calendar_create_event", tools.NewCreateEventTool()},
+		{"calendar_update_event", tools.NewUpdateEventTool()},
+		{"calendar_reschedule_event", tools.NewRescheduleEventTool()},
+		{"calendar_cancel_event", tools.NewCancelEventTool()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !strings.Contains(tt.tool.Description, "MUST") {
+				t.Errorf("description missing 'MUST' keyword:\n  got: %s", tt.tool.Description)
+			}
+		})
+	}
+}
+
 // TestCalendarTools_AccountParamDescription verifies that all 9 calendar tools
 // have the updated account parameter description containing "the default
 // account is used" and NOT containing the old elicitation-specific text
