@@ -46,7 +46,9 @@ func NewUpdateEventTool() mcp.Tool {
 				"before calling this tool. The summary MUST include the fields being changed "+
 				"and the affected attendees. If any new attendee email domain differs from "+
 				"the user's own domain, add an explicit warning that external recipients "+
-				"will receive update notifications. Only call this tool after the user confirms.",
+				"will receive update notifications. Only call this tool after the user confirms. "+
+				"If the AskUserQuestion tool is available, use it to present the summary "+
+				"and collect confirmation for a better user experience.",
 		),
 		mcp.WithString("event_id", mcp.Required(),
 			mcp.Description("The unique ID of the event to update"),

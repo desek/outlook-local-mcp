@@ -2,7 +2,7 @@
 
 ## Summary
 
-Requirements: 10/10 | Acceptance Criteria: 11/11 | Tests: 10/10 | Gaps: 0
+Requirements: 11/11 | Acceptance Criteria: 12/12 | Tests: 11/11 | Gaps: 0
 
 ## Requirement Verification
 
@@ -18,6 +18,7 @@ Requirements: 10/10 | Acceptance Criteria: 11/11 | Tests: 10/10 | Gaps: 0
 | FR-8 | cancel_event MUST warn when any attendee is external | PASS | `cancel_event.go:44-46` -- "If any attendee is external to the user's organization, add an explicit warning about external cancellation notices" |
 | FR-9 | All confirmation instructions MUST use keyword "MUST" | PASS | `create_event.go:57,59` "MUST present", "MUST include"; `update_event.go:44,46` "MUST present", "MUST include"; `reschedule_event.go:42` "MUST present"; `cancel_event.go:42` "MUST present" |
 | FR-10 | Events without attendees MUST NOT require confirmation | PASS | All four descriptions scope confirmation to attendee-present scenarios: "When the event includes attendees" (create), "When the update adds or modifies attendees" (update), "When the event has attendees" (reschedule, cancel) |
+| FR-11 | All four confirmation instructions MUST mention AskUserQuestion tool | PASS | All four descriptions contain "If the AskUserQuestion tool is available, use it to present the summary and collect confirmation" -- `create_event.go:63-64`, `update_event.go:50-51`, `reschedule_event.go:45-46`, `cancel_event.go:47-48` |
 
 ## Acceptance Criteria Verification
 
@@ -34,6 +35,7 @@ Requirements: 10/10 | Acceptance Criteria: 11/11 | Tests: 10/10 | Gaps: 0
 | AC-9 | Existing CR-0039 guidance preserved | PASS | `create_event.go:53-56` retains CR-0039 paragraph; `update_event.go:40-43` retains CR-0039 paragraph; existing tests `TestCreateEvent_DescriptionContainsAttendeeGuidance` and `TestUpdateEvent_DescriptionContainsAttendeeGuidance` pass |
 | AC-10 | All quality checks pass | PASS | `go build ./...` succeeds; `golangci-lint run ./...` reports 0 issues; `go test ./...` all packages pass |
 | AC-11 | Confirmation instructions use MUST keyword | PASS | All four descriptions contain "MUST" in the confirmation directive; verified by `TestConfirmationInstructions_UseMUSTKeyword` test |
+| AC-12 | Confirmation instructions reference AskUserQuestion tool | PASS | All four descriptions contain "AskUserQuestion"; verified by `TestConfirmationInstructions_AskUserQuestionGuidance` test |
 
 ## Test Strategy Verification
 
@@ -49,6 +51,7 @@ Requirements: 10/10 | Acceptance Criteria: 11/11 | Tests: 10/10 | Gaps: 0
 | `tool_description_test.go` | `TestCreateEvent_DescriptionContainsSummaryFields` | Yes | Yes (line 173) | Yes -- checks "subject", "date/time", "attendee list", "location", "body preview" |
 | `tool_description_test.go` | `TestConfirmationInstructions_ScopedToAttendees` | Yes | Yes (line 188) | Yes -- checks attendee-scoping language for all four tools |
 | `tool_description_test.go` | `TestConfirmationInstructions_UseMUSTKeyword` | Yes | Yes (line 211) | Yes -- checks "MUST" keyword for all four tools |
+| `tool_description_test.go` | `TestConfirmationInstructions_AskUserQuestionGuidance` | Yes | Yes (line 231) | Yes -- checks "AskUserQuestion" for all four tools |
 
 ## Gaps
 

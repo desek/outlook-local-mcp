@@ -43,7 +43,9 @@ func NewCancelEventTool() mcp.Tool {
 				"user showing the event subject, time, and full attendee list, then wait "+
 				"for explicit confirmation before calling this tool. If any attendee is "+
 				"external to the user's organization, add an explicit warning about "+
-				"external cancellation notices.",
+				"external cancellation notices. "+
+				"If the AskUserQuestion tool is available, use it to present the summary "+
+				"and collect confirmation for a better user experience.",
 		),
 		mcp.WithString("event_id",
 			mcp.Required(),

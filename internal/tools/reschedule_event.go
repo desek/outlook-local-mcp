@@ -41,7 +41,9 @@ func NewRescheduleEventTool() mcp.Tool {
 				"IMPORTANT: When the event has attendees, rescheduling sends update "+
 				"notifications to all attendees. You MUST present a draft summary to the "+
 				"user showing the event subject, current time, proposed new time, and "+
-				"attendee list, then wait for explicit confirmation before calling this tool.",
+				"attendee list, then wait for explicit confirmation before calling this tool. "+
+				"If the AskUserQuestion tool is available, use it to present the summary "+
+				"and collect confirmation for a better user experience.",
 		),
 		mcp.WithString("event_id", mcp.Required(),
 			mcp.Description("The unique identifier of the event to reschedule."),

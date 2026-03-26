@@ -228,6 +228,29 @@ func TestConfirmationInstructions_UseMUSTKeyword(t *testing.T) {
 	}
 }
 
+// TestConfirmationInstructions_AskUserQuestionGuidance verifies that all four
+// confirmation instructions mention AskUserQuestion as a preferred UX mechanism
+// per CR-0053 enhancement.
+func TestConfirmationInstructions_AskUserQuestionGuidance(t *testing.T) {
+	tests := []struct {
+		name string
+		tool mcp.Tool
+	}{
+		{"calendar_create_event", tools.NewCreateEventTool()},
+		{"calendar_update_event", tools.NewUpdateEventTool()},
+		{"calendar_reschedule_event", tools.NewRescheduleEventTool()},
+		{"calendar_cancel_event", tools.NewCancelEventTool()},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if !strings.Contains(tt.tool.Description, "AskUserQuestion") {
+				t.Errorf("description missing 'AskUserQuestion' guidance:\n  got: %s", tt.tool.Description)
+			}
+		})
+	}
+}
+
 // TestCalendarTools_AccountParamDescription verifies that all 9 calendar tools
 // have the updated account parameter description containing "the default
 // account is used" and NOT containing the old elicitation-specific text

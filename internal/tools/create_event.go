@@ -59,7 +59,9 @@ func NewCreateEventTool() mcp.Tool {
 				"this tool. The summary MUST include: subject, date/time, attendee list, "+
 				"location, and body preview. If any attendee email domain differs from the "+
 				"user's own domain, add an explicit warning that external recipients will "+
-				"receive the invitation. Only call this tool after the user confirms.",
+				"receive the invitation. Only call this tool after the user confirms. "+
+				"If the AskUserQuestion tool is available, use it to present the summary "+
+				"and collect confirmation for a better user experience.",
 		),
 		mcp.WithString("subject", mcp.Required(),
 			mcp.Description("Event title"),

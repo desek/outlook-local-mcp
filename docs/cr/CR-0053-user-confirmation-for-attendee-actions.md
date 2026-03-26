@@ -74,6 +74,7 @@ Add a new paragraph to each of the four affected tool descriptions that instruct
 - Present a draft summary of the action to the user before calling the tool.
 - Wait for explicit user confirmation before proceeding.
 - Include an extra warning when any attendee email domain differs from the organizer's domain (external attendees).
+- Use the `AskUserQuestion` tool (if available) for presenting the summary and collecting confirmation, providing a structured UX.
 
 The confirmation instruction is added as an `IMPORTANT` paragraph in the tool description, following the existing pattern established by CR-0039.
 
@@ -88,6 +89,8 @@ this tool. The summary MUST include: subject, date/time, attendee list,
 location, and body preview. If any attendee email domain differs from the
 user's own domain, add an explicit warning that external recipients will
 receive the invitation. Only call this tool after the user confirms.
+If the AskUserQuestion tool is available, use it to present the summary
+and collect confirmation for a better user experience.
 ```
 
 **`calendar_update_event`** -- append after the existing CR-0039 paragraph:
@@ -99,7 +102,8 @@ before calling this tool. The summary MUST include the fields being changed
 and the affected attendees. If any new attendee email domain differs from
 the user's own domain, add an explicit warning that external recipients
 will receive update notifications. Only call this tool after the user
-confirms.
+confirms. If the AskUserQuestion tool is available, use it to present
+the summary and collect confirmation for a better user experience.
 ```
 
 **`calendar_reschedule_event`** -- append to existing description:
@@ -109,7 +113,8 @@ IMPORTANT: When the event has attendees, rescheduling sends update
 notifications to all attendees. You MUST present a draft summary to the
 user showing the event subject, current time, proposed new time, and
 attendee list, then wait for explicit confirmation before calling this
-tool.
+tool. If the AskUserQuestion tool is available, use it to present the
+summary and collect confirmation for a better user experience.
 ```
 
 **`calendar_cancel_event`** -- append to existing description:
@@ -120,7 +125,9 @@ notice to ALL attendees immediately. You MUST present a summary to the
 user showing the event subject, time, and full attendee list, then wait
 for explicit confirmation before calling this tool. If any attendee is
 external to the user's organization, add an explicit warning about
-external cancellation notices.
+external cancellation notices. If the AskUserQuestion tool is available,
+use it to present the summary and collect confirmation for a better user
+experience.
 ```
 
 ### Proposed LLM-to-Tool Flow
@@ -169,6 +176,7 @@ sequenceDiagram
 8. The `calendar_cancel_event` tool description **MUST** instruct the LLM to add an explicit warning when any attendee is external to the user's organization.
 9. All confirmation instructions **MUST** use the keyword "MUST" (not "should" or "consider") to maximize LLM compliance.
 10. Events without attendees **MUST NOT** require user confirmation -- the confirmation instruction **MUST** be scoped to attendee-present scenarios only.
+11. All four confirmation instructions **MUST** instruct the LLM to use the `AskUserQuestion` tool (if available) to present the summary and collect confirmation for improved user experience.
 
 ### Non-Functional Requirements
 
@@ -291,6 +299,7 @@ flowchart LR
 | `tool_description_test.go` | `TestCreateEvent_DescriptionContainsSummaryFields` | Verify create_event description specifies required summary fields (AC-7) | `NewCreateEventTool()` struct | Description contains "subject", "date/time", "attendee list", "location", and "body preview" |
 | `tool_description_test.go` | `TestConfirmationInstructions_ScopedToAttendees` | Verify all four confirmation instructions are conditional on attendee presence (AC-8) | All four `New*Tool()` structs | Each description contains attendee-scoping language before the confirmation directive |
 | `tool_description_test.go` | `TestConfirmationInstructions_UseMUSTKeyword` | Verify all four confirmation instructions use "MUST" keyword (AC-11) | All four `New*Tool()` structs | Each description contains "MUST" in the confirmation instruction |
+| `tool_description_test.go` | `TestConfirmationInstructions_AskUserQuestionGuidance` | Verify all four confirmation instructions mention AskUserQuestion (AC-12) | All four `New*Tool()` structs | Each description contains "AskUserQuestion" |
 
 ### Tests to Modify
 
@@ -399,6 +408,14 @@ Then the build succeeds
 Given the updated tool descriptions for all four affected tools
 When the confirmation instruction text is inspected
 Then every confirmation instruction MUST use the keyword "MUST" (not "should" or "consider") for the confirmation directive
+```
+
+### AC-12: Confirmation instructions reference AskUserQuestion tool
+
+```gherkin
+Given the updated tool descriptions for all four affected tools
+When the confirmation instruction text is inspected
+Then every confirmation instruction MUST mention "AskUserQuestion" as a preferred mechanism for presenting the summary and collecting confirmation
 ```
 
 ## Quality Standards Compliance
