@@ -40,7 +40,15 @@ func NewUpdateEventTool() mcp.Tool {
 				"IMPORTANT: When attendees are included, always provide a body "+
 				"(agenda or description) and location so recipients understand the "+
 				"purpose and place of the meeting. Ask the user for these details "+
-				"or suggest appropriate values before updating the event.",
+				"or suggest appropriate values before updating the event.\n\n"+
+				"IMPORTANT: When the update adds or modifies attendees, you MUST present a "+
+				"draft summary of the changes to the user and wait for explicit confirmation "+
+				"before calling this tool. The summary MUST include the fields being changed "+
+				"and the affected attendees. If any new attendee email domain differs from "+
+				"the user's own domain, add an explicit warning that external recipients "+
+				"will receive update notifications. Only call this tool after the user confirms. "+
+				"If the AskUserQuestion tool is available, use it to present the summary "+
+				"and collect confirmation for a better user experience.",
 		),
 		mcp.WithString("event_id", mcp.Required(),
 			mcp.Description("The unique ID of the event to update"),

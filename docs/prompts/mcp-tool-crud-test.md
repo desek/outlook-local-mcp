@@ -262,6 +262,8 @@ Call `mcp__outlookCalendar__calendar_list_events` for the same test date as Step
 
 ### Step 18 -- Create Teams meeting
 
+> **Note:** In multi-account mode, this step creates an event with attendees. Per CR-0053, the LLM should present a draft summary (subject, date/time, attendee list, location, body preview) and wait for user confirmation before calling the tool. If any attendee email domain differs from the user's own domain, the LLM should also display an external attendee warning. Confirm when prompted.
+
 **If multi-account mode**, call `mcp__outlookCalendar__calendar_create_event` with:
 
 | Parameter           | Value                                           |
@@ -350,6 +352,8 @@ Call `mcp__outlookCalendar__calendar_respond_event` with:
 - **Fail:** If the call succeeds, the server is not enforcing the organizer/attendee distinction.
 
 ### Step 24 -- Cancel Teams meeting
+
+> **Note:** This event has attendees (in multi-account mode). Per CR-0053, the LLM should present a summary (subject, time, attendee list) and wait for user confirmation before calling the tool. If any attendee is external, the LLM should also display an external attendee warning. Confirm when prompted.
 
 Call `mcp__outlookCalendar__calendar_cancel_event` with:
 

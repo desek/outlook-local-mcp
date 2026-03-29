@@ -49,6 +49,7 @@ On first tool call, sign in with a device code. No Azure AD app registration or 
 - **OpenTelemetry** -- optional metrics and tracing via OTLP gRPC
 - **Event provenance tagging** -- every event created by the MCP server is tagged with a hidden extended property, enabling reliable identification and filtering of MCP-created events via `created_by_mcp` on `calendar_search_events`. Invisible in Outlook UI. Configurable via `OUTLOOK_MCP_PROVENANCE_TAG`; set to empty to disable (see CR-0040)
 - **Event quality guardrails** -- tool descriptions guide the LLM to provide body and location when creating meetings with attendees; a response `_advisory` field prompts follow-up when these are missing (see CR-0039)
+- **User confirmation for attendee actions** -- when creating, updating, rescheduling, or cancelling events that involve attendees, tool descriptions instruct the LLM to present a draft summary and wait for explicit user confirmation before proceeding. An additional warning is shown when external attendees (different email domain) are involved. When the `AskUserQuestion` tool is available, the LLM is instructed to use it for a structured confirmation experience. Events without attendees are unaffected (see CR-0053)
 - **Mail read access** -- opt-in read-only email access via `OUTLOOK_MCP_MAIL_ENABLED=true`. Four mail tools (`mail_list_folders`, `mail_list_messages`, `mail_search_messages`, `mail_get_message`) enable finding emails related to calendar events using KQL full-text search, OData filtering by conversation ID/sender/date, and full message retrieval. Adds `Mail.Read` OAuth scope only when enabled. Default: disabled (see CR-0043)
 - **MCP tool annotations** -- all tools include complete MCP annotations (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) for Anthropic Software Directory compliance. Clients can auto-approve read-only tools, prompt for confirmation on destructive operations, and display human-readable titles (see CR-0052)
 - **Response filtering** -- text mode (default) returns token-efficient plain text for LLM consumption; summary mode returns compact JSON; raw mode preserves full Graph API data (see CR-0033, CR-0042, CR-0051)
@@ -534,7 +535,7 @@ Retrieve details of a single message by ID. Default output includes `bodyPreview
 
 #### `calendar_create_event`
 
-Create a new calendar event. Only `subject` and `start_datetime` are required -- timezones default to the server's configured timezone, and `end_datetime` defaults to start + 30 minutes (or + 24 hours for all-day events). Supports attendees (sends invitations automatically), Teams online meetings, recurrence, and all standard event properties. When attendees are included, always provide a body (agenda or description) and location so recipients understand the purpose and place of the meeting (see CR-0039, CR-0042).
+Create a new calendar event. Only `subject` and `start_datetime` are required -- timezones default to the server's configured timezone, and `end_datetime` defaults to start + 30 minutes (or + 24 hours for all-day events). Supports attendees (sends invitations automatically), Teams online meetings, recurrence, and all standard event properties. When attendees are included, always provide a body (agenda or description) and location so recipients understand the purpose and place of the meeting (see CR-0039, CR-0042). When the event includes attendees, the LLM is instructed to present a draft summary (subject, date/time, attendee list, location, body preview) and wait for user confirmation before calling this tool. An additional warning is shown for external attendees. If the `AskUserQuestion` tool is available, the LLM uses it for structured confirmation (see CR-0053).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -577,7 +578,7 @@ Create a new calendar event. Only `subject` and `start_datetime` are required --
 
 #### `calendar_update_event`
 
-Update an existing calendar event. Only specified fields are changed (PATCH semantics). Sends update notifications to attendees if applicable. When attendees are included, always provide a body (agenda or description) and location so recipients understand the purpose and place of the meeting (see CR-0039).
+Update an existing calendar event. Only specified fields are changed (PATCH semantics). Sends update notifications to attendees if applicable. When attendees are included, always provide a body (agenda or description) and location so recipients understand the purpose and place of the meeting (see CR-0039). When the update adds or modifies attendees, the LLM is instructed to present a draft summary of changes and wait for user confirmation before calling this tool. An additional warning is shown for external attendees. If the `AskUserQuestion` tool is available, the LLM uses it for structured confirmation (see CR-0053).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -619,7 +620,7 @@ Permanently delete a calendar event. When the organizer deletes a meeting, cance
 
 #### `calendar_cancel_event`
 
-Cancel a meeting and send a cancellation message to all attendees. Only the organizer can cancel. For events without attendees, use `calendar_delete_event` instead.
+Cancel a meeting and send a cancellation message to all attendees. Only the organizer can cancel. For events without attendees, use `calendar_delete_event` instead. When the event has attendees, the LLM is instructed to present a summary (subject, time, attendee list) and wait for user confirmation before calling this tool. An additional warning is shown for external attendees. If the `AskUserQuestion` tool is available, the LLM uses it for structured confirmation (see CR-0053).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -643,7 +644,7 @@ Respond to a meeting invitation: accept, tentatively accept, or decline. Sends a
 
 #### `calendar_reschedule_event`
 
-Move an event to a new time, preserving its original duration. Only the new start time is required; the end time is computed automatically from the original event's duration. Sends update notifications to attendees if applicable. Completes in at most 2 Graph API calls (GET + PATCH). See CR-0042.
+Move an event to a new time, preserving its original duration. Only the new start time is required; the end time is computed automatically from the original event's duration. Sends update notifications to attendees if applicable. Completes in at most 2 Graph API calls (GET + PATCH). See CR-0042. When the event has attendees, the LLM is instructed to present a draft summary (subject, current time, proposed new time, attendee list) and wait for user confirmation before calling this tool. If the `AskUserQuestion` tool is available, the LLM uses it for structured confirmation (see CR-0053).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
