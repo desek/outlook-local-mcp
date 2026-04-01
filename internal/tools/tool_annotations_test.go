@@ -190,10 +190,10 @@ func TestDeleteEventToolAnnotations(t *testing.T) {
 	})
 }
 
-// TestCancelEventToolAnnotations verifies all 5 annotations on calendar_cancel_event.
-func TestCancelEventToolAnnotations(t *testing.T) {
-	assertAnnotations(t, tools.NewCancelEventTool(), annotationExpectation{
-		title: "Cancel Calendar Event", readOnly: false, destructive: true, idempotent: true, openWorld: true,
+// TestCancelMeetingToolAnnotations verifies all 5 annotations on calendar_cancel_meeting.
+func TestCancelMeetingToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewCancelMeetingTool(), annotationExpectation{
+		title: "Cancel Calendar Meeting", readOnly: false, destructive: true, idempotent: true, openWorld: true,
 	})
 }
 

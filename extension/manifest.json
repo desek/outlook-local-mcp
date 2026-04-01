@@ -85,7 +85,7 @@
       "description": "Delete a calendar event by ID. Organizer deletions send cancellation notices to attendees."
     },
     {
-      "name": "calendar_cancel_event",
+      "name": "calendar_cancel_meeting",
       "description": "Cancel a meeting and send a cancellation message to all attendees. Only the organizer can cancel."
     },
     {

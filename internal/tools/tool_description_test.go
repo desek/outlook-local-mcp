@@ -142,11 +142,11 @@ func TestRescheduleEvent_DescriptionContainsConfirmationGuidance(t *testing.T) {
 	}
 }
 
-// TestCancelEvent_DescriptionContainsConfirmationGuidance verifies that the
-// cancel_event tool description contains user confirmation instruction text
+// TestCancelMeeting_DescriptionContainsConfirmationGuidance verifies that the
+// cancel_meeting tool description contains user confirmation instruction text
 // added by CR-0053.
-func TestCancelEvent_DescriptionContainsConfirmationGuidance(t *testing.T) {
-	tool := tools.NewCancelEventTool()
+func TestCancelMeeting_DescriptionContainsConfirmationGuidance(t *testing.T) {
+	tool := tools.NewCancelMeetingTool()
 
 	if !strings.Contains(tool.Description, "confirmation") {
 		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
@@ -156,11 +156,11 @@ func TestCancelEvent_DescriptionContainsConfirmationGuidance(t *testing.T) {
 	}
 }
 
-// TestCancelEvent_DescriptionContainsExternalWarningGuidance verifies that the
-// cancel_event tool description contains external attendee warning text
+// TestCancelMeeting_DescriptionContainsExternalWarningGuidance verifies that the
+// cancel_meeting tool description contains external attendee warning text
 // added by CR-0053.
-func TestCancelEvent_DescriptionContainsExternalWarningGuidance(t *testing.T) {
-	tool := tools.NewCancelEventTool()
+func TestCancelMeeting_DescriptionContainsExternalWarningGuidance(t *testing.T) {
+	tool := tools.NewCancelMeetingTool()
 
 	if !strings.Contains(tool.Description, "external") {
 		t.Errorf("tool description missing 'external':\n  got: %s", tool.Description)
@@ -194,7 +194,7 @@ func TestConfirmationInstructions_ScopedToAttendees(t *testing.T) {
 		{"calendar_create_event", tools.NewCreateEventTool(), "When the event includes attendees"},
 		{"calendar_update_event", tools.NewUpdateEventTool(), "When the update adds or modifies attendees"},
 		{"calendar_reschedule_event", tools.NewRescheduleEventTool(), "When the event has attendees"},
-		{"calendar_cancel_event", tools.NewCancelEventTool(), "When the event has attendees"},
+		{"calendar_cancel_meeting", tools.NewCancelMeetingTool(), "When the event has attendees"},
 	}
 
 	for _, tt := range tests {
@@ -216,7 +216,7 @@ func TestConfirmationInstructions_UseMUSTKeyword(t *testing.T) {
 		{"calendar_create_event", tools.NewCreateEventTool()},
 		{"calendar_update_event", tools.NewUpdateEventTool()},
 		{"calendar_reschedule_event", tools.NewRescheduleEventTool()},
-		{"calendar_cancel_event", tools.NewCancelEventTool()},
+		{"calendar_cancel_meeting", tools.NewCancelMeetingTool()},
 	}
 
 	for _, tt := range tests {
@@ -239,7 +239,7 @@ func TestConfirmationInstructions_AskUserQuestionGuidance(t *testing.T) {
 		{"calendar_create_event", tools.NewCreateEventTool()},
 		{"calendar_update_event", tools.NewUpdateEventTool()},
 		{"calendar_reschedule_event", tools.NewRescheduleEventTool()},
-		{"calendar_cancel_event", tools.NewCancelEventTool()},
+		{"calendar_cancel_meeting", tools.NewCancelMeetingTool()},
 	}
 
 	for _, tt := range tests {
@@ -265,7 +265,7 @@ func TestCalendarTools_AccountParamDescription(t *testing.T) {
 		tools.NewCreateEventTool(),
 		tools.NewUpdateEventTool(),
 		tools.NewDeleteEventTool(),
-		tools.NewCancelEventTool(),
+		tools.NewCancelMeetingTool(),
 	}
 
 	const wantSubstring = "the default account is used"

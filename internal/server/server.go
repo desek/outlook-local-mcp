@@ -83,7 +83,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 
 	// CR-0009: Delete and cancel event tools.
 	s.AddTool(tools.NewDeleteEventTool(), wrapWrite("calendar_delete_event", "delete", tools.HandleDeleteEvent(retryCfg, timeout)))
-	s.AddTool(tools.NewCancelEventTool(), wrapWrite("calendar_cancel_event", "delete", tools.HandleCancelEvent(retryCfg, timeout)))
+	s.AddTool(tools.NewCancelMeetingTool(), wrapWrite("calendar_cancel_meeting", "delete", tools.HandleCancelEvent(retryCfg, timeout)))
 
 	// CR-0042: Respond to meeting invitations (accept/tentative/decline).
 	s.AddTool(tools.NewRespondEventTool(), wrapWrite("calendar_respond_event", "write", tools.HandleRespondEvent(retryCfg, timeout)))
