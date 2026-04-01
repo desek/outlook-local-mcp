@@ -2,10 +2,12 @@
 // Outlook Calendar MCP Server.
 //
 // This file provides the update_event MCP tool, which modifies an existing
-// calendar event via PATCH /me/events/{id} on the Microsoft Graph API. Only
-// fields explicitly provided in the request are set on the request body,
-// preserving PATCH semantics where omitted fields retain their current values.
-// Supports converting events to/from Teams online meetings via is_online_meeting.
+// personal calendar event (without attendee changes) via PATCH /me/events/{id}
+// on the Microsoft Graph API. Only fields explicitly provided in the request are
+// set on the request body, preserving PATCH semantics where omitted fields
+// retain their current values. Supports converting events to/from Teams online
+// meetings via is_online_meeting. To update attendees on an event, use
+// calendar_update_meeting instead.
 package tools
 
 import (
@@ -21,9 +23,12 @@ import (
 )
 
 // NewUpdateEventTool creates the MCP tool definition for update_event. The tool
-// accepts a required event_id and optional fields for all mutable event
-// properties, including Teams online meeting toggling. Only specified fields
-// are changed (PATCH semantics).
+// accepts a required event_id and optional fields for mutable event properties,
+// including Teams online meeting toggling. Only specified fields are changed
+// (PATCH semantics).
+//
+// This tool does not accept attendees. To update attendees on an event,
+// use calendar_update_meeting instead.
 //
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewUpdateEventTool() mcp.Tool {
@@ -35,20 +40,8 @@ func NewUpdateEventTool() mcp.Tool {
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Update an existing calendar event. Only specified fields are changed "+
-				"(PATCH semantics). Automatically sends update notifications to "+
-				"attendees if applicable.\n\n"+
-				"IMPORTANT: When attendees are included, always provide a body "+
-				"(agenda or description) and location so recipients understand the "+
-				"purpose and place of the meeting. Ask the user for these details "+
-				"or suggest appropriate values before updating the event.\n\n"+
-				"IMPORTANT: When the update adds or modifies attendees, you MUST present a "+
-				"draft summary of the changes to the user and wait for explicit confirmation "+
-				"before calling this tool. The summary MUST include the fields being changed "+
-				"and the affected attendees. If any new attendee email domain differs from "+
-				"the user's own domain, add an explicit warning that external recipients "+
-				"will receive update notifications. Only call this tool after the user confirms. "+
-				"If the AskUserQuestion tool is available, use it to present the summary "+
-				"and collect confirmation for a better user experience.",
+				"(PATCH semantics).\n\n"+
+				"To update attendees on an event, use calendar_update_meeting instead.",
 		),
 		mcp.WithString("event_id", mcp.Required(),
 			mcp.Description("The unique ID of the event to update"),
@@ -69,17 +62,10 @@ func NewUpdateEventTool() mcp.Tool {
 			mcp.Description("IANA timezone for new end time"),
 		),
 		mcp.WithString("body",
-			mcp.Description("New event body (HTML or plain text). Strongly recommended when "+
-				"attendees are invited -- include the meeting agenda, purpose, or discussion topics. "+
-				"Attendees receive this in their invitation."),
+			mcp.Description("New event body (HTML or plain text)."),
 		),
 		mcp.WithString("location",
-			mcp.Description("New location display name (e.g. room name, office, or \"Microsoft Teams\"). "+
-				"Strongly recommended when attendees are invited. If an online meeting is enabled, "+
-				"you may use \"Microsoft Teams\" or omit this."),
-		),
-		mcp.WithString("attendees",
-			mcp.Description(`New attendees JSON array (replaces entire list): [{"email":"a@b.com","name":"Name","type":"required"}]`),
+			mcp.Description("New location display name (e.g. room name, office, or \"Microsoft Teams\")."),
 		),
 		mcp.WithBoolean("is_online_meeting",
 			mcp.Description("Set true to make this a Teams online meeting, or false to remove it (work/school accounts only)"),

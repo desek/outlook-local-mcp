@@ -1,12 +1,12 @@
 // Package tools provides MCP tool definitions and handler constructors for the
 // Outlook Calendar MCP Server.
 //
-// This file provides the create_event MCP tool, which creates a new calendar
-// event via the Microsoft Graph API. It supports the full range of event
-// properties: subject, start/end with timezones, body (HTML/text auto-detection),
-// location, attendees (with automatic invitation sending), Teams online meetings,
-// all-day events, importance, sensitivity, free/busy status, categories,
-// recurrence patterns, and reminders.
+// This file provides the create_event MCP tool, which creates a new personal
+// calendar event (without attendees) via the Microsoft Graph API. It supports
+// subject, start/end with timezones, body (HTML/text auto-detection), location,
+// Teams online meetings, all-day events, importance, sensitivity, free/busy
+// status, categories, recurrence patterns, and reminders. To create an event
+// with attendees, use calendar_create_meeting instead.
 package tools
 
 import (
@@ -31,9 +31,11 @@ const maxAttendees = 500
 // accepts required parameters for subject and start_datetime, plus optional
 // parameters for start/end timezone (default to server's configured timezone),
 // end_datetime (default to start + 30 minutes, or + 24 hours for all-day
-// events), body, location, attendees, online meeting, all-day, importance,
-// sensitivity, show_as, categories, recurrence, reminder_minutes, and
-// calendar_id.
+// events), body, location, online meeting, all-day, importance, sensitivity,
+// show_as, categories, recurrence, reminder_minutes, and calendar_id.
+//
+// This tool does not accept attendees. To create an event with attendees,
+// use calendar_create_meeting instead.
 //
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewCreateEventTool() mcp.Tool {
@@ -44,24 +46,12 @@ func NewCreateEventTool() mcp.Tool {
 		mcp.WithIdempotentHintAnnotation(false),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
-			"Create a new calendar event. Supports attendees (sends invitations "+
-				"automatically), Teams online meetings, recurrence, and all standard "+
-				"event properties.\n\n"+
+			"Create a new personal calendar event. Supports Teams online meetings, "+
+				"recurrence, and all standard event properties.\n\n"+
 				"Only subject and start_datetime are required. Timezones default to "+
 				"the server's configured timezone, and end_datetime defaults to "+
 				"start + 30 minutes (or + 24 hours for all-day events).\n\n"+
-				"IMPORTANT: When attendees are included, always provide a body "+
-				"(agenda or description) and location so recipients understand the "+
-				"purpose and place of the meeting. Ask the user for these details "+
-				"or suggest appropriate values before creating the event.\n\n"+
-				"IMPORTANT: When the event includes attendees, you MUST present a draft "+
-				"summary to the user and wait for explicit confirmation before calling "+
-				"this tool. The summary MUST include: subject, date/time, attendee list, "+
-				"location, and body preview. If any attendee email domain differs from the "+
-				"user's own domain, add an explicit warning that external recipients will "+
-				"receive the invitation. Only call this tool after the user confirms. "+
-				"If the AskUserQuestion tool is available, use it to present the summary "+
-				"and collect confirmation for a better user experience.",
+				"To create an event with attendees, use calendar_create_meeting instead.",
 		),
 		mcp.WithString("subject", mcp.Required(),
 			mcp.Description("Event title"),
@@ -79,17 +69,10 @@ func NewCreateEventTool() mcp.Tool {
 			mcp.Description("IANA timezone for end time. Defaults to server's configured timezone when omitted."),
 		),
 		mcp.WithString("body",
-			mcp.Description("Event body content (HTML or plain text). Strongly recommended when "+
-				"attendees are invited -- include the meeting agenda, purpose, or discussion topics. "+
-				"Attendees receive this in their invitation."),
+			mcp.Description("Event body content (HTML or plain text)."),
 		),
 		mcp.WithString("location",
-			mcp.Description("Location display name (e.g. room name, office, or \"Microsoft Teams\"). "+
-				"Strongly recommended when attendees are invited. If an online meeting is enabled, "+
-				"you may use \"Microsoft Teams\" or omit this."),
-		),
-		mcp.WithString("attendees",
-			mcp.Description(`JSON array of attendees: [{"email":"a@b.com","name":"Name","type":"required|optional|resource"}]`),
+			mcp.Description("Location display name (e.g. room name, office, or \"Microsoft Teams\")."),
 		),
 		mcp.WithBoolean("is_online_meeting",
 			mcp.Description("Set true to create a Teams online meeting (work/school accounts only)"),
