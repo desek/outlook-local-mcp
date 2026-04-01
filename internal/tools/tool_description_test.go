@@ -157,7 +157,155 @@ func TestCancelMeeting_ConfirmationInstructions_ScopedToAttendees(t *testing.T) 
 	}
 }
 
-// TestCalendarTools_AccountParamDescription verifies that all 9 calendar tools
+// --- Meeting tool positive assertions (CR-0054) ---
+
+// TestCreateMeeting_DescriptionContainsConfirmationGuidance verifies that
+// create_meeting includes unconditional user confirmation instruction text.
+func TestCreateMeeting_DescriptionContainsConfirmationGuidance(t *testing.T) {
+	tool := tools.NewCreateMeetingTool()
+
+	if !strings.Contains(tool.Description, "MUST present") {
+		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "confirmation") {
+		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
+	}
+}
+
+// TestCreateMeeting_DescriptionContainsExternalWarningGuidance verifies that
+// create_meeting includes external attendee domain warning guidance.
+func TestCreateMeeting_DescriptionContainsExternalWarningGuidance(t *testing.T) {
+	tool := tools.NewCreateMeetingTool()
+
+	if !strings.Contains(tool.Description, "external") {
+		t.Errorf("tool description missing 'external':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "domain") {
+		t.Errorf("tool description missing 'domain':\n  got: %s", tool.Description)
+	}
+}
+
+// TestCreateMeeting_DescriptionContainsSummaryFields verifies that
+// create_meeting specifies the required draft summary fields: subject,
+// date/time, attendee list, location, and body preview.
+func TestCreateMeeting_DescriptionContainsSummaryFields(t *testing.T) {
+	tool := tools.NewCreateMeetingTool()
+
+	requiredFields := []string{"subject", "date/time", "attendee list", "location", "body preview"}
+	for _, field := range requiredFields {
+		if !strings.Contains(tool.Description, field) {
+			t.Errorf("tool description missing summary field %q:\n  got: %s", field, tool.Description)
+		}
+	}
+}
+
+// TestCreateMeeting_DescriptionContainsAttendeeAdvisory verifies that
+// create_meeting contains CR-0039 body/location advisory guidance.
+func TestCreateMeeting_DescriptionContainsAttendeeAdvisory(t *testing.T) {
+	tool := tools.NewCreateMeetingTool()
+
+	if !strings.Contains(tool.Description, "body") {
+		t.Errorf("tool description missing 'body' advisory:\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "location") {
+		t.Errorf("tool description missing 'location' advisory:\n  got: %s", tool.Description)
+	}
+}
+
+// TestUpdateMeeting_DescriptionContainsConfirmationGuidance verifies that
+// update_meeting includes unconditional user confirmation instruction text.
+func TestUpdateMeeting_DescriptionContainsConfirmationGuidance(t *testing.T) {
+	tool := tools.NewUpdateMeetingTool()
+
+	if !strings.Contains(tool.Description, "MUST present") {
+		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "confirmation") {
+		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
+	}
+}
+
+// TestUpdateMeeting_DescriptionContainsExternalWarningGuidance verifies that
+// update_meeting includes external attendee domain warning guidance.
+func TestUpdateMeeting_DescriptionContainsExternalWarningGuidance(t *testing.T) {
+	tool := tools.NewUpdateMeetingTool()
+
+	if !strings.Contains(tool.Description, "external") {
+		t.Errorf("tool description missing 'external':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "domain") {
+		t.Errorf("tool description missing 'domain':\n  got: %s", tool.Description)
+	}
+}
+
+// TestUpdateMeeting_DescriptionContainsAttendeeAdvisory verifies that
+// update_meeting contains CR-0039 body/location advisory guidance.
+func TestUpdateMeeting_DescriptionContainsAttendeeAdvisory(t *testing.T) {
+	tool := tools.NewUpdateMeetingTool()
+
+	if !strings.Contains(tool.Description, "body") {
+		t.Errorf("tool description missing 'body' advisory:\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "location") {
+		t.Errorf("tool description missing 'location' advisory:\n  got: %s", tool.Description)
+	}
+}
+
+// TestRescheduleMeeting_DescriptionContainsConfirmationGuidance verifies that
+// reschedule_meeting includes unconditional user confirmation instruction text
+// referencing attendee notifications.
+func TestRescheduleMeeting_DescriptionContainsConfirmationGuidance(t *testing.T) {
+	tool := tools.NewRescheduleMeetingTool()
+
+	if !strings.Contains(tool.Description, "MUST present") {
+		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
+	}
+	if !strings.Contains(tool.Description, "confirmation") {
+		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
+	}
+}
+
+// TestMeetingConfirmationInstructions_UseMUSTKeyword verifies that all four
+// meeting tool descriptions use the "MUST" keyword for the confirmation
+// directive, as required by CR-0054 FR-34.
+func TestMeetingConfirmationInstructions_UseMUSTKeyword(t *testing.T) {
+	meetingTools := []mcp.Tool{
+		tools.NewCreateMeetingTool(),
+		tools.NewUpdateMeetingTool(),
+		tools.NewRescheduleMeetingTool(),
+		tools.NewCancelMeetingTool(),
+	}
+
+	for _, tool := range meetingTools {
+		t.Run(tool.Name, func(t *testing.T) {
+			if !strings.Contains(tool.Description, "MUST") {
+				t.Errorf("tool description missing 'MUST' keyword:\n  got: %s", tool.Description)
+			}
+		})
+	}
+}
+
+// TestMeetingConfirmationInstructions_AskUserQuestionGuidance verifies that
+// all four meeting tool descriptions reference the AskUserQuestion tool for
+// collecting user confirmation, as required by CR-0054.
+func TestMeetingConfirmationInstructions_AskUserQuestionGuidance(t *testing.T) {
+	meetingTools := []mcp.Tool{
+		tools.NewCreateMeetingTool(),
+		tools.NewUpdateMeetingTool(),
+		tools.NewRescheduleMeetingTool(),
+		tools.NewCancelMeetingTool(),
+	}
+
+	for _, tool := range meetingTools {
+		t.Run(tool.Name, func(t *testing.T) {
+			if !strings.Contains(tool.Description, "AskUserQuestion") {
+				t.Errorf("tool description missing 'AskUserQuestion' reference:\n  got: %s", tool.Description)
+			}
+		})
+	}
+}
+
+// TestCalendarTools_AccountParamDescription verifies that all 12 calendar tools
 // have the updated account parameter description containing "the default
 // account is used" and NOT containing the old elicitation-specific text
 // "you will be prompted to select".
@@ -172,6 +320,9 @@ func TestCalendarTools_AccountParamDescription(t *testing.T) {
 		tools.NewUpdateEventTool(),
 		tools.NewDeleteEventTool(),
 		tools.NewCancelMeetingTool(),
+		tools.NewCreateMeetingTool(),
+		tools.NewUpdateMeetingTool(),
+		tools.NewRescheduleMeetingTool(),
 	}
 
 	const wantSubstring = "the default account is used"

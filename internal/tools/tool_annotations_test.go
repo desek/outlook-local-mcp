@@ -1,4 +1,4 @@
-// Package tools_test contains cross-cutting annotation tests for all 20 MCP
+// Package tools_test contains cross-cutting annotation tests for all 23 MCP
 // tools. Each test verifies that the five MCP annotations (Title,
 // ReadOnlyHint, DestructiveHint, IdempotentHint, OpenWorldHint) match the
 // values specified in the CR-0052 annotation matrix.
@@ -137,7 +137,7 @@ func TestStatusToolAnnotations(t *testing.T) {
 	})
 }
 
-// --- Non-destructive write tools (6) ---
+// --- Non-destructive write tools (9) ---
 
 // TestCreateEventToolAnnotations verifies all 5 annotations on calendar_create_event.
 func TestCreateEventToolAnnotations(t *testing.T) {
@@ -164,6 +164,30 @@ func TestRespondEventToolAnnotations(t *testing.T) {
 func TestRescheduleEventToolAnnotations(t *testing.T) {
 	assertAnnotations(t, tools.NewRescheduleEventTool(), annotationExpectation{
 		title: "Reschedule Event", readOnly: false, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
+// TestCreateMeetingToolAnnotations verifies all 5 annotations on
+// calendar_create_meeting (CR-0054).
+func TestCreateMeetingToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewCreateMeetingTool(), annotationExpectation{
+		title: "Create Calendar Meeting", readOnly: false, destructive: false, idempotent: false, openWorld: true,
+	})
+}
+
+// TestUpdateMeetingToolAnnotations verifies all 5 annotations on
+// calendar_update_meeting (CR-0054).
+func TestUpdateMeetingToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewUpdateMeetingTool(), annotationExpectation{
+		title: "Update Calendar Meeting", readOnly: false, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
+// TestRescheduleMeetingToolAnnotations verifies all 5 annotations on
+// calendar_reschedule_meeting (CR-0054).
+func TestRescheduleMeetingToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewRescheduleMeetingTool(), annotationExpectation{
+		title: "Reschedule Meeting", readOnly: false, destructive: false, idempotent: true, openWorld: true,
 	})
 }
 
