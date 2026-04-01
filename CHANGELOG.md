@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - MCP server communicating over stdio (JSON-RPC) backed by Microsoft Graph API v1.0
-- 9 calendar tools: list_calendars, list_events, get_event, search_events, get_free_busy, create_event, update_event, delete_event, cancel_event
+- 9 calendar tools: list_calendars, list_events, get_event, search_events, get_free_busy, create_event, update_event, delete_event, cancel_meeting
 - 3 account management tools: add_account, list_accounts, remove_account
 - Multi-account support with per-account token isolation
 - Lazy authentication via OAuth 2.0 authorization code flow (browser) and device code flow

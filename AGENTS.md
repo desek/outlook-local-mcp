@@ -25,7 +25,7 @@ outlook-mcp/
     validate/                  # Input validation helpers
     observability/             # OpenTelemetry metrics and tracing, WithObservability middleware
     server/                    # RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
-    tools/                     # 20 MCP tool handlers (11 calendar + 4 mail + 3 account + 2 system)
+    tools/                     # 23 MCP tool handlers (14 calendar + 4 mail + 3 account + 2 system)
   docs/
     ...
 ```
@@ -99,7 +99,7 @@ All MCP tools **MUST** include the full set of five MCP annotations for Anthropi
 
 * `mcp.WithTitleAnnotation(string)` -- human-readable display name for UI tool pickers.
 * `mcp.WithReadOnlyHintAnnotation(bool)` -- `true` for read tools, `false` for write/delete tools.
-* `mcp.WithDestructiveHintAnnotation(bool)` -- `true` only for tools that irreversibly delete data or send cancellation notices (`calendar_delete_event`, `calendar_cancel_event`, `account_remove`).
+* `mcp.WithDestructiveHintAnnotation(bool)` -- `true` only for tools that irreversibly delete data or send cancellation notices (`calendar_delete_event`, `calendar_cancel_meeting`, `account_remove`).
 * `mcp.WithIdempotentHintAnnotation(bool)` -- `true` when calling with the same arguments produces the same result (e.g., GET, PATCH, DELETE); `false` for tools that create new resources each call.
 * `mcp.WithOpenWorldHintAnnotation(bool)` -- `true` for tools that call external APIs (Microsoft Graph); `false` for local-only tools (`account_list`, `account_remove`, `status`).
 
