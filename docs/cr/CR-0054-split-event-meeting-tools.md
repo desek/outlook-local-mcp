@@ -1,14 +1,15 @@
 ---
 id: "CR-0054"
-status: "proposed"
+status: "completed"
 date: 2026-04-01
+completed-date: 2026-04-01
 requestor: Daniel Grenemark
 stakeholders:
   - Daniel Grenemark
 priority: "high"
 target-version: "0.3.0"
 source-branch: dev/user-confirmation
-source-commit: 7298cb5
+source-commit: fd6d386
 ---
 
 # Split Calendar Write Tools into Event and Meeting Variants
@@ -581,27 +582,27 @@ Then each MUST contain guidance about providing body and location when attendees
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
-- [ ] Any linter exceptions are documented with justification
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
+- [x] Any linter exceptions are documented with justification
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation (with expected modifications)
-- [ ] All new meeting tool tests pass
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation (with expected modifications)
+- [x] All new meeting tool tests pass
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] Go doc comments on all new tool constructors
-- [ ] Go doc comments updated on modified tool constructors
-- [ ] File-level package doc comments on new files
-- [ ] CRUD test document updated
+- [x] Go doc comments on all new tool constructors
+- [x] Go doc comments updated on modified tool constructors
+- [x] File-level package doc comments on new files
+- [x] CRUD test document updated
 
 ### Code Review
 
