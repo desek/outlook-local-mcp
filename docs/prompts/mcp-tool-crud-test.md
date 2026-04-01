@@ -262,9 +262,9 @@ Call `mcp__outlookCalendar__calendar_list_events` for the same test date as Step
 
 ### Step 18 -- Create Teams meeting
 
-> **Note:** In multi-account mode, this step creates an event with attendees. Per CR-0053, the LLM should present a draft summary (subject, date/time, attendee list, location, body preview) and wait for user confirmation before calling the tool. If any attendee email domain differs from the user's own domain, the LLM should also display an external attendee warning. Confirm when prompted.
+> **Note:** In multi-account mode, this step uses `calendar_create_meeting` (the meeting variant) because attendees are involved. The LLM should present a draft summary (subject, date/time, attendee list, location, body preview) and wait for user confirmation before calling the tool. If any attendee email domain differs from the user's own domain, the LLM should also display an external attendee warning. Confirm when prompted.
 
-**If multi-account mode**, call `mcp__outlookCalendar__calendar_create_event` with:
+**If multi-account mode**, call `mcp__outlookCalendar__calendar_create_meeting` with:
 
 | Parameter           | Value                                           |
 |---------------------|--------------------------------------------------|
@@ -278,7 +278,7 @@ Call `mcp__outlookCalendar__calendar_list_events` for the same test date as Step
 | `show_as`           | `free`                                           |
 | `attendees`         | `[{"email":"<attendee email>","name":"Attendee","type":"required"}]` |
 
-**If single-account mode**, call `mcp__outlookCalendar__calendar_create_event` with the same parameters **without** the `attendees` field.
+**If single-account mode**, call `mcp__outlookCalendar__calendar_create_event` with the same parameters **without** the `attendees` field (single-account mode uses the event variant since no attendees are involved).
 
 - **Pass:** Response is a plain text confirmation containing the event subject and an `ID:` line.
 - Save the returned **Teams event ID** from the `ID:` line.
@@ -338,6 +338,60 @@ Call `mcp__outlookCalendar__calendar_get_event` with the saved Teams event ID (o
 - **Verify:** The `attendees` array contains an entry for the attendee email with `status.response` equal to `tentativelyAccepted`.
 - **Fail:** If the attendee's response status has not updated.
 
+### Step 22a -- Update meeting (meeting tool)
+
+> **Multi-account only.** If single-account mode, mark this step **SKIP**.
+
+> **Note:** This step uses `calendar_update_meeting` (the meeting variant) because the event has attendees. The LLM should present a draft summary of the changes and affected attendees, then wait for user confirmation before calling the tool. Confirm when prompted.
+
+Call `mcp__outlookCalendar__calendar_update_meeting` with:
+
+| Parameter  | Value                                                    |
+|------------|----------------------------------------------------------|
+| `event_id` | Saved Teams event ID                                     |
+| `subject`  | Append ` (meeting updated)` to original subject from Step 18 |
+| `body`     | `Updated meeting agenda -- CRUD test`                    |
+
+- **Pass:** Response is a plain text confirmation containing `Event updated:` and the event subject.
+
+### Step 22b -- Verify meeting update
+
+> **Multi-account only.** If single-account mode, mark this step **SKIP**.
+
+Call `mcp__outlookCalendar__calendar_get_event` with the saved Teams event ID.
+
+- **Verify:** Subject ends with `(meeting updated)`.
+- **Verify:** Body preview contains `Updated meeting agenda`.
+- **Verify:** Start time and end time are unchanged from Step 18.
+- **Fail:** Report any mismatched field.
+
+### Step 22c -- Reschedule meeting (meeting tool)
+
+> **Multi-account only.** If single-account mode, mark this step **SKIP**.
+
+> **Note:** This step uses `calendar_reschedule_meeting` (the meeting variant) because the event has attendees. The LLM should present a summary showing the event subject, current time, proposed new time, and attendee list, then wait for user confirmation. Confirm when prompted.
+
+Call `mcp__outlookCalendar__calendar_reschedule_meeting` with:
+
+| Parameter            | Value                              |
+|----------------------|------------------------------------|
+| `event_id`           | Saved Teams event ID               |
+| `new_start_datetime` | Test date at `17:30:00`            |
+| `new_start_timezone` | `Europe/Amsterdam`                 |
+
+- **Pass:** Response is a plain text confirmation containing `Event rescheduled:` and the event subject.
+
+### Step 22d -- Verify meeting reschedule
+
+> **Multi-account only.** If single-account mode, mark this step **SKIP**.
+
+Call `mcp__outlookCalendar__calendar_get_event` with the saved Teams event ID.
+
+- **Verify:** Start time corresponds to test date `17:30` in `Europe/Amsterdam`.
+- **Verify:** End time corresponds to test date `18:00` in `Europe/Amsterdam` (original 30-minute duration preserved from Step 18).
+- **Verify:** Subject is unchanged (still ends with `(meeting updated)`).
+- **Fail:** Report any mismatched field or if duration was not preserved.
+
 ### Step 23 -- Respond to own meeting (expect failure)
 
 Call `mcp__outlookCalendar__calendar_respond_event` with:
@@ -353,9 +407,9 @@ Call `mcp__outlookCalendar__calendar_respond_event` with:
 
 ### Step 24 -- Cancel Teams meeting
 
-> **Note:** This event has attendees (in multi-account mode). Per CR-0053, the LLM should present a summary (subject, time, attendee list) and wait for user confirmation before calling the tool. If any attendee is external, the LLM should also display an external attendee warning. Confirm when prompted.
+> **Note:** This event has attendees (in multi-account mode). The LLM should present a summary (subject, time, attendee list) and wait for user confirmation before calling the tool. If any attendee is external, the LLM should also display an external attendee warning. Confirm when prompted.
 
-Call `mcp__outlookCalendar__calendar_cancel_event` with:
+Call `mcp__outlookCalendar__calendar_cancel_meeting` with:
 
 | Parameter  | Value                              |
 |------------|------------------------------------|
@@ -384,7 +438,10 @@ Read the **log file path** recorded in Step 0. Inspect the log entries emitted d
 - **Verify:** The `calendar_create_event` log includes the event ID.
 - **Verify:** The `calendar_delete_event` log includes the event ID and confirms deletion.
 - **Verify:** The `calendar_reschedule_event` log includes the event ID.
-- **Verify:** The `calendar_cancel_event` log includes the event ID.
+- **Verify:** The `calendar_cancel_meeting` log includes the event ID.
+- **If multi-account mode:** Verify the `calendar_create_meeting` log (Step 18) includes the event ID.
+- **If multi-account mode:** Verify the `calendar_update_meeting` log (Step 22a) includes the event ID.
+- **If multi-account mode:** Verify the `calendar_reschedule_meeting` log (Step 22c) includes the event ID.
 - **Verify:** The `calendar_get_event` call after deletion (Step 15) is logged at `ERROR` level with `ErrorItemNotFound`.
 - **Verify:** The `calendar_respond_event` call (Step 23) is logged at `ERROR` level.
 - **If multi-account mode:** Verify the `calendar_respond_event` call (Step 21) is logged at `INFO` level (success).
@@ -424,6 +481,10 @@ After all steps, print a summary table:
 | 20   | Verify invitation (attendee)      | PASS/FAIL/SKIP |
 | 21   | Respond from attendee (text)      | PASS/FAIL/SKIP |
 | 22   | Verify attendee response          | PASS/FAIL/SKIP |
+| 22a  | Update meeting (meeting tool)     | PASS/FAIL/SKIP |
+| 22b  | Verify meeting update             | PASS/FAIL/SKIP |
+| 22c  | Reschedule meeting (meeting tool) | PASS/FAIL/SKIP |
+| 22d  | Verify meeting reschedule         | PASS/FAIL/SKIP |
 | 23   | Respond to own meeting (err)      | PASS/FAIL      |
 | 24   | Cancel Teams meeting (text)       | PASS/FAIL      |
 | 25   | Verify cancellation               | PASS/FAIL      |
