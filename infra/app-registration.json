@@ -1,6 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/desek/outlook-local-mcp/main/infra/app-registration.schema.json",
-  "_comment": "Master definition for the Outlook Local MCP Azure AD app registration. Apply with: ./infra/apply-app-registration.sh",
+  "_comment": "Master definition for the Outlook Local MCP Entra ID app registration. Apply with: ./infra/apply-app-registration.sh",
   "_appId": "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3",
   "_objectId": "34e5f032-8c6d-4991-a82e-8dfb31a9c464",
 

@@ -46,7 +46,7 @@ func TestIsAuthError_AuthenticationRequired(t *testing.T) {
 	}
 }
 
-// TestIsAuthError_AADSTSError verifies that errors containing Azure AD STS
+// TestIsAuthError_AADSTSError verifies that errors containing Entra ID STS
 // error codes (AADSTS prefix) are detected as authentication errors.
 func TestIsAuthError_AADSTSError(t *testing.T) {
 	err := fmt.Errorf("AADSTS70000: error")

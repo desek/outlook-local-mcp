@@ -138,7 +138,7 @@ var (
 //
 // Parameters:
 //   - clientID: the OAuth 2.0 application (client) ID.
-//   - tenantID: the Azure AD tenant identifier (e.g., "common" or a GUID).
+//   - tenantID: the Entra ID tenant identifier (e.g., "common" or a GUID).
 //   - opts: functional options for configuring cache and other settings.
 //
 // Returns the constructed AuthCodeCredential, or an error if the MSAL
@@ -347,7 +347,7 @@ type persistedAccount struct {
 	// HomeAccountID is the unique identifier for the account across tenants.
 	HomeAccountID string `json:"home_account_id"`
 
-	// Environment is the Azure AD environment (e.g., "login.microsoftonline.com").
+	// Environment is the Entra ID environment (e.g., "login.microsoftonline.com").
 	Environment string `json:"environment"`
 
 	// Realm is the tenant in which the account authenticated.

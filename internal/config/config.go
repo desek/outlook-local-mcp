@@ -19,7 +19,7 @@ type Config struct {
 	// Microsoft Office first-party client ID.
 	ClientID string
 
-	// TenantID is the Azure AD tenant identifier. Accepts "common" (any account),
+	// TenantID is the Entra ID tenant identifier. Accepts "common" (any account),
 	// "organizations" (work/school only), "consumers" (personal only), or a
 	// specific tenant GUID.
 	TenantID string

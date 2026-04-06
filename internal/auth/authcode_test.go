@@ -13,7 +13,7 @@ import (
 )
 
 // testClientID is a synthetic client ID used in tests. It does not correspond
-// to a real Azure AD application registration.
+// to a real Entra ID application registration.
 const testClientID = "d3590ed6-52b3-4102-aeff-aad2292ab01c"
 
 // TestNewAuthCodeCredential_Success verifies that NewAuthCodeCredential

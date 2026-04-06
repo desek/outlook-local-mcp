@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # apply-app-registration.sh
 #
-# Applies the master app registration definition to Azure AD using the
+# Applies the master app registration definition to Entra ID using the
 # Microsoft Graph API. Reads infra/app-registration.json and PATCHes
 # the application object.
 #

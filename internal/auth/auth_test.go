@@ -18,7 +18,7 @@ import (
 )
 
 // testRecord returns a populated AuthenticationRecord for use in tests.
-// The values are synthetic and do not correspond to a real Azure AD account.
+// The values are synthetic and do not correspond to a real Entra ID account.
 func testRecord() azidentity.AuthenticationRecord {
 	return azidentity.AuthenticationRecord{
 		Authority:     "https://login.microsoftonline.com",

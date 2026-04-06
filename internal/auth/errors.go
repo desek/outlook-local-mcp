@@ -11,11 +11,11 @@ import (
 
 // authErrorPatterns lists substrings whose presence in an error message
 // indicates an authentication failure. Each pattern corresponds to a
-// known error surface from the Azure Identity SDK or Azure AD:
+// known error surface from the Azure Identity SDK or Entra ID:
 //   - "DeviceCodeCredential" -- azidentity DeviceCodeCredential failures.
 //   - "InteractiveBrowserCredential" -- azidentity InteractiveBrowserCredential failures.
 //   - "authentication required" -- explicit auth-needed signals.
-//   - "AADSTS" -- Azure AD Security Token Service error codes.
+//   - "AADSTS" -- Entra ID Security Token Service error codes.
 var authErrorPatterns = []string{
 	"DeviceCodeCredential",
 	"InteractiveBrowserCredential",
@@ -112,11 +112,11 @@ func classifyAuthError(err error) string {
 		return "Authentication timed out or was cancelled for this account."
 	}
 
-	// Check for AADSTS error codes from Azure AD.
+	// Check for AADSTS error codes from Entra ID.
 	if strings.Contains(msg, "AADSTS") {
 		// Extract a sanitized version without SDK class names.
 		sanitized := stripSDKClassNames(msg)
-		return "Azure AD rejected the authentication request: " + sanitized
+		return "Entra ID rejected the authentication request: " + sanitized
 	}
 
 	// Check for HTTP 401 via OData.

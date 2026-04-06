@@ -36,7 +36,7 @@ const silentAuthTimeout = 5 * time.Second
 // Parameters:
 //   - label: the unique account label.
 //   - clientID: the OAuth client ID.
-//   - tenantID: the Azure AD tenant ID.
+//   - tenantID: the Entra ID tenant ID.
 //   - authMethod: the authentication method (browser, device_code, auth_code).
 //   - cacheNameBase: base name for the OS keychain partition.
 //   - authRecordDir: directory where per-account auth record files are stored.
