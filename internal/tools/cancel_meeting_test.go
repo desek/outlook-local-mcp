@@ -27,7 +27,7 @@ func TestCancelEvent_Success_WithComment(t *testing.T) {
 	handler := HandleCancelEvent(graph.RetryConfig{}, 30*time.Second)
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = "calendar_cancel_event"
+	req.Params.Name = "calendar_cancel_meeting"
 	req.Params.Arguments = map[string]any{
 		"event_id": "AAMkAGTest456",
 		"comment":  "Meeting postponed to next week",
@@ -62,7 +62,7 @@ func TestCancelEvent_Success_WithoutComment(t *testing.T) {
 	handler := HandleCancelEvent(graph.RetryConfig{}, 30*time.Second)
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = "calendar_cancel_event"
+	req.Params.Name = "calendar_cancel_meeting"
 	req.Params.Arguments = map[string]any{
 		"event_id": "AAMkAGTest789",
 	}
@@ -96,7 +96,7 @@ func TestCancelEvent_NonOrganizer(t *testing.T) {
 	handler := HandleCancelEvent(graph.RetryConfig{}, 30*time.Second)
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = "calendar_cancel_event"
+	req.Params.Name = "calendar_cancel_meeting"
 	req.Params.Arguments = map[string]any{
 		"event_id": "AAMkAGTest456",
 	}
@@ -125,7 +125,7 @@ func TestCancelEvent_NotFound(t *testing.T) {
 	handler := HandleCancelEvent(graph.RetryConfig{}, 30*time.Second)
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = "calendar_cancel_event"
+	req.Params.Name = "calendar_cancel_meeting"
 	req.Params.Arguments = map[string]any{
 		"event_id": "nonexistent-id",
 	}
@@ -146,7 +146,7 @@ func TestCancelEvent_MissingEventId(t *testing.T) {
 	handler := HandleCancelEvent(graph.RetryConfig{}, 30*time.Second)
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = "calendar_cancel_event"
+	req.Params.Name = "calendar_cancel_meeting"
 	req.Params.Arguments = map[string]any{}
 
 	client, srv := newTestGraphClient(t, nil)
@@ -176,7 +176,7 @@ func TestCancelEvent_NoClientInContext(t *testing.T) {
 	handler := HandleCancelEvent(graph.RetryConfig{}, 30*time.Second)
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = "calendar_cancel_event"
+	req.Params.Name = "calendar_cancel_meeting"
 	req.Params.Arguments = map[string]any{
 		"event_id": "AAMkAGTest456",
 	}
@@ -207,7 +207,7 @@ func TestCancelEvent_Timeout(t *testing.T) {
 	handler := HandleCancelEvent(graph.RetryConfig{}, 30*time.Second)
 
 	req := mcp.CallToolRequest{}
-	req.Params.Name = "calendar_cancel_event"
+	req.Params.Name = "calendar_cancel_meeting"
 	req.Params.Arguments = map[string]any{
 		"event_id": "AAMkAGTest456",
 	}
@@ -227,13 +227,13 @@ func TestCancelEvent_Timeout(t *testing.T) {
 	}
 }
 
-// TestNewCancelEventTool validates that the cancel_event tool definition has
+// TestNewCancelMeetingTool validates that the cancel_meeting tool definition has
 // the correct name, parameters, and description content.
-func TestNewCancelEventTool(t *testing.T) {
-	tool := NewCancelEventTool()
+func TestNewCancelMeetingTool(t *testing.T) {
+	tool := NewCancelMeetingTool()
 
-	if tool.Name != "calendar_cancel_event" {
-		t.Errorf("name = %q, want %q", tool.Name, "calendar_cancel_event")
+	if tool.Name != "calendar_cancel_meeting" {
+		t.Errorf("name = %q, want %q", tool.Name, "calendar_cancel_meeting")
 	}
 
 	desc := tool.Description

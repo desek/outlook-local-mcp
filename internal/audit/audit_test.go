@@ -600,7 +600,7 @@ func TestOperationTypeClassification(t *testing.T) {
 		{"calendar_create_event", "write"},
 		{"calendar_update_event", "write"},
 		{"calendar_delete_event", "delete"},
-		{"calendar_cancel_event", "delete"},
+		{"calendar_cancel_meeting", "delete"},
 	}
 
 	for _, tt := range tests {

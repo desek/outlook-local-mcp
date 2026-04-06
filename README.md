@@ -39,7 +39,7 @@ On first tool call, sign in with a device code. No Azure AD app registration or 
 
 ## Features
 
-- **Up to 20 MCP tools** -- 11 calendar tools (list, get, search, free/busy, create, update, delete, cancel, respond, reschedule), 4 mail tools (list folders, list messages, search messages, get message; opt-in via `OUTLOOK_MCP_MAIL_ENABLED`), 3 account management tools (add, list, remove), 1 diagnostic tool (`status`), plus `complete_auth` (registered when using `auth_code` method). Without mail: 16 tools (15 without `complete_auth`)
+- **Up to 23 MCP tools** -- 14 calendar tools (list, get, search, free/busy, create event, create meeting, update event, update meeting, delete, cancel meeting, respond, reschedule event, reschedule meeting), 4 mail tools (list folders, list messages, search messages, get message; opt-in via `OUTLOOK_MCP_MAIL_ENABLED`), 3 account management tools (add, list, remove), 1 diagnostic tool (`status`), plus `complete_auth` (registered when using `auth_code` method). Without mail: 19 tools (18 without `complete_auth`). Event tools handle personal calendar entries; meeting tools handle events with attendees and include confirmation guidance (see CR-0054)
 - **Multi-account support** -- manage multiple Microsoft accounts simultaneously with per-account token isolation; accounts persist across server restarts via `accounts.json` (see CR-0025, CR-0032)
 - **Lazy authentication** -- authenticates on first tool call, not at startup; device code flow (default) displays a URL and code for simple sign-in (see CR-0034). Smart auth method defaulting infers the best method based on client ID (see CR-0034)
 - **Persistent token cache** -- OS-native secure storage (macOS Keychain, Linux libsecret, Windows DPAPI) for desktop release builds (CGo-enabled); AES-256-GCM encrypted file cache (`~/.outlook-local-mcp/token_cache.bin`) as fallback or for container builds. Configurable via `OUTLOOK_MCP_TOKEN_STORAGE` (`auto`, `keychain`, `file`). See CR-0037, CR-0038
@@ -48,7 +48,8 @@ On first tool call, sign in with a device code. No Azure AD app registration or 
 - **Audit logging** -- structured audit trail for every tool invocation
 - **OpenTelemetry** -- optional metrics and tracing via OTLP gRPC
 - **Event provenance tagging** -- every event created by the MCP server is tagged with a hidden extended property, enabling reliable identification and filtering of MCP-created events via `created_by_mcp` on `calendar_search_events`. Invisible in Outlook UI. Configurable via `OUTLOOK_MCP_PROVENANCE_TAG`; set to empty to disable (see CR-0040)
-- **Event quality guardrails** -- tool descriptions guide the LLM to provide body and location when creating meetings with attendees; a response `_advisory` field prompts follow-up when these are missing (see CR-0039)
+- **Event quality guardrails** -- meeting tool descriptions guide the LLM to provide body and location when creating or updating meetings with attendees; a response `_advisory` field prompts follow-up when these are missing (see CR-0039, CR-0054)
+- **User confirmation for attendee actions** -- dedicated meeting tools (`calendar_create_meeting`, `calendar_update_meeting`, `calendar_reschedule_meeting`, `calendar_cancel_meeting`) include unconditional confirmation guidance: the LLM must present a draft summary and wait for explicit user confirmation before proceeding. An additional warning is shown when external attendees (different email domain) are involved. When the `AskUserQuestion` tool is available, the LLM is instructed to use it for a structured confirmation experience. Event tools (without attendees) require no confirmation and redirect to meeting tools when attendees are needed (see CR-0053, CR-0054)
 - **Mail read access** -- opt-in read-only email access via `OUTLOOK_MCP_MAIL_ENABLED=true`. Four mail tools (`mail_list_folders`, `mail_list_messages`, `mail_search_messages`, `mail_get_message`) enable finding emails related to calendar events using KQL full-text search, OData filtering by conversation ID/sender/date, and full message retrieval. Adds `Mail.Read` OAuth scope only when enabled. Default: disabled (see CR-0043)
 - **MCP tool annotations** -- all tools include complete MCP annotations (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) for Anthropic Software Directory compliance. Clients can auto-approve read-only tools, prompt for confirmation on destructive operations, and display human-readable titles (see CR-0052)
 - **Response filtering** -- text mode (default) returns token-efficient plain text for LLM consumption; summary mode returns compact JSON; raw mode preserves full Graph API data (see CR-0033, CR-0042, CR-0051)
@@ -208,7 +209,7 @@ The server supports managing multiple Microsoft accounts simultaneously (see CR-
 
 ### Account selection
 
-All 11 calendar tools and 4 mail tools (when enabled) accept an optional `account` parameter to target a specific account:
+All 14 calendar tools and 4 mail tools (when enabled) accept an optional `account` parameter to target a specific account:
 
 - **Explicit selection:** Pass `account: "work"` to use the account with that label.
 - **Single account:** When only one account is registered, it is auto-selected (no `account` parameter needed).
@@ -534,7 +535,7 @@ Retrieve details of a single message by ID. Default output includes `bodyPreview
 
 #### `calendar_create_event`
 
-Create a new calendar event. Only `subject` and `start_datetime` are required -- timezones default to the server's configured timezone, and `end_datetime` defaults to start + 30 minutes (or + 24 hours for all-day events). Supports attendees (sends invitations automatically), Teams online meetings, recurrence, and all standard event properties. When attendees are included, always provide a body (agenda or description) and location so recipients understand the purpose and place of the meeting (see CR-0039, CR-0042).
+Create a new personal calendar event (without attendees). Only `subject` and `start_datetime` are required -- timezones default to the server's configured timezone, and `end_datetime` defaults to start + 30 minutes (or + 24 hours for all-day events). Supports Teams online meetings, recurrence, and all standard event properties. To create an event with attendees, use `calendar_create_meeting` instead (see CR-0054).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -543,9 +544,8 @@ Create a new calendar event. Only `subject` and `start_datetime` are required --
 | `start_timezone` | string | No | IANA timezone for start time (e.g., `America/New_York`). Defaults to the server's configured timezone when omitted. See CR-0042 |
 | `end_datetime` | string | No | End time in ISO 8601 without offset. Defaults to `start_datetime` + 30 minutes (or + 24 hours when `is_all_day` is true). See CR-0042 |
 | `end_timezone` | string | No | IANA timezone for end time. Defaults to the server's configured timezone when omitted. See CR-0042 |
-| `body` | string | No | Event body (HTML or plain text, auto-detected). Strongly recommended when attendees are invited |
-| `location` | string | No | Location display name. Strongly recommended when attendees are invited |
-| `attendees` | string | No | JSON array: `[{"email":"a@b.com","name":"Name","type":"required"}]`. Type: `required`, `optional`, `resource` |
+| `body` | string | No | Event body (HTML or plain text, auto-detected) |
+| `location` | string | No | Location display name |
 | `is_online_meeting` | boolean | No | Create a Teams online meeting (work/school accounts only) |
 | `is_all_day` | boolean | No | All-day event. Start/end must be midnight in the same timezone |
 | `importance` | string | No | `low`, `normal`, `high` |
@@ -575,9 +575,35 @@ Create a new calendar event. Only `subject` and `start_datetime` are required --
 
 ---
 
+#### `calendar_create_meeting`
+
+Create a new calendar meeting with attendees. Sends invitations automatically. Only `subject`, `start_datetime`, and `attendees` are required. Always provide a body (agenda or description) and location so attendees understand the purpose and place of the meeting (see CR-0039). The LLM is instructed to present a draft summary (subject, date/time, attendee list, location, body preview) and wait for user confirmation before calling this tool. An additional warning is shown for external attendees. If the `AskUserQuestion` tool is available, the LLM uses it for structured confirmation (see CR-0054).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `subject` | string | Yes | Event title |
+| `start_datetime` | string | Yes | Start time in ISO 8601 without offset (e.g., `2026-04-15T09:00:00`) |
+| `attendees` | string | Yes | JSON array: `[{"email":"a@b.com","name":"Name","type":"required"}]`. Type: `required`, `optional`, `resource` |
+| `start_timezone` | string | No | IANA timezone for start time (e.g., `America/New_York`). Defaults to the server's configured timezone when omitted |
+| `end_datetime` | string | No | End time in ISO 8601 without offset. Defaults to `start_datetime` + 30 minutes (or + 24 hours when `is_all_day` is true) |
+| `end_timezone` | string | No | IANA timezone for end time. Defaults to the server's configured timezone when omitted |
+| `body` | string | No | Event body (HTML or plain text, auto-detected). Strongly recommended -- include the meeting agenda, purpose, or discussion topics |
+| `location` | string | No | Location display name. Strongly recommended |
+| `is_online_meeting` | boolean | No | Create a Teams online meeting (work/school accounts only) |
+| `is_all_day` | boolean | No | All-day event. Start/end must be midnight in the same timezone |
+| `importance` | string | No | `low`, `normal`, `high` |
+| `sensitivity` | string | No | `normal`, `personal`, `private`, `confidential` |
+| `show_as` | string | No | `free`, `tentative`, `busy`, `oof`, `workingElsewhere` |
+| `categories` | string | No | Comma-separated category names |
+| `recurrence` | string | No | JSON recurrence object (same format as `calendar_create_event`) |
+| `reminder_minutes` | number | No | Reminder minutes before start |
+| `calendar_id` | string | No | Target calendar ID. Omit for default calendar |
+
+---
+
 #### `calendar_update_event`
 
-Update an existing calendar event. Only specified fields are changed (PATCH semantics). Sends update notifications to attendees if applicable. When attendees are included, always provide a body (agenda or description) and location so recipients understand the purpose and place of the meeting (see CR-0039).
+Update an existing personal calendar event. Only specified fields are changed (PATCH semantics). This tool does not accept attendees. To update attendees on an event, use `calendar_update_meeting` instead (see CR-0054).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -587,9 +613,35 @@ Update an existing calendar event. Only specified fields are changed (PATCH sema
 | `start_timezone` | string | No | IANA timezone for new start time. Defaults to the server's configured timezone when `start_datetime` is provided |
 | `end_datetime` | string | No | New end time. When provided without `end_timezone`, defaults to the server's configured timezone |
 | `end_timezone` | string | No | IANA timezone for new end time. Defaults to the server's configured timezone when `end_datetime` is provided |
-| `body` | string | No | New body (HTML or plain text). Strongly recommended when attendees are invited |
-| `location` | string | No | New location display name. Strongly recommended when attendees are invited |
+| `body` | string | No | New body (HTML or plain text) |
+| `location` | string | No | New location display name |
+| `is_all_day` | boolean | No | Change all-day status |
+| `importance` | string | No | `low`, `normal`, `high` |
+| `sensitivity` | string | No | `normal`, `personal`, `private`, `confidential` |
+| `show_as` | string | No | `free`, `tentative`, `busy`, `oof`, `workingElsewhere` |
+| `categories` | string | No | Comma-separated categories (replaces all) |
+| `recurrence` | string | No | New recurrence JSON, or `"null"` to remove. Series masters only |
+| `reminder_minutes` | number | No | New reminder minutes before start |
+| `is_reminder_on` | boolean | No | Enable or disable the reminder |
+
+---
+
+#### `calendar_update_meeting`
+
+Update an existing calendar meeting. Only specified fields are changed (PATCH semantics). Automatically sends update notifications to attendees. Always provide a body (agenda or description) and location so attendees understand the purpose and place of the meeting (see CR-0039). The LLM is instructed to present a draft summary of changes and wait for user confirmation before calling this tool. An additional warning is shown for external attendees. If the `AskUserQuestion` tool is available, the LLM uses it for structured confirmation (see CR-0054).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | string | Yes | The unique ID of the event to update |
+| `subject` | string | No | New event title |
+| `start_datetime` | string | No | New start time. When provided without `start_timezone`, defaults to the server's configured timezone |
+| `start_timezone` | string | No | IANA timezone for new start time |
+| `end_datetime` | string | No | New end time. When provided without `end_timezone`, defaults to the server's configured timezone |
+| `end_timezone` | string | No | IANA timezone for new end time |
+| `body` | string | No | New body (HTML or plain text). Strongly recommended -- include the meeting agenda, purpose, or discussion topics |
+| `location` | string | No | New location display name. Strongly recommended |
 | `attendees` | string | No | New attendees JSON array (replaces entire list) |
+| `is_online_meeting` | boolean | No | Set true to make this a Teams online meeting, or false to remove it |
 | `is_all_day` | boolean | No | Change all-day status |
 | `importance` | string | No | `low`, `normal`, `high` |
 | `sensitivity` | string | No | `normal`, `personal`, `private`, `confidential` |
@@ -601,7 +653,7 @@ Update an existing calendar event. Only specified fields are changed (PATCH sema
 
 #### Attendee quality advisory
 
-When `calendar_create_event` or `calendar_update_event` succeeds with attendees but the body or location is missing, the response JSON includes an `_advisory` field -- a plain-text hint for LLM clients suggesting they offer the user the option to add the missing information. The advisory is not present when there are no attendees, when all recommended fields are provided, or when `is_online_meeting` is set (which covers the location requirement). On `calendar_update_event`, the advisory only triggers when the `attendees` parameter is explicitly provided in the request. See CR-0039.
+When `calendar_create_meeting` or `calendar_update_meeting` succeeds with attendees but the body or location is missing, the response includes an `_advisory` field -- a plain-text hint for LLM clients suggesting they offer the user the option to add the missing information. The advisory is not present when all recommended fields are provided, or when `is_online_meeting` is set (which covers the location requirement). On `calendar_update_meeting`, the advisory only triggers when the `attendees` parameter is explicitly provided in the request. See CR-0039.
 
 ---
 
@@ -617,9 +669,9 @@ Permanently delete a calendar event. When the organizer deletes a meeting, cance
 
 ---
 
-#### `calendar_cancel_event`
+#### `calendar_cancel_meeting`
 
-Cancel a meeting and send a cancellation message to all attendees. Only the organizer can cancel. For events without attendees, use `calendar_delete_event` instead.
+Cancel a meeting and send a cancellation message to all attendees. Only the organizer can cancel. For non-meeting events, use `calendar_delete_event` instead. The LLM is instructed to present a summary (subject, time, attendee list) and wait for user confirmation before calling this tool. An additional warning is shown for external attendees. If the `AskUserQuestion` tool is available, the LLM uses it for structured confirmation (see CR-0053, CR-0054).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -643,7 +695,19 @@ Respond to a meeting invitation: accept, tentatively accept, or decline. Sends a
 
 #### `calendar_reschedule_event`
 
-Move an event to a new time, preserving its original duration. Only the new start time is required; the end time is computed automatically from the original event's duration. Sends update notifications to attendees if applicable. Completes in at most 2 Graph API calls (GET + PATCH). See CR-0042.
+Move a personal event to a new time, preserving its original duration. Only the new start time is required; the end time is computed automatically from the original event's duration. Completes in at most 2 Graph API calls (GET + PATCH). See CR-0042. To reschedule an event that has attendees (sends update notifications), use `calendar_reschedule_meeting` instead (see CR-0054).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `event_id` | string | Yes | The unique identifier of the event to reschedule |
+| `new_start_datetime` | string | Yes | New start time in ISO 8601 without offset (e.g., `2026-04-17T14:00:00`) |
+| `new_start_timezone` | string | No | IANA timezone for the new start time. Defaults to the server's configured timezone |
+
+---
+
+#### `calendar_reschedule_meeting`
+
+Move a meeting to a new time, preserving its original duration. Sends update notifications to all attendees. Only the new start time is required; the end time is computed automatically. The LLM is instructed to present a draft summary (subject, current time, proposed new time, attendee list) and wait for user confirmation before calling this tool. If the `AskUserQuestion` tool is available, the LLM uses it for structured confirmation (see CR-0054).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -653,7 +717,7 @@ Move an event to a new time, preserving its original duration. Only the new star
 
 ## Read-Only Mode
 
-Set `OUTLOOK_MCP_READ_ONLY=true` to disable all write operations. In this mode, the write tools (`calendar_create_event`, `calendar_update_event`, `calendar_delete_event`, `calendar_cancel_event`, `calendar_respond_event`, `calendar_reschedule_event`) return an error when invoked. Read and search tools remain fully functional.
+Set `OUTLOOK_MCP_READ_ONLY=true` to disable all write operations. In this mode, the write tools (`calendar_create_event`, `calendar_create_meeting`, `calendar_update_event`, `calendar_update_meeting`, `calendar_delete_event`, `calendar_cancel_meeting`, `calendar_respond_event`, `calendar_reschedule_event`, `calendar_reschedule_meeting`) return an error when invoked. Read and search tools remain fully functional.
 
 ```bash
 OUTLOOK_MCP_READ_ONLY=true ./outlook-local-mcp

@@ -541,3 +541,51 @@ func TestFormatStatusText(t *testing.T) {
 		t.Error("expected features line")
 	}
 }
+
+// TestFormatAccountsText_WithEmail verifies that accounts with an email field
+// display the email alongside the label.
+func TestFormatAccountsText_WithEmail(t *testing.T) {
+	accounts := []map[string]any{
+		{"label": "work", "authenticated": true, "email": "work@example.com"},
+		{"label": "personal", "authenticated": false, "email": ""},
+	}
+
+	result := FormatAccountsText(accounts)
+
+	if !strings.Contains(result, "work@example.com") {
+		t.Error("expected email address in output for authenticated account")
+	}
+	if !strings.Contains(result, "1. work (authenticated) — work@example.com") {
+		t.Error("expected formatted account line with email")
+	}
+	// Personal has no email — should still render label and state.
+	if !strings.Contains(result, "2. personal (not authenticated)") {
+		t.Error("expected account line without email for empty email")
+	}
+}
+
+// TestFormatAccountLine_WithEmail verifies the full label+email format.
+func TestFormatAccountLine_WithEmail(t *testing.T) {
+	result := FormatAccountLine("default", "user@example.com")
+	want := "Account: default (user@example.com)"
+	if result != want {
+		t.Errorf("FormatAccountLine = %q, want %q", result, want)
+	}
+}
+
+// TestFormatAccountLine_EmailOmitted verifies that email is omitted when empty.
+func TestFormatAccountLine_EmailOmitted(t *testing.T) {
+	result := FormatAccountLine("default", "")
+	want := "Account: default"
+	if result != want {
+		t.Errorf("FormatAccountLine = %q, want %q", result, want)
+	}
+}
+
+// TestFormatAccountLine_EmptyLabel verifies that an empty label returns "".
+func TestFormatAccountLine_EmptyLabel(t *testing.T) {
+	result := FormatAccountLine("", "user@example.com")
+	if result != "" {
+		t.Errorf("FormatAccountLine with empty label = %q, want empty string", result)
+	}
+}

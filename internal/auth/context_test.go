@@ -69,3 +69,40 @@ func TestAccountAuthFromContext_MissingKey(t *testing.T) {
 		t.Error("expected zero-value AccountAuth for missing key")
 	}
 }
+
+func TestWithAccountInfo_RoundTrip(t *testing.T) {
+	info := AccountInfo{Label: "work", Email: "work@example.com"}
+	ctx := WithAccountInfo(context.Background(), info)
+
+	got, ok := AccountInfoFromContext(ctx)
+	if !ok {
+		t.Fatal("expected ok=true, got false")
+	}
+	if got.Label != info.Label {
+		t.Errorf("Label = %q, want %q", got.Label, info.Label)
+	}
+	if got.Email != info.Email {
+		t.Errorf("Email = %q, want %q", got.Email, info.Email)
+	}
+}
+
+func TestAccountInfoFromContext_MissingKey(t *testing.T) {
+	got, ok := AccountInfoFromContext(context.Background())
+	if ok {
+		t.Fatal("expected ok=false for missing key")
+	}
+	if got.Label != "" || got.Email != "" {
+		t.Error("expected zero-value AccountInfo for missing key")
+	}
+}
+
+func TestAccountInfoFromContext_NilContext(t *testing.T) {
+	//nolint:staticcheck // intentionally testing nil context behavior
+	got, ok := AccountInfoFromContext(nil)
+	if ok {
+		t.Fatal("expected ok=false for nil context")
+	}
+	if got.Label != "" || got.Email != "" {
+		t.Error("expected zero-value AccountInfo for nil context")
+	}
+}

@@ -44,3 +44,33 @@ func TestGraphClient_ReturnsErrorWhenNotInContext(t *testing.T) {
 		t.Errorf("error = %q, want %q", err.Error(), "no account selected")
 	}
 }
+
+// TestAccountInfoLine_WithEmail verifies the full label+email output.
+func TestAccountInfoLine_WithEmail(t *testing.T) {
+	ctx := auth.WithAccountInfo(context.Background(), auth.AccountInfo{
+		Label: "default",
+		Email: "user@example.com",
+	})
+	want := "Account: default (user@example.com)"
+	if got := AccountInfoLine(ctx); got != want {
+		t.Errorf("AccountInfoLine = %q, want %q", got, want)
+	}
+}
+
+// TestAccountInfoLine_NoEmail verifies that email is omitted from output
+// when not set on the AccountInfo.
+func TestAccountInfoLine_NoEmail(t *testing.T) {
+	ctx := auth.WithAccountInfo(context.Background(), auth.AccountInfo{Label: "default"})
+	want := "Account: default"
+	if got := AccountInfoLine(ctx); got != want {
+		t.Errorf("AccountInfoLine = %q, want %q", got, want)
+	}
+}
+
+// TestAccountInfoLine_MissingContext verifies that an empty string is returned
+// when no AccountInfo has been injected into the context.
+func TestAccountInfoLine_MissingContext(t *testing.T) {
+	if got := AccountInfoLine(context.Background()); got != "" {
+		t.Errorf("AccountInfoLine with no context value = %q, want empty string", got)
+	}
+}

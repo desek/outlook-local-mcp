@@ -74,18 +74,26 @@
     },
     {
       "name": "calendar_create_event",
-      "description": "Create a new calendar event. Supports attendees, Teams online meetings, recurrence, and all standard event properties."
+      "description": "Create a new personal calendar event (no attendees). Supports Teams online meetings, recurrence, and all standard event properties."
+    },
+    {
+      "name": "calendar_create_meeting",
+      "description": "Create a new calendar meeting with attendees. Sends invitations automatically. Supports Teams online meetings, recurrence, and all standard event properties."
     },
     {
       "name": "calendar_update_event",
-      "description": "Update an existing calendar event. Only specified fields are changed (PATCH semantics)."
+      "description": "Update an existing calendar event (no attendee changes). Only specified fields are changed (PATCH semantics)."
+    },
+    {
+      "name": "calendar_update_meeting",
+      "description": "Update an existing calendar meeting including attendee changes. Sends update notifications to attendees. Only specified fields are changed (PATCH semantics)."
     },
     {
       "name": "calendar_delete_event",
       "description": "Delete a calendar event by ID. Organizer deletions send cancellation notices to attendees."
     },
     {
-      "name": "calendar_cancel_event",
+      "name": "calendar_cancel_meeting",
       "description": "Cancel a meeting and send a cancellation message to all attendees. Only the organizer can cancel."
     },
     {
@@ -94,7 +102,11 @@
     },
     {
       "name": "calendar_reschedule_event",
-      "description": "Move an event to a new time, preserving its original duration. Sends update notifications to attendees if applicable."
+      "description": "Move a personal event to a new time, preserving its original duration."
+    },
+    {
+      "name": "calendar_reschedule_meeting",
+      "description": "Move a meeting to a new time, preserving its original duration. Sends update notifications to all attendees."
     },
     {
       "name": "mail_list_folders",

@@ -102,3 +102,50 @@ func AccountAuthFromContext(ctx context.Context) (AccountAuth, bool) {
 	auth, ok := ctx.Value(accountAuthKey).(AccountAuth)
 	return auth, ok
 }
+
+// AccountInfo holds the label and email of the account resolved for a request.
+// Email may be empty if the /me fetch has not yet completed for this account.
+type AccountInfo struct {
+	// Label is the unique account identifier (e.g., "default", "work").
+	Label string
+
+	// Email is the authenticated user's email address fetched from /me.
+	// Empty when EnsureEmail has not yet run successfully for this account.
+	Email string
+}
+
+// accountInfoKeyType is the unexported context key type for AccountInfo storage.
+type accountInfoKeyType struct{}
+
+// accountInfoKey is the package-level context key for AccountInfo storage.
+var accountInfoKey = accountInfoKeyType{}
+
+// WithAccountInfo returns a new context with the given AccountInfo stored
+// under accountInfoKey. The AccountResolver middleware calls this after
+// resolving the account to make label and email available to tool handlers.
+//
+// Parameters:
+//   - ctx: the parent context.
+//   - info: the resolved account label and email.
+//
+// Returns a derived context containing the AccountInfo.
+func WithAccountInfo(ctx context.Context, info AccountInfo) context.Context {
+	return context.WithValue(ctx, accountInfoKey, info)
+}
+
+// AccountInfoFromContext retrieves the AccountInfo previously stored via
+// WithAccountInfo. Tool handlers call this to obtain the account label and
+// email for inclusion in response text.
+//
+// Parameters:
+//   - ctx: the context to retrieve the AccountInfo from.
+//
+// Returns the AccountInfo and true if present, or a zero-value AccountInfo
+// and false if not.
+func AccountInfoFromContext(ctx context.Context) (AccountInfo, bool) {
+	if ctx == nil {
+		return AccountInfo{}, false
+	}
+	info, ok := ctx.Value(accountInfoKey).(AccountInfo)
+	return info, ok
+}

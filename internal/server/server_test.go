@@ -195,7 +195,7 @@ func TestRegisterTools_ReadOnly_False_AllWriteToolsPass(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), testConfig(), nil)
 
-	writeTools := []string{"calendar_create_event", "calendar_update_event", "calendar_delete_event", "calendar_cancel_event"}
+	writeTools := []string{"calendar_create_event", "calendar_update_event", "calendar_delete_event", "calendar_cancel_meeting"}
 	for _, toolName := range writeTools {
 		msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + toolName + `","arguments":{}}}`
 		resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
@@ -668,8 +668,8 @@ func TestRegisterTools_MailEnabled(t *testing.T) {
 		}
 	}
 
-	// Verify total count: 15 base + 4 mail = 19.
-	const expectedTotal = 19
+	// Verify total count: 18 base + 4 mail = 22.
+	const expectedTotal = 22
 	if got := len(registered); got != expectedTotal {
 		t.Errorf("expected %d tools with mail enabled, got %d", expectedTotal, got)
 	}

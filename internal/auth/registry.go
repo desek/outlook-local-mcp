@@ -68,6 +68,14 @@ type AccountEntry struct {
 	// and Graph client. Accounts restored from disk without a cached token
 	// may have Authenticated == false until the user re-authenticates.
 	Authenticated bool
+
+	// Email is the authenticated user's email address, lazily fetched from the
+	// Microsoft Graph /me endpoint by EnsureEmail. Empty until first fetch.
+	Email string
+
+	// emailMu serializes concurrent EnsureEmail calls for this entry so the
+	// /me fetch happens at most once per account per server lifetime.
+	emailMu sync.Mutex
 }
 
 // AccountRegistry is a thread-safe store for multiple authenticated accounts.

@@ -31,3 +31,22 @@ func GraphClient(ctx context.Context) (*msgraphsdk.GraphServiceClient, error) {
 	}
 	return client, nil
 }
+
+// AccountInfoLine returns a formatted "Account: label (email)" line from the
+// AccountInfo stored in context by the AccountResolver middleware. The line is
+// suitable for appending to write-tool confirmation responses. Returns an empty
+// string when no AccountInfo is in context or the label is empty.
+//
+// Parameters:
+//   - ctx: the request context containing the injected AccountInfo.
+//
+// Returns a formatted account line, or "" when not available.
+//
+// Side effects: none.
+func AccountInfoLine(ctx context.Context) string {
+	info, ok := auth.AccountInfoFromContext(ctx)
+	if !ok {
+		return ""
+	}
+	return FormatAccountLine(info.Label, info.Email)
+}

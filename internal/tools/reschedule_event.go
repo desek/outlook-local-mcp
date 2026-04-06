@@ -2,9 +2,11 @@
 // Outlook Calendar MCP Server.
 //
 // This file provides the reschedule_event MCP tool, which moves an existing
-// calendar event to a new time while preserving its original duration. The
-// handler performs two Graph API calls: GET to retrieve the current event
-// start/end, and PATCH to update with the new computed times.
+// personal calendar event to a new time while preserving its original duration.
+// The handler performs two Graph API calls: GET to retrieve the current event
+// start/end, and PATCH to update with the new computed times. To reschedule
+// an event that has attendees (sends update notifications), use
+// calendar_reschedule_meeting instead.
 package tools
 
 import (
@@ -35,9 +37,10 @@ func NewRescheduleEventTool() mcp.Tool {
 		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
-			"Move an event to a new time, preserving its original duration. "+
-				"Only the new start time is required; the end time is computed automatically. "+
-				"Sends update notifications to attendees if applicable.",
+			"Move a personal event to a new time, preserving its original duration. "+
+				"Only the new start time is required; the end time is computed automatically.\n\n"+
+				"To reschedule an event that has attendees (sends update notifications), "+
+				"use calendar_reschedule_meeting instead.",
 		),
 		mcp.WithString("event_id", mcp.Required(),
 			mcp.Description("The unique identifier of the event to reschedule."),
@@ -222,7 +225,11 @@ func HandleRescheduleEvent(retryCfg graph.RetryConfig, timeout time.Duration, de
 		displayTime := formatEventDisplayTime(updatedEvent)
 		eventLocation := extractEventLocation(updatedEvent)
 
-		return mcp.NewToolResultText(FormatWriteConfirmation("rescheduled", eventSubject, eventID, displayTime, eventLocation)), nil
+		response := FormatWriteConfirmation("rescheduled", eventSubject, eventID, displayTime, eventLocation)
+		if line := AccountInfoLine(ctx); line != "" {
+			response += "\n" + line
+		}
+		return mcp.NewToolResultText(response), nil
 	}
 }
 

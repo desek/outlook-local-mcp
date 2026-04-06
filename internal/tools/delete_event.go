@@ -36,7 +36,7 @@ func NewDeleteEventTool() mcp.Tool {
 				"cancellation notices are automatically sent to all attendees. When an "+
 				"attendee deletes, the event is removed only from their own calendar. "+
 				"Deleting a series master deletes all occurrences. For sending a custom "+
-				"cancellation message to attendees, use calendar_cancel_event instead.",
+				"cancellation message to attendees, use calendar_cancel_meeting instead.",
 		),
 		mcp.WithString("event_id",
 			mcp.Required(),
@@ -110,6 +110,9 @@ func HandleDeleteEvent(retryCfg graph.RetryConfig, timeout time.Duration) func(c
 		logger.InfoContext(ctx, "event deleted", "event_id", eventID)
 
 		response := fmt.Sprintf("Event deleted: %s\nCancellation notices were sent to attendees if applicable.", eventID)
+		if line := AccountInfoLine(ctx); line != "" {
+			response += "\n" + line
+		}
 		return mcp.NewToolResultText(response), nil
 	}
 }

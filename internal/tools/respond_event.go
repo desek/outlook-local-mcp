@@ -164,6 +164,9 @@ func HandleRespondEvent(retryCfg graph.RetryConfig, timeout time.Duration) func(
 		}[response]
 
 		result := fmt.Sprintf("Event %s: %s\nResponse sent to organizer.", responseLabel, eventID)
+		if line := AccountInfoLine(ctx); line != "" {
+			result += "\n" + line
+		}
 		return mcp.NewToolResultText(result), nil
 	}
 }

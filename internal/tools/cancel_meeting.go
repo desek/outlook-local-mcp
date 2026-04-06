@@ -1,11 +1,11 @@
 // Package tools provides MCP tool definitions and handler constructors for the
 // Outlook Calendar MCP Server.
 //
-// This file provides the cancel_event MCP tool, which cancels a meeting on the
-// authenticated user's calendar via the Microsoft Graph API. Only the meeting
-// organizer can cancel; non-organizers receive an access denied error from the
-// Graph API. An optional comment parameter allows the organizer to include a
-// custom cancellation message sent to all attendees.
+// This file provides the cancel_meeting MCP tool, which cancels a meeting on
+// the authenticated user's calendar via the Microsoft Graph API. Only the
+// meeting organizer can cancel; non-organizers receive an access denied error
+// from the Graph API. An optional comment parameter allows the organizer to
+// include a custom cancellation message sent to all attendees.
 package tools
 
 import (
@@ -20,14 +20,15 @@ import (
 	graphusers "github.com/microsoftgraph/msgraph-sdk-go/users"
 )
 
-// NewCancelEventTool creates the MCP tool definition for cancel_event. The tool
-// accepts a required event_id and an optional comment string parameter. It does
-// not carry a ReadOnlyHintAnnotation because it is a destructive write operation.
+// NewCancelMeetingTool creates the MCP tool definition for cancel_meeting. The
+// tool accepts a required event_id and an optional comment string parameter. It
+// does not carry a ReadOnlyHintAnnotation because it is a destructive write
+// operation.
 //
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
-func NewCancelEventTool() mcp.Tool {
-	return mcp.NewTool("calendar_cancel_event",
-		mcp.WithTitleAnnotation("Cancel Calendar Event"),
+func NewCancelMeetingTool() mcp.Tool {
+	return mcp.NewTool("calendar_cancel_meeting",
+		mcp.WithTitleAnnotation("Cancel Calendar Meeting"),
 		mcp.WithReadOnlyHintAnnotation(false),
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithIdempotentHintAnnotation(true),
@@ -37,7 +38,15 @@ func NewCancelEventTool() mcp.Tool {
 				"Only the meeting organizer can cancel; non-organizers will receive an "+
 				"access denied error. Cancelling a series master cancels all future "+
 				"instances. For non-meeting events or when no custom cancellation "+
-				"message is needed, use calendar_delete_event instead.",
+				"message is needed, use calendar_delete_event instead.\n\n"+
+				"IMPORTANT: When the event has attendees, cancelling sends a cancellation "+
+				"notice to ALL attendees immediately. You MUST present a summary to the "+
+				"user showing the event subject, time, and full attendee list, then wait "+
+				"for explicit confirmation before calling this tool. If any attendee is "+
+				"external to the user's organization, add an explicit warning about "+
+				"external cancellation notices. "+
+				"If the AskUserQuestion tool is available, use it to present the summary "+
+				"and collect confirmation for a better user experience.",
 		),
 		mcp.WithString("event_id",
 			mcp.Required(),
@@ -52,7 +61,7 @@ func NewCancelEventTool() mcp.Tool {
 	)
 }
 
-// HandleCancelEvent is the MCP tool handler for cancel_event. It extracts the
+// HandleCancelEvent is the MCP tool handler for cancel_meeting. It extracts the
 // event_id and optional comment from the request arguments, builds the cancel
 // request body, calls the Graph API POST /cancel endpoint, and returns a
 // plain text confirmation on success. The Graph client is retrieved from the
@@ -71,7 +80,7 @@ func NewCancelEventTool() mcp.Tool {
 // Logs at debug level on entry, error level on failure, and info level on success.
 func HandleCancelEvent(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "calendar_cancel_event")
+		logger := slog.With("tool", "calendar_cancel_meeting")
 
 		client, err := GraphClient(ctx)
 		if err != nil {
@@ -127,6 +136,9 @@ func HandleCancelEvent(retryCfg graph.RetryConfig, timeout time.Duration) func(c
 		logger.InfoContext(ctx, "event cancelled", "event_id", eventID)
 
 		response := fmt.Sprintf("Event cancelled: %s\nCancellation message sent to all attendees.", eventID)
+		if line := AccountInfoLine(ctx); line != "" {
+			response += "\n" + line
+		}
 		return mcp.NewToolResultText(response), nil
 	}
 }

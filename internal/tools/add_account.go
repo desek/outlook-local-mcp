@@ -43,7 +43,10 @@ func NewAddAccountTool() mcp.Tool {
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithDescription(
 			"Add and authenticate a new Microsoft account. "+
-				"Creates a per-account credential with isolated token cache and auth record.",
+				"Call this tool directly when the user wants to connect an account — do not ask them to configure it manually. "+
+				"Performs the full authentication flow inline and presents the result to the user. "+
+				"The label parameter is a short identifier for the account (e.g., the email address or a nickname). "+
+				"Leave auth_method blank unless the user explicitly requests a specific method; the server will use its configured default.",
 		),
 		mcp.WithString("label",
 			mcp.Required(),

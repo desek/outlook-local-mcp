@@ -83,13 +83,18 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 
 	// CR-0009: Delete and cancel event tools.
 	s.AddTool(tools.NewDeleteEventTool(), wrapWrite("calendar_delete_event", "delete", tools.HandleDeleteEvent(retryCfg, timeout)))
-	s.AddTool(tools.NewCancelEventTool(), wrapWrite("calendar_cancel_event", "delete", tools.HandleCancelEvent(retryCfg, timeout)))
+	s.AddTool(tools.NewCancelMeetingTool(), wrapWrite("calendar_cancel_meeting", "delete", tools.HandleCancelEvent(retryCfg, timeout)))
 
 	// CR-0042: Respond to meeting invitations (accept/tentative/decline).
 	s.AddTool(tools.NewRespondEventTool(), wrapWrite("calendar_respond_event", "write", tools.HandleRespondEvent(retryCfg, timeout)))
 
 	// CR-0042: Reschedule event (preserves duration, computes new end time).
 	s.AddTool(tools.NewRescheduleEventTool(), wrapWrite("calendar_reschedule_event", "write", tools.HandleRescheduleEvent(retryCfg, timeout, cfg.DefaultTimezone)))
+
+	// CR-0054: Meeting tools (attendee-focused variants reusing event handlers).
+	s.AddTool(tools.NewCreateMeetingTool(), wrapWrite("calendar_create_meeting", "write", tools.HandleCreateEvent(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
+	s.AddTool(tools.NewUpdateMeetingTool(), wrapWrite("calendar_update_meeting", "write", tools.HandleUpdateEvent(retryCfg, timeout, cfg.DefaultTimezone)))
+	s.AddTool(tools.NewRescheduleMeetingTool(), wrapWrite("calendar_reschedule_meeting", "write", tools.HandleRescheduleEvent(retryCfg, timeout, cfg.DefaultTimezone)))
 
 	// CR-0025: Account management tools. These do NOT go through
 	// AccountResolver (they manage the registry) or ReadOnlyGuard (they are
@@ -114,7 +119,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	// CR-0030: complete_auth fallback tool for auth_code method. Only
 	// registered when auth_code is active, since the tool is meaningless
 	// for browser or device_code flows.
-	toolCount := 15
+	toolCount := 18
 	if cfg.MailEnabled {
 		toolCount += 4
 	}
