@@ -104,6 +104,7 @@ func (s *accountResolverState) middleware(next mcpserver.ToolHandlerFunc) mcpser
 			AuthRecordPath: entry.AuthRecordPath,
 			AuthMethod:     inferAuthMethod(entry),
 		})
+		ctx = WithAccountInfo(ctx, AccountInfo{Label: entry.Label, Email: entry.Email})
 
 		return next(ctx, request)
 	}

@@ -110,6 +110,9 @@ func HandleDeleteEvent(retryCfg graph.RetryConfig, timeout time.Duration) func(c
 		logger.InfoContext(ctx, "event deleted", "event_id", eventID)
 
 		response := fmt.Sprintf("Event deleted: %s\nCancellation notices were sent to attendees if applicable.", eventID)
+		if line := AccountInfoLine(ctx); line != "" {
+			response += "\n" + line
+		}
 		return mcp.NewToolResultText(response), nil
 	}
 }

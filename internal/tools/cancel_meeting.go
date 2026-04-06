@@ -136,6 +136,9 @@ func HandleCancelEvent(retryCfg graph.RetryConfig, timeout time.Duration) func(c
 		logger.InfoContext(ctx, "event cancelled", "event_id", eventID)
 
 		response := fmt.Sprintf("Event cancelled: %s\nCancellation message sent to all attendees.", eventID)
+		if line := AccountInfoLine(ctx); line != "" {
+			response += "\n" + line
+		}
 		return mcp.NewToolResultText(response), nil
 	}
 }

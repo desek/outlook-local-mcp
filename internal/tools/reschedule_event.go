@@ -225,7 +225,11 @@ func HandleRescheduleEvent(retryCfg graph.RetryConfig, timeout time.Duration, de
 		displayTime := formatEventDisplayTime(updatedEvent)
 		eventLocation := extractEventLocation(updatedEvent)
 
-		return mcp.NewToolResultText(FormatWriteConfirmation("rescheduled", eventSubject, eventID, displayTime, eventLocation)), nil
+		response := FormatWriteConfirmation("rescheduled", eventSubject, eventID, displayTime, eventLocation)
+		if line := AccountInfoLine(ctx); line != "" {
+			response += "\n" + line
+		}
+		return mcp.NewToolResultText(response), nil
 	}
 }
 

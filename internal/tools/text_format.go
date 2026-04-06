@@ -492,11 +492,12 @@ func toInt(v any) int {
 }
 
 // FormatAccountsText formats a slice of account maps into a numbered
-// plain-text listing showing each account's label and authentication state.
+// plain-text listing showing each account's label, authentication state,
+// and email address when available.
 //
 // Parameters:
 //   - accounts: slice of account maps, each expected to contain "label"
-//     (string) and "authenticated" (bool) keys.
+//     (string), "authenticated" (bool), and optionally "email" (string) keys.
 //
 // Returns a formatted plain-text string. Returns "No accounts registered."
 // when the slice is nil or empty.
@@ -518,12 +519,39 @@ func FormatAccountsText(accounts []map[string]any) string {
 		if authed {
 			state = "authenticated"
 		}
-		fmt.Fprintf(&b, "%d. %s (%s)\n", i+1, label, state)
+		email, _ := a["email"].(string)
+		if email != "" {
+			fmt.Fprintf(&b, "%d. %s (%s) — %s\n", i+1, label, state, email)
+		} else {
+			fmt.Fprintf(&b, "%d. %s (%s)\n", i+1, label, state)
+		}
 	}
 
 	fmt.Fprintf(&b, "\n%d account(s) total.", len(accounts))
 
 	return b.String()
+}
+
+// FormatAccountLine returns a formatted "Account: label (email)" line
+// suitable for appending to write-tool confirmation responses. When email is
+// empty, the email portion is omitted. When label is empty, an empty string
+// is returned.
+//
+// Parameters:
+//   - label: the account label (e.g., "default", "work").
+//   - email: the account email address; may be empty.
+//
+// Returns a single-line string or empty string when label is empty.
+//
+// Side effects: none.
+func FormatAccountLine(label, email string) string {
+	if label == "" {
+		return ""
+	}
+	if email != "" {
+		return fmt.Sprintf("Account: %s (%s)", label, email)
+	}
+	return "Account: " + label
 }
 
 // FormatStatusText formats a statusResponse struct into a human-readable

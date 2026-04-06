@@ -2,8 +2,9 @@
 // Outlook Calendar MCP Server.
 //
 // This file provides the list_accounts MCP tool, which returns all registered
-// accounts in the account registry as a JSON array. Each entry includes the
-// account label and authentication status.
+// accounts in the account registry. For each authenticated account, the email
+// address is lazily fetched from the Microsoft Graph /me endpoint and cached
+// on the AccountEntry for use in subsequent tool confirmations.
 package tools
 
 import (
@@ -22,7 +23,12 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewListAccountsTool() mcp.Tool {
 	return mcp.NewTool("account_list",
-		mcp.WithDescription("List all registered accounts and their authentication status."),
+		mcp.WithDescription(
+			"List all registered accounts with their email addresses and authentication status. "+
+				"Call this to identify which account label corresponds to which email address.\n\n"+
+				"IMPORTANT: Always present the email address alongside the account label when "+
+				"reporting results to the user, so they know which email each account maps to.",
+		),
 		mcp.WithTitleAnnotation("List Accounts"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -36,8 +42,10 @@ func NewListAccountsTool() mcp.Tool {
 }
 
 // HandleListAccounts creates a tool handler that lists all registered accounts
-// from the account registry. Each account is serialized as a JSON object with
-// "label" and "authenticated" fields.
+// from the account registry. For each authenticated account, it calls EnsureEmail
+// to lazily populate the email address from the Microsoft Graph /me endpoint.
+// Each account is serialized as a JSON object with "label", "authenticated",
+// and "email" fields.
 //
 // Parameters:
 //   - registry: the account registry to query for registered accounts.
@@ -46,9 +54,10 @@ func NewListAccountsTool() mcp.Tool {
 // method. The handler returns a JSON array of account objects via
 // mcp.NewToolResultText, or an error result if JSON serialization fails.
 //
-// Side effects: none. The handler only reads from the registry.
+// Side effects: calls GET /me on the Graph API for each authenticated account
+// whose email has not yet been fetched.
 func HandleListAccounts(registry *auth.AccountRegistry) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := slog.With("tool", "account_list")
 		logger.Debug("tool called")
 
@@ -61,9 +70,14 @@ func HandleListAccounts(registry *auth.AccountRegistry) func(ctx context.Context
 		entries := registry.List()
 		results := make([]map[string]any, 0, len(entries))
 		for _, entry := range entries {
+			// Lazily fetch email for authenticated accounts.
+			if entry.Client != nil {
+				auth.EnsureEmail(ctx, entry)
+			}
 			results = append(results, map[string]any{
 				"label":         entry.Label,
 				"authenticated": entry.Client != nil,
+				"email":         entry.Email,
 			})
 		}
 

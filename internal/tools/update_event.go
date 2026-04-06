@@ -363,6 +363,10 @@ func HandleUpdateEvent(retryCfg graph.RetryConfig, timeout time.Duration, defaul
 			response += "\n" + advisory
 		}
 
+		if line := AccountInfoLine(ctx); line != "" {
+			response += "\n" + line
+		}
+
 		return mcp.NewToolResultText(response), nil
 	}
 }
