@@ -1,6 +1,6 @@
 ---
 id: "CR-0055"
-status: "proposed"
+status: "implemented"
 date: 2026-04-06
 requestor: desek
 stakeholders:
@@ -378,9 +378,9 @@ Chosen approach: "lazy /me resolution with per-entry mutex and context injection
 ## Implementation Status
 
 * **Started:** 2026-04-06
-* **Completed:** —
+* **Completed:** 2026-04-06
 * **Deployed to Production:** —
-* **Notes:** Implementation is in progress on branch `dev/user-confirmation` at commit `19df15a`.
+* **Notes:** Implemented on branch `dev/user-confirmation` at commit `441382e`. All CI checks pass.
 
 ## Related Items
 
