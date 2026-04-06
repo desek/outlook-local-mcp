@@ -1,6 +1,9 @@
 # macOS metadata
 .DS_Store
 
+# sed temp files (macOS in-place edit side effects)
+.!*
+
 # Go binary artifacts
 /outlook-local-mcp
 /outlook-local-mcp-*
