@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1](https://github.com/desek/outlook-local-mcp/compare/v0.2.0...v0.2.1) (2026-04-06)
+
+
+### Bug Fixes
+
+* rename azure ad to entra id ([#15](https://github.com/desek/outlook-local-mcp/issues/15)) ([dd7e517](https://github.com/desek/outlook-local-mcp/commit/dd7e517b6d3ce87615666136fb48998f5b4144d5))
+* user confirmation prompts ([#12](https://github.com/desek/outlook-local-mcp/issues/12)) ([ba851db](https://github.com/desek/outlook-local-mcp/commit/ba851dbc2615a754687c0cdb4fc182a832cf6345))
+
 ## [0.2.0](https://github.com/desek/outlook-local-mcp/compare/v0.1.0...v0.2.0) (2026-03-22)
 
 
