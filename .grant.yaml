@@ -1,0 +1,16 @@
+require-license: false
+require-known-license: false
+
+allow:
+  - MIT*
+  - Apache*
+  - BSD*
+  - ISC
+  - CC0*
+  - Unlicense
+  - MPL*
+  - WTFPL
+  - 0BSD
+  - BlueOak-1.0.0
+
+ignore-packages: []

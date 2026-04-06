@@ -1,0 +1,105 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: desktop
+    main: ./cmd/outlook-local-mcp/
+    binary: outlook-local-mcp
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+      - goos: darwin
+        goarch: amd64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+  - id: container
+    main: ./cmd/outlook-local-mcp/
+    binary: outlook-local-mcp
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: binaries
+    ids:
+      - desktop
+      - container
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}-{{ .Os }}-{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+sboms:
+  - id: cyclonedx
+    artifacts: source
+    cmd: syft
+    args:
+      - scan
+      - "dir:."
+      - -o
+      - "cyclonedx-json=$document"
+    documents:
+      - "{{ .ProjectName }}-{{ .Tag }}.cdx.json"
+  - id: spdx
+    artifacts: source
+    cmd: syft
+    args:
+      - scan
+      - "dir:."
+      - -o
+      - "spdx-json=$document"
+    documents:
+      - "{{ .ProjectName }}-{{ .Tag }}.spdx.json"
+
+changelog:
+  disable: true
+
+release:
+  mode: keep-existing
+
+dockers_v2:
+  - id: outlook-local-mcp
+    ids:
+      - container
+    dockerfile: Dockerfile
+    images:
+      - "ghcr.io/desek/{{ .ProjectName }}"
+    tags:
+      - "v{{ .Version }}"
+      - latest
+    platforms:
+      - linux/amd64
+      - linux/arm64
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-snapshot"
