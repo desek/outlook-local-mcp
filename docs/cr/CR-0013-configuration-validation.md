@@ -21,7 +21,7 @@ This CR introduces startup-time configuration validation for the Outlook Calenda
 
 ## Motivation and Background
 
-Enterprise-grade server software must fail fast on misconfiguration. The current codebase silently absorbs invalid configuration values in multiple places: `parseLogLevel()` defaults unrecognized levels to "warn", `initLogger()` defaults unrecognized formats to JSON, and `DefaultTimezone` is passed unchecked to `time.LoadLocation()` inside tool handlers, where a failure surfaces as a cryptic runtime error deep in a user-facing tool call. The `ClientID` is expected to be a UUID but is never validated, meaning a typo would only manifest as an opaque OAuth error during device code authentication. Similarly, `TenantID` accepts a fixed set of well-known values or a UUID, but an invalid value produces a confusing Azure AD error at authentication time rather than a clear startup message.
+Enterprise-grade server software must fail fast on misconfiguration. The current codebase silently absorbs invalid configuration values in multiple places: `parseLogLevel()` defaults unrecognized levels to "warn", `initLogger()` defaults unrecognized formats to JSON, and `DefaultTimezone` is passed unchecked to `time.LoadLocation()` inside tool handlers, where a failure surfaces as a cryptic runtime error deep in a user-facing tool call. The `ClientID` is expected to be a UUID but is never validated, meaning a typo would only manifest as an opaque OAuth error during device code authentication. Similarly, `TenantID` accepts a fixed set of well-known values or a UUID, but an invalid value produces a confusing Entra ID error at authentication time rather than a clear startup message.
 
 With CR-0010 and CR-0011 adding `MaxRetries`, `RetryBackoffMS`, and `RequestTimeout` fields to the config struct, the validation surface grows further. Each of these numeric fields has a valid range, and out-of-range values could cause either excessive retry storms or effectively disabled timeouts. Validating all fields in one place, at one time (startup), with all errors reported together, is the standard approach for production server software.
 
@@ -29,7 +29,7 @@ With CR-0010 and CR-0011 adding `MaxRetries`, `RetryBackoffMS`, and `RequestTime
 
 * **Silent misconfiguration:** Invalid `LogLevel` silently defaults to "warn"; invalid `LogFormat` silently defaults to JSON. Users have no indication their intended configuration was ignored.
 * **Runtime failures from invalid config:** An invalid `DefaultTimezone` string causes `time.LoadLocation()` to fail inside tool handlers, producing a runtime error on the first tool call rather than at startup.
-* **Authentication failures from invalid credentials:** A malformed `ClientID` or `TenantID` does not fail until the OAuth flow is attempted, producing opaque Azure AD error messages instead of a clear "invalid UUID format" message at startup.
+* **Authentication failures from invalid credentials:** A malformed `ClientID` or `TenantID` does not fail until the OAuth flow is attempted, producing opaque Entra ID error messages instead of a clear "invalid UUID format" message at startup.
 * **New numeric fields:** CR-0010 adds `MaxRetries` (0-10) and `RetryBackoffMS` (100-30000); CR-0011 adds `RequestTimeout` (1-300 seconds). These fields have strict valid ranges that must be enforced.
 * **Enterprise requirement:** Misconfiguration must be caught at startup, not at runtime. The fail-fast principle ensures operators discover all configuration errors in a single startup attempt rather than encountering them one at a time during operation.
 
@@ -40,8 +40,8 @@ The `loadConfig()` function in `main.go` reads seven environment variables (expa
 * `LogLevel` with an unrecognized value is silently coerced to `slog.LevelWarn` by `parseLogLevel()` in `logger.go`.
 * `LogFormat` with an unrecognized value is silently coerced to JSON output by `initLogger()` in `logger.go`.
 * `DefaultTimezone` is never validated; an invalid IANA timezone string causes `time.LoadLocation()` to return an error inside tool handlers at runtime.
-* `ClientID` is never checked for UUID format; a malformed value fails during OAuth authentication with an opaque Azure AD error.
-* `TenantID` is never checked against the allowed set (`common`, `organizations`, `consumers`, or UUID); an invalid value fails during Azure AD tenant resolution.
+* `ClientID` is never checked for UUID format; a malformed value fails during OAuth authentication with an opaque Entra ID error.
+* `TenantID` is never checked against the allowed set (`common`, `organizations`, `consumers`, or UUID); an invalid value fails during Entra ID tenant resolution.
 * `AuthRecordPath` has `~` expanded but the parent directory is never checked for existence or writability.
 * `CacheName` is never checked for emptiness or length.
 
@@ -56,7 +56,7 @@ flowchart TD
         B -->|"invalid LogLevel"| B1["Silently defaults to warn"]
         B -->|"invalid LogFormat"| B2["Silently defaults to JSON"]
         C -->|"invalid ClientID"| C1["Opaque OAuth error"]
-        C -->|"invalid TenantID"| C2["Opaque Azure AD error"]
+        C -->|"invalid TenantID"| C2["Opaque Entra ID error"]
         D -->|"invalid DefaultTimezone"| D1["Runtime error on first tool call"]
     end
 ```
@@ -200,7 +200,7 @@ The function collects all errors into a `[]string` slice, then joins them with `
 
 ### User Impact
 
-Operators who previously received opaque OAuth or Azure AD errors due to misconfigured `ClientID` or `TenantID` will now receive clear, actionable error messages at startup. Operators who set an invalid timezone will see a clear message listing the problem field and expected format instead of encountering a runtime error on their first tool call. All misconfigured fields are reported at once, enabling single-iteration fixes.
+Operators who previously received opaque OAuth or Entra ID errors due to misconfigured `ClientID` or `TenantID` will now receive clear, actionable error messages at startup. Operators who set an invalid timezone will see a clear message listing the problem field and expected format instead of encountering a runtime error on their first tool call. All misconfigured fields are reported at once, enabling single-iteration fixes.
 
 ### Technical Impact
 
@@ -589,7 +589,7 @@ go tool cover -func=coverage.out | grep validateConfig
 
 **Likelihood:** low
 **Impact:** low
-**Mitigation:** The regex `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$` matches the standard 8-4-4-4-12 UUID format used by Azure AD. Microsoft Azure exclusively uses this format for client IDs and tenant IDs. Non-standard UUID representations (e.g., without hyphens, with braces) are not used by Azure AD and should be rejected.
+**Mitigation:** The regex `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$` matches the standard 8-4-4-4-12 UUID format used by Entra ID. Microsoft Azure exclusively uses this format for client IDs and tenant IDs. Non-standard UUID representations (e.g., without hyphens, with braces) are not used by Entra ID and should be rejected.
 
 ## Dependencies
 

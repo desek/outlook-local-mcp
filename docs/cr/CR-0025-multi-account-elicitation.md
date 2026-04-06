@@ -205,7 +205,7 @@ sequenceDiagram
     participant AddTool as add_account tool
     participant Registry as Account Registry
     participant AZ as azidentity
-    participant AAD as Azure AD
+    participant AAD as Entra ID
 
     Client->>AddTool: add_account(label: "work")
     AddTool->>Registry: check label availability

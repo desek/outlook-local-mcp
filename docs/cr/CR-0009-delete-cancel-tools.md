@@ -415,7 +415,7 @@ go tool cover -func=coverage.out
 
 ## Dependencies
 
-* **CR-0001 (Configuration):** Required for Azure AD credentials and tenant configuration used by the Graph client.
+* **CR-0001 (Configuration):** Required for Entra ID credentials and tenant configuration used by the Graph client.
 * **CR-0002 (Logging):** Required for `slog` structured logging infrastructure.
 * **CR-0004 (Graph Client & MCP Server):** Required for `graphClient` initialization and MCP server/tool registration framework.
 * **CR-0005 (Error Handling):** Required for `formatGraphError` utility used by both tools to format Graph API errors into user-friendly messages.

@@ -451,7 +451,7 @@ Chosen approach: **Single-value extended properties**, because they are the stan
 
 Alternatives considered:
 - **Open extensions**: Simpler data model but not filterable via `$filter` on CalendarView endpoints, which would require client-side filtering for the "find MCP events" use case. Less efficient at scale.
-- **Schema extensions**: Require Azure AD app-level schema registration and admin consent. Adds operational complexity and deployment prerequisites that don't align with the project's local-first design.
+- **Schema extensions**: Require Entra ID app-level schema registration and admin consent. Adds operational complexity and deployment prerequisites that don't align with the project's local-first design.
 - **Categories**: Visible in the Outlook UI (colored labels), which violates the "hidden" requirement. Users may also delete or modify categories.
 - **Body footer/watermark**: Visible to attendees in meeting invitations. Fragile -- can be removed by editing the event. Not queryable.
 

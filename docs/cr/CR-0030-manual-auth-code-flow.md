@@ -25,7 +25,7 @@ The `auth_code` method integrates fully with the existing multi-account infrastr
 
 The project currently supports two authentication methods, both of which have significant limitations when using the Microsoft Office first-party client ID (`d3590ed6-52b3-4102-aeff-aad2292ab01c`):
 
-1. **`browser` (InteractiveBrowserCredential):** Starts a local HTTP server on a random port and uses `http://localhost:<port>` as the redirect URI. The Microsoft Office app registration does not include `http://localhost` as a registered redirect URI, causing Azure AD to reject the request with `AADSTS50011: The redirect URI 'http://localhost:<port>' specified in the request does not match the redirect URIs configured for the application`.
+1. **`browser` (InteractiveBrowserCredential):** Starts a local HTTP server on a random port and uses `http://localhost:<port>` as the redirect URI. The Microsoft Office app registration does not include `http://localhost` as a registered redirect URI, causing Entra ID to reject the request with `AADSTS50011: The redirect URI 'http://localhost:<port>' specified in the request does not match the redirect URIs configured for the application`.
 
 2. **`device_code` (DeviceCodeCredential):** Works with the Microsoft Office client ID but is blocked by Conditional Access policies in many enterprise environments (`AADSTS50199: device code flow is blocked`). Organizations increasingly restrict device code flow due to phishing risks (RFC 8628 Section 5.5).
 
@@ -37,7 +37,7 @@ The Microsoft Office app registration **does** include `https://login.microsofto
 4. The user copies the URL and provides it back to the application.
 5. The application extracts the authorization code and exchanges it for tokens via MSAL.
 
-This is the same flow used by tools like the Azure CLI (`az login`), GNOME Evolution mail client, and Thunderbird for authenticating against Azure AD without a custom app registration.
+This is the same flow used by tools like the Azure CLI (`az login`), GNOME Evolution mail client, and Thunderbird for authenticating against Entra ID without a custom app registration.
 
 ### Why MSAL Go Directly?
 
@@ -100,7 +100,7 @@ sequenceDiagram
     participant MW as AuthMiddleware
     participant ACC as AuthCodeCredential
     participant MSAL as MSAL public.Client
-    participant AAD as Azure AD
+    participant AAD as Entra ID
     participant Browser as User Browser
 
     Client->>MW: tool call (e.g., list_events)
@@ -274,7 +274,7 @@ sequenceDiagram
 
 ### Out of Scope ("Here, But Not Further")
 
-* Custom Azure AD app registration -- the Microsoft Office first-party client ID is used.
+* Custom Entra ID app registration -- the Microsoft Office first-party client ID is used.
 * Refresh token rotation or custom token lifecycle management -- handled by MSAL internally.
 * Removing or modifying the existing `browser` or `device_code` auth methods.
 * Automated browser interaction (e.g., headless browser to extract the code automatically).
@@ -312,7 +312,7 @@ The authentication experience is:
 
 - Unblocks users in enterprise environments where device code flow is disabled via Conditional Access.
 - Resolves the `AADSTS50011` redirect URI mismatch error that prevents browser auth with the Microsoft Office client ID.
-- Maintains the zero-app-registration value proposition: users do not need to create their own Azure AD app.
+- Maintains the zero-app-registration value proposition: users do not need to create their own Entra ID app.
 
 ## Implementation Approach
 
@@ -880,7 +880,7 @@ go run ./cmd/outlook-local-mcp/
 
 **Likelihood:** Very Low
 **Impact:** Critical
-**Mitigation:** The `nativeclient` redirect URI is used by the Azure CLI, GNOME Evolution, Thunderbird, and other widely deployed applications. Microsoft removing it would break substantial existing tooling. If removed, the mitigation is to require users to register their own Azure AD app (documented as out of scope for this CR but straightforward to implement).
+**Mitigation:** The `nativeclient` redirect URI is used by the Azure CLI, GNOME Evolution, Thunderbird, and other widely deployed applications. Microsoft removing it would break substantial existing tooling. If removed, the mitigation is to require users to register their own Entra ID app (documented as out of scope for this CR but straightforward to implement).
 
 ### Risk 6: PKCE state not preserved across add_account elicitation round-trip
 
@@ -932,7 +932,7 @@ The UX trade-off (user must paste a URL) is acceptable because:
 
 Alternative approaches considered:
 
-* **Custom localhost port for browser auth:** Would require users to register their own Azure AD app with the specific port, contradicting the zero-setup goal.
+* **Custom localhost port for browser auth:** Would require users to register their own Entra ID app with the specific port, contradicting the zero-setup goal.
 * **Device code flow only:** Blocked by Conditional Access in many organizations.
 * **WAM/SSO broker integration:** Requires native macOS/iOS SDK (MSAL Objective-C); not available in Go.
 * **Headless browser automation:** Complex, fragile, and a security concern.

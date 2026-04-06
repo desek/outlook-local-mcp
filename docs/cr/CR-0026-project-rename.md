@@ -26,7 +26,7 @@ The current name `outlook-calendar-mcp` is scoped to calendar functionality only
 The name `outlook-local-mcp` was chosen because:
 
 - **Broader scope**: Does not constrain the project to calendar-only functionality.
-- **Differentiator**: "local" communicates the key value proposition -- no remote MCP server, no Azure AD app registration, runs entirely on the user's machine.
+- **Differentiator**: "local" communicates the key value proposition -- no remote MCP server, no Entra ID app registration, runs entirely on the user's machine.
 - **Convention-compliant**: Follows the dominant `<name>-mcp` naming pattern (40% of MCP servers per ecosystem analysis).
 
 The repository is local-only with no remote configured and has never been published, making this a zero-impact rename.

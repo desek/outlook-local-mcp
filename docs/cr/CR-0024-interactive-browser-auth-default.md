@@ -21,7 +21,7 @@ The Outlook Local MCP Server currently uses `azidentity.DeviceCodeCredential` as
 
 ## Motivation and Background
 
-The device code flow requires the user to visit a URL and enter a code manually -- a multi-step process that is cumbersome for desktop users who have a browser available. More critically, many organizations configure Conditional Access policies that block the device code flow entirely (Azure AD error `AADSTS50199: device code flow is blocked`), making the server unusable without any workaround.
+The device code flow requires the user to visit a URL and enter a code manually -- a multi-step process that is cumbersome for desktop users who have a browser available. More critically, many organizations configure Conditional Access policies that block the device code flow entirely (Entra ID error `AADSTS50199: device code flow is blocked`), making the server unusable without any workaround.
 
 The `InteractiveBrowserCredential` uses the OAuth 2.0 authorization code flow with PKCE, which opens the system browser directly to the Microsoft login page. This is the standard authentication experience users expect from desktop applications. It is also more resilient against organizational policies since the authorization code flow is the most widely permitted OAuth flow.
 
@@ -29,7 +29,7 @@ The research document at `docs/research/authentication-channels.md` confirms tha
 
 ## Change Drivers
 
-* Device code flow is blocked by Conditional Access policies in many enterprise Azure AD tenants (AADSTS50199), making the server unusable for those users.
+* Device code flow is blocked by Conditional Access policies in many enterprise Entra ID tenants (AADSTS50199), making the server unusable for those users.
 * The device code flow requires a manual copy-paste of a code, which is a poor UX for desktop users with a browser available.
 * Interactive browser auth is the standard desktop authentication experience and is the most widely permitted OAuth flow across organizations.
 * Both credential types implement `azcore.TokenCredential` and support `Cache` + `AuthenticationRecord`, minimizing implementation complexity.
@@ -561,7 +561,7 @@ go test ./internal/auth/... -race -count=1
 
 **Likelihood:** high
 **Impact:** high
-**Mitigation:** The default client ID (`d3590ed6-52b3-4102-aeff-aad2292ab01c`) is the Microsoft Office first-party app, which already has `http://localhost` registered as a redirect URI. Users with custom client IDs must ensure their app registration includes this redirect URI. If the redirect URI is missing, Azure AD returns an error that the middleware surfaces as an auth failure with troubleshooting guidance. Documentation should note this requirement.
+**Mitigation:** The default client ID (`d3590ed6-52b3-4102-aeff-aad2292ab01c`) is the Microsoft Office first-party app, which already has `http://localhost` registered as a redirect URI. Users with custom client IDs must ensure their app registration includes this redirect URI. If the redirect URI is missing, Entra ID returns an error that the middleware surfaces as an auth failure with troubleshooting guidance. Documentation should note this requirement.
 
 ### Risk 2: Browser auth fails in headless environments
 
@@ -636,7 +636,7 @@ Alternative approaches considered:
 The `azidentity.InteractiveBrowserCredential` (v1.13.1) supports the following configuration via `InteractiveBrowserCredentialOptions`:
 
 * `ClientID` -- The application client ID. When set, `RedirectURL` is required.
-* `TenantID` -- The Azure AD tenant. Defaults to `"organizations"` if unset.
+* `TenantID` -- The Entra ID tenant. Defaults to `"organizations"` if unset.
 * `Cache` -- Persistent token cache (same `azidentity.Cache` type as DeviceCodeCredential).
 * `AuthenticationRecord` -- Enables silent token acquisition from a previous authentication (same type).
 * `RedirectURL` -- The OAuth redirect URI. Must be `http://localhost` (with optional port) and must match the app registration.

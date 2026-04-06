@@ -141,7 +141,7 @@ All environment variables are prefixed with `OUTLOOK_MCP_`:
 | Variable | Default | Description |
 |---|---|---|
 | `CLIENT_ID` | Microsoft Office client ID | OAuth 2.0 client ID |
-| `TENANT_ID` | `common` | Azure AD tenant (`common`, `organizations`, `consumers`, or a GUID) |
+| `TENANT_ID` | `common` | Entra ID tenant (`common`, `organizations`, `consumers`, or a GUID) |
 | `DEFAULT_TIMEZONE` | `UTC` | IANA timezone for calendar operations |
 | `LOG_LEVEL` | `warn` | Log level: `debug`, `info`, `warn`, `error` |
 | `READ_ONLY` | `false` | Disable write tools (create, update, delete, cancel) |

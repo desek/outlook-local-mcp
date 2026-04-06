@@ -21,7 +21,7 @@ Add end-to-end integration tests that exercise MCP tool handlers against the rea
 The existing test suite uses mock HTTP servers (`httptest.Server`) and the `newTestGraphClient` helper to validate tool handler logic in isolation. While these unit tests verify request construction, parameter parsing, serialization, and error handling, they cannot detect:
 
 - **Breaking Graph API changes**: Microsoft may change response schemas, deprecate query parameters, or alter OData filter behavior. Mock tests cannot catch these regressions.
-- **Authentication integration failures**: The auth flow (token acquisition, scope negotiation, token refresh) is never exercised against real Azure AD endpoints.
+- **Authentication integration failures**: The auth flow (token acquisition, scope negotiation, token refresh) is never exercised against real Entra ID endpoints.
 - **End-to-end data flow issues**: Subtle mismatches between the SDK's request serialization and Graph API expectations (e.g., time zone formatting, extended property syntax, pagination cursors) are invisible to mock tests.
 - **Multi-step workflow correctness**: The create -> list -> get -> update -> search -> cancel -> delete lifecycle has never been validated against a real mailbox.
 
@@ -293,9 +293,9 @@ Before implementation, the following one-time setup steps are required:
 
 1. **Create an M365 Developer Sandbox**: Join the [Microsoft 365 Developer Program](https://developer.microsoft.com/en-us/microsoft-365/dev-program) and provision a sandbox tenant. This provides 25 E5 licenses for 90 days (renewable).
 
-2. **Create a test user**: In the sandbox tenant's Azure AD, create a dedicated test user (e.g., `e2e-test@<tenant>.onmicrosoft.com`). Assign an E5 license so the user has a mailbox and calendar.
+2. **Create a test user**: In the sandbox tenant's Entra ID, create a dedicated test user (e.g., `e2e-test@<tenant>.onmicrosoft.com`). Assign an E5 license so the user has a mailbox and calendar.
 
-3. **Register an app for ROPC**: In Azure AD > App registrations, create a new app:
+3. **Register an app for ROPC**: In Entra ID > App registrations, create a new app:
    - **Name**: `outlook-local-mcp-e2e`
    - **Supported account types**: Single tenant (this tenant only)
    - **Redirect URIs**: None (ROPC does not use redirect)
@@ -303,7 +303,7 @@ Before implementation, the following one-time setup steps are required:
    - **Grant admin consent** for all permissions
    - **Enable public client flows**: Under Authentication > Advanced settings, set "Allow public client flows" to **Yes** (required for ROPC)
 
-4. **Disable MFA for the test user**: ROPC does not support MFA. In Azure AD > Security > Conditional Access, create an exclusion policy for the test user, or ensure no CA policies require MFA for this user. Alternatively, use Security Defaults with an exclusion.
+4. **Disable MFA for the test user**: ROPC does not support MFA. In Entra ID > Security > Conditional Access, create an exclusion policy for the test user, or ensure no CA policies require MFA for this user. Alternatively, use Security Defaults with an exclusion.
 
 5. **Store credentials**: Add the following as GitHub repository secrets:
    - `E2E_TENANT_ID`: The sandbox tenant ID (GUID)
@@ -678,7 +678,7 @@ Chosen approach: **ROPC-based e2e tests with build tag isolation and nightly CI*
 
 Alternatives considered:
 - **Client credentials (app-only) flow**: Produces an application-only token where `/me` is undefined. Would require all test paths to use `/users/{id}`, diverging from production code paths and requiring handler modifications. Rejected because it tests a different code path than production.
-- **Headless browser automation for interactive auth**: Tools like Playwright could drive the `auth_code` flow through a real browser. Higher fidelity but significantly more complex infrastructure, slower execution, and fragile (dependent on Azure AD login page DOM structure). Disproportionate effort for the initial implementation.
+- **Headless browser automation for interactive auth**: Tools like Playwright could drive the `auth_code` flow through a real browser. Higher fidelity but significantly more complex infrastructure, slower execution, and fragile (dependent on Entra ID login page DOM structure). Disproportionate effort for the initial implementation.
 - **Mock service with recorded responses**: Record Graph API responses and replay them in tests. Loses the key benefit of e2e testing (detecting real API changes). Already achieved by the existing unit test suite.
 - **Per-PR e2e execution**: Maximum coverage but exposes secrets to fork PRs, risks rate limiting, and slows PR feedback. The security and rate limit concerns outweigh the benefit of per-PR validation.
 
