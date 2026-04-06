@@ -1,6 +1,6 @@
 # Technical Specification: Outlook Local MCP Server in Go
 
-**The server authenticates as the user via device code flow using a well-known Microsoft first-party client ID, manages calendar data through the Microsoft Graph API v1.0, and exposes up to twenty tools (five read-only calendar, six write, four read-only mail (opt-in), three account management, one diagnostic, plus conditional complete_auth) over MCP stdio transport.** No custom Azure AD app registration is required. This specification covers every component (authentication, token persistence, logging, tool schemas, error handling, and configuration) with exact Go types and API calls sufficient to write the complete implementation.
+**The server authenticates as the user via device code flow using a well-known Microsoft first-party client ID, manages calendar data through the Microsoft Graph API v1.0, and exposes up to twenty tools (five read-only calendar, six write, four read-only mail (opt-in), three account management, one diagnostic, plus conditional complete_auth) over MCP stdio transport.** No custom Entra ID app registration is required. This specification covers every component (authentication, token persistence, logging, tool schemas, error handling, and configuration) with exact Go types and API calls sufficient to write the complete implementation.
 
 ---
 
@@ -65,7 +65,7 @@ import (
 
 The server uses the **Microsoft Office** first-party client ID: **`d3590ed6-52b3-4102-aeff-aad2292ab01c`**. This is the only well-known client ID confirmed to have `Calendars.Read` and `Calendars.ReadWrite` pre-authorized for the Microsoft Graph resource (`00000003-0000-0000-c000-000000000000`). The Azure CLI client ID (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`) explicitly does **not** support calendar scopes and will fail with `AADSTS65002` ("consent between first party application and first party resource must be configured via preauthorization").
 
-The Microsoft Office client ID is present in every Azure AD / Entra ID tenant by default. It supports device code flow and is pre-authorized for a broad set of Microsoft Graph delegated permissions including `Calendar.ReadWrite`, `Calendars.Read.Shared`, `Calendars.ReadWrite`, `Mail.ReadWrite`, `Files.Read`, `Contacts.ReadWrite`, `User.Read.All`, `People.Read`, and others.
+The Microsoft Office client ID is present in every Entra ID / Entra ID tenant by default. It supports device code flow and is pre-authorized for a broad set of Microsoft Graph delegated permissions including `Calendar.ReadWrite`, `Calendars.Read.Shared`, `Calendars.ReadWrite`, `Mail.ReadWrite`, `Files.Read`, `Contacts.ReadWrite`, `User.Read.All`, `People.Read`, and others.
 
 ### Tenant ID configuration
 
@@ -1615,7 +1615,7 @@ The server reads configuration from environment variables with sensible defaults
 | Environment variable | Default | Description |
 |---|---|---|
 | `OUTLOOK_MCP_CLIENT_ID` | `d3590ed6-52b3-4102-aeff-aad2292ab01c` | OAuth client ID. Override only if using a custom app registration. |
-| `OUTLOOK_MCP_TENANT_ID` | `common` | Azure AD tenant. Use `consumers` for personal-only, `organizations` for work-only. |
+| `OUTLOOK_MCP_TENANT_ID` | `common` | Entra ID tenant. Use `consumers` for personal-only, `organizations` for work-only. |
 | `OUTLOOK_MCP_AUTH_RECORD_PATH` | `~/.outlook-local-mcp/auth_record.json` | Path to persisted authentication record. |
 | `OUTLOOK_MCP_TOKEN_STORAGE` | `auto` | Token storage backend: `auto` (OS keychain with file fallback), `keychain` (OS keychain only), `file` (file-based only). See CR-0038. |
 | `OUTLOOK_MCP_CACHE_NAME` | `outlook-local-mcp` | Name for the OS-level token cache partition. |
@@ -1756,7 +1756,7 @@ On first launch, the user sees the device code prompt in Claude Desktop's server
 
 ## Known limitations and caveats
 
-**Using a first-party client ID is unsupported by Microsoft.** The Microsoft Office client ID's pre-authorized scopes could change without notice. For production or enterprise use, registering a custom Azure AD application is strongly recommended. The `OUTLOOK_MCP_CLIENT_ID` environment variable allows seamless migration to a custom registration when needed.
+**Using a first-party client ID is unsupported by Microsoft.** The Microsoft Office client ID's pre-authorized scopes could change without notice. For production or enterprise use, registering a custom Entra ID application is strongly recommended. The `OUTLOOK_MCP_CLIENT_ID` environment variable allows seamless migration to a custom registration when needed.
 
 **Conditional Access policies** in some organizations may block device code flow entirely or restrict it to compliant devices. If authentication fails with policy-related errors, the user must consult their IT administrator.
 

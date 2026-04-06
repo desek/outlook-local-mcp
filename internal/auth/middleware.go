@@ -20,7 +20,7 @@ import (
 
 // authenticateFunc is the function signature for performing authentication.
 // The default implementation calls the package-level Authenticate function.
-// Tests can replace this to avoid real Azure AD calls.
+// Tests can replace this to avoid real Entra ID calls.
 type authenticateFunc func(ctx context.Context, auth Authenticator, authRecordPath string, scopes []string) (azidentity.AuthenticationRecord, error)
 
 // urlElicitFunc is the function signature for requesting URL mode elicitation.
@@ -522,7 +522,7 @@ func (s *authMiddlewareState) handleBrowserAuth(
 
 // handleDeviceCodeAuth performs re-authentication using the device code flow.
 // It starts the flow in a background goroutine and waits for the device code
-// prompt from Azure AD via the deviceCodeCh channel. Once received, it
+// prompt from Entra ID via the deviceCodeCh channel. Once received, it
 // attempts to present the device code and URL via form mode elicitation
 // (RequestElicitation), falling back to returning the prompt as a tool result
 // when elicitation is not supported.
@@ -601,9 +601,9 @@ func (s *authMiddlewareState) handleDeviceCodeAuth(
 		return next(ctx, request)
 
 	case <-time.After(15 * time.Second):
-		// Timeout waiting for the device code prompt from Azure AD.
+		// Timeout waiting for the device code prompt from Entra ID.
 		return mcp.NewToolResultError(FormatAuthError(
-			fmt.Errorf("authentication required: device code prompt was not received from Azure AD"))), nil
+			fmt.Errorf("authentication required: device code prompt was not received from Entra ID"))), nil
 	}
 }
 

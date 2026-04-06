@@ -22,7 +22,7 @@ The Outlook Local MCP Server currently has no authentication implementation. Thi
 
 ## Motivation and Background
 
-The MCP server requires authenticated access to the Microsoft Graph API to read and write calendar events on behalf of the user. Without authentication, no calendar operations can be performed. The device code flow is chosen specifically because the MCP server runs as a CLI process with no browser integration and no ability to handle OAuth redirect URIs. Using the Microsoft Office first-party client ID eliminates the need for users to register their own Azure AD application, dramatically lowering the barrier to adoption.
+The MCP server requires authenticated access to the Microsoft Graph API to read and write calendar events on behalf of the user. Without authentication, no calendar operations can be performed. The device code flow is chosen specifically because the MCP server runs as a CLI process with no browser integration and no ability to handle OAuth redirect URIs. Using the Microsoft Office first-party client ID eliminates the need for users to register their own Entra ID application, dramatically lowering the barrier to adoption.
 
 Token persistence is equally critical: requiring users to re-authenticate on every server startup would make the tool impractical for daily use. The combination of OS keychain-backed token caching and authentication record persistence provides a seamless experience where the device code prompt appears only on first run.
 
@@ -30,7 +30,7 @@ Token persistence is equally critical: requiring users to re-authenticate on eve
 
 * The MCP server cannot perform any Graph API operations without valid authentication credentials.
 * Device code flow is the only viable OAuth flow for a stdio-based MCP server process.
-* The Microsoft Office client ID is pre-authorized for `Calendars.ReadWrite` in all Azure AD tenants, eliminating app registration requirements.
+* The Microsoft Office client ID is pre-authorized for `Calendars.ReadWrite` in all Entra ID tenants, eliminating app registration requirements.
 * Token persistence is required for a usable developer experience; re-authentication on every launch is unacceptable.
 * Secure token storage via OS keychain prevents plaintext credential leakage.
 
@@ -56,7 +56,7 @@ Implement a complete authentication subsystem consisting of three tightly integr
 sequenceDiagram
     participant S as MCP Server
     participant AZ as azidentity Credential
-    participant AAD as Azure AD / Entra ID
+    participant AAD as Entra ID / Entra ID
     participant U as User (Browser)
     participant KC as OS Keychain
 
@@ -157,13 +157,13 @@ flowchart TD
 * Logging infrastructure setup (`slog` handler configuration) -- addressed in CR-0002. This CR calls `slog` functions but does not configure the logger.
 * Token refresh logic -- handled internally by the `azidentity` library; no custom implementation required.
 * Multi-account support -- only a single authenticated account is supported.
-* Custom Azure AD app registration -- the Microsoft Office first-party client ID is used exclusively.
+* Custom Entra ID app registration -- the Microsoft Office first-party client ID is used exclusively.
 
 ## Alternative Approaches Considered
 
 * **Azure CLI client ID (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`)** -- Rejected because it does not have `Calendars.ReadWrite` pre-authorized and fails with `AADSTS65002`.
 * **Interactive browser flow (`azidentity.InteractiveBrowserCredential`)** -- Rejected because the MCP server runs as a stdio process without the ability to open a browser or listen for redirect URIs reliably.
-* **Client credentials flow (app-only)** -- Rejected because it requires an Azure AD app registration and admin-consented application permissions, contradicting the zero-setup design goal.
+* **Client credentials flow (app-only)** -- Rejected because it requires an Entra ID app registration and admin-consented application permissions, contradicting the zero-setup design goal.
 * **Manual OAuth implementation** -- Rejected in favor of the well-maintained `azidentity` library which handles token refresh, caching integration, and error handling.
 * **Storing tokens directly on disk instead of using OS keychain** -- Rejected because plaintext token storage is a security risk. The `azidentity/cache` package leverages OS-native secure storage.
 
@@ -261,7 +261,7 @@ Then an azidentity.DeviceCodeCredential is constructed with the specified client
 
 ```gherkin
 Given the device code flow is triggered
-When Azure AD returns a user_code and verification_uri
+When Entra ID returns a user_code and verification_uri
 Then the UserPrompt callback prints the device code message to stderr
   And no output is written to stdout
 ```
@@ -427,7 +427,7 @@ go tool cover -func=coverage.out
 
 **Likelihood:** medium
 **Impact:** low
-**Mitigation:** The Azure AD device code has a ~15-minute expiration window. If the user does not complete sign-in in time, the `Authenticate` call returns an error and the server exits with an error message. The user can simply restart and try again.
+**Mitigation:** The Entra ID device code has a ~15-minute expiration window. If the user does not complete sign-in in time, the `Authenticate` call returns an error and the server exits with an error message. The user can simply restart and try again.
 
 ### Risk 5: File Permission Issues on Shared Systems
 
@@ -464,7 +464,7 @@ Chosen approach: "Device code flow with Microsoft Office client ID, OS-native to
 
 ### Microsoft Office Client ID Details
 
-The client ID `d3590ed6-52b3-4102-aeff-aad2292ab01c` is the Microsoft Office first-party application. It is present in every Azure AD / Entra ID tenant by default and has pre-authorized delegated permissions for a broad set of Microsoft Graph scopes including `Calendars.ReadWrite`. This is the only well-known client ID confirmed to work with calendar scopes via device code flow. The Azure CLI client ID (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`) explicitly does not support calendar scopes.
+The client ID `d3590ed6-52b3-4102-aeff-aad2292ab01c` is the Microsoft Office first-party application. It is present in every Entra ID / Entra ID tenant by default and has pre-authorized delegated permissions for a broad set of Microsoft Graph scopes including `Calendars.ReadWrite`. This is the only well-known client ID confirmed to work with calendar scopes via device code flow. The Azure CLI client ID (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`) explicitly does not support calendar scopes.
 
 ### AuthenticationRecord Security Properties
 

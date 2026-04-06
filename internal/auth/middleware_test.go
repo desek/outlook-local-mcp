@@ -48,7 +48,7 @@ func urlElicitUnsupported(_ context.Context, _, _, _ string) (*mcp.ElicitationRe
 }
 
 // newTestState creates an authMiddlewareState with a mock authenticate function
-// for use in tests. The authFn replaces the real Authenticate to avoid Azure AD
+// for use in tests. The authFn replaces the real Authenticate to avoid Entra ID
 // calls. The authMethod defaults to "browser" — use newTestStateWithMethod for
 // explicit method selection. Elicitation functions default to returning
 // ErrElicitationNotSupported (exercising the fallback path).

@@ -300,8 +300,8 @@ Create the `extension/` directory and author the MCPB manifest.
     },
     "tenant_id": {
       "type": "string",
-      "title": "Azure AD Tenant ID",
-      "description": "Azure AD tenant identifier. Use 'common' for any account, 'organizations' for work/school, 'consumers' for personal, or a specific tenant GUID. Defaults to 'common'.",
+      "title": "Entra ID Tenant ID",
+      "description": "Entra ID tenant identifier. Use 'common' for any account, 'organizations' for work/school, 'consumers' for personal, or a specific tenant GUID. Defaults to 'common'.",
       "required": false
     }
   }

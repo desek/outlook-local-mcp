@@ -46,7 +46,7 @@ var validTokenStorageValues = map[string]bool{
 	"file":     true,
 }
 
-// wellKnownTenants is the set of accepted well-known Azure AD tenant aliases.
+// wellKnownTenants is the set of accepted well-known Entra ID tenant aliases.
 var wellKnownTenants = map[string]bool{
 	"common":        true,
 	"organizations": true,

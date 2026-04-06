@@ -152,14 +152,14 @@
     "client_id": {
       "type": "string",
       "title": "Microsoft Application (Client) ID",
-      "description": "The app used to access Microsoft Graph. Default: 'outlook-desktop' (Microsoft Office, works out of the box with device_code auth). Use 'outlook-local-mcp' for the project's own app registration. To use browser auth, register your own app in Azure AD with http://localhost redirect URI and paste the client ID here.",
+      "description": "The app used to access Microsoft Graph. Default: 'outlook-desktop' (Microsoft Office, works out of the box with device_code auth). Use 'outlook-local-mcp' for the project's own app registration. To use browser auth, register your own app in Entra ID with http://localhost redirect URI and paste the client ID here.",
       "required": false,
       "default": "outlook-desktop"
     },
     "tenant_id": {
       "type": "string",
-      "title": "Azure AD Tenant ID",
-      "description": "Your Azure AD tenant. Use 'common' (default) for any Microsoft account, 'organizations' for work/school only, or 'consumers' for personal accounts only. Advanced: paste a specific tenant GUID to restrict access to a single organization.",
+      "title": "Entra ID Tenant ID",
+      "description": "Your Entra ID tenant. Use 'common' (default) for any Microsoft account, 'organizations' for work/school only, or 'consumers' for personal accounts only. Advanced: paste a specific tenant GUID to restrict access to a single organization.",
       "required": false,
       "default": "common"
     },

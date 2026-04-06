@@ -290,7 +290,7 @@ No other authentication channel is viable for this use case due to:
 - [Configure keychain - MSAL for iOS/macOS](https://learn.microsoft.com/en-us/entra/msal/objc/howto-v2-keychain-objc)
 - [Using MSAL.NET with the macOS broker](https://learn.microsoft.com/en-us/entra/msal/dotnet/acquiring-tokens/desktop-mobile/macos-broker-dotnet-sdk)
 - [Apple Keychain Access Groups Entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/keychain-access-groups)
-- [Abuse and replay of Azure AD token from Edge in macOS Keychain](https://www.cloud-architekt.net/abuse-and-replay-azuread-token-macos/)
+- [Abuse and replay of Entra ID token from Edge in macOS Keychain](https://www.cloud-architekt.net/abuse-and-replay-azuread-token-macos/)
 - [Family of Client IDs Research - Secureworks](https://github.com/secureworks/family-of-client-ids-research)
 - [macOS Platform SSO overview](https://learn.microsoft.com/en-us/entra/identity/devices/macos-psso)
 

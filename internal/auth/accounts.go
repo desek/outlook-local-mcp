@@ -24,7 +24,7 @@ type AccountConfig struct {
 	// app registration.
 	ClientID string `json:"client_id"`
 
-	// TenantID is the Azure AD tenant identifier for this account
+	// TenantID is the Entra ID tenant identifier for this account
 	// (e.g., "common", "organizations", or a specific tenant GUID).
 	TenantID string `json:"tenant_id"`
 

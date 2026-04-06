@@ -17,7 +17,7 @@ source-commit: 160a617
 
 ## Change Summary
 
-Enable full per-account configuration of `client_id` and `tenant_id` so that each account can authenticate against a different Azure AD tenant using a different app registration. Currently, the `add_account` tool accepts these parameters at creation time, but they are not persisted — on server restart, accounts are lost and must be re-added. This CR introduces persistent per-account identity configuration via a JSON accounts file, and restores accounts automatically on startup.
+Enable full per-account configuration of `client_id` and `tenant_id` so that each account can authenticate against a different Entra ID tenant using a different app registration. Currently, the `add_account` tool accepts these parameters at creation time, but they are not persisted — on server restart, accounts are lost and must be re-added. This CR introduces persistent per-account identity configuration via a JSON accounts file, and restores accounts automatically on startup.
 
 ## Motivation and Background
 

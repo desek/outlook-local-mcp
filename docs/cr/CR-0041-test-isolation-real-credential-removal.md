@@ -23,7 +23,7 @@ Running `go test ./...` opens **16 browser tabs** per invocation from three inde
 Running `go test ./...` currently opens **16 browser tabs** per invocation from three sources. The first source (4 tabs) is `restoreOne()`, which hardcodes a call to `SetupCredentialForAccount` and then calls `GetToken()` on the real credential. The Azure SDK:
 
 1. Starts a localhost HTTP server for the OAuth redirect
-2. Calls `browser.OpenURL()` to open the Azure AD login page
+2. Calls `browser.OpenURL()` to open the Entra ID login page
 3. Waits for user interaction (bounded by the 5-second `silentAuthTimeout`)
 
 The timeout cancels the context, but the browser tab is already opened. The `GetToken()` call always fails in test environments (no cached tokens), so these browser opens are entirely redundant — they produce no useful test signal and create an annoying developer experience.
@@ -382,7 +382,7 @@ Not applicable. No tests become redundant.
 Given the full test suite
 When `go test ./...` is executed
 Then zero browser tabs MUST be opened
-  And the test suite MUST NOT make any external HTTP requests to Azure AD endpoints
+  And the test suite MUST NOT make any external HTTP requests to Entra ID endpoints
 ```
 
 ### AC-2: Restore tests preserve semantics
@@ -529,10 +529,10 @@ Chosen approach: "CredentialFactory injection", because it follows the existing 
    actual main.go source code.
 
 2. **Ambiguous AC-1 wording**:
-   "zero external HTTP requests MUST be made to Azure AD endpoints" was
+   "zero external HTTP requests MUST be made to Entra ID endpoints" was
    grammatically ambiguous — it could be parsed as requiring requests rather
    than prohibiting them. Reworded to: "the test suite MUST NOT make any
-   external HTTP requests to Azure AD endpoints."
+   external HTTP requests to Entra ID endpoints."
 
 ### Advisory (No Fix Needed)
 

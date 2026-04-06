@@ -346,7 +346,7 @@ func deviceCodeUserPrompt(ctx context.Context, msg azidentity.DeviceCodeMessage)
 //   - label: the unique account label, used to derive the cache partition and
 //     auth record filename.
 //   - clientID: the OAuth 2.0 client (application) ID. Must be non-empty.
-//   - tenantID: the Azure AD tenant identifier. Must be non-empty.
+//   - tenantID: the Entra ID tenant identifier. Must be non-empty.
 //   - authMethod: the authentication method ("auth_code", "browser", or
 //     "device_code"). Must be non-empty.
 //   - cacheNameBase: the base name for the OS keychain partition. The account

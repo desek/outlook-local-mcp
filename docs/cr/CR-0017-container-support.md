@@ -120,7 +120,7 @@ flowchart LR
 sequenceDiagram
     participant Op as Operator
     participant DC as Docker Container
-    participant AAD as Azure AD
+    participant AAD as Entra ID
 
     Op->>DC: docker run -it (first run)
     DC->>DC: No auth record at /data/auth/auth_record.json

@@ -11,7 +11,7 @@ This extension requires the **Calendars.ReadWrite** Microsoft Graph API scope. O
 | Field | Description |
 |-------|-------------|
 | **Client ID** | OAuth 2.0 client ID for Microsoft Graph API access. Leave empty to use the default Microsoft Office first-party client ID. |
-| **Tenant ID** | Azure AD tenant identifier. Use `common` for any account, `organizations` for work/school only, `consumers` for personal only, or a specific tenant GUID. Defaults to `common`. |
+| **Tenant ID** | Entra ID tenant identifier. Use `common` for any account, `organizations` for work/school only, `consumers` for personal only, or a specific tenant GUID. Defaults to `common`. |
 
 Both fields are optional. The extension works out of the box with default values for most users.
 

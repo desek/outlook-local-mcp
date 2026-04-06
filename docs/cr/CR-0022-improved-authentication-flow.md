@@ -55,7 +55,7 @@ sequenceDiagram
     participant Main as main.go
     participant Auth as auth.SetupCredential
     participant AZ as azidentity
-    participant AAD as Azure AD
+    participant AAD as Entra ID
     participant Stderr as os.Stderr
 
     Main->>Auth: SetupCredential(cfg)
@@ -127,7 +127,7 @@ sequenceDiagram
     participant Handler as Tool Handler
     participant Graph as Graph API
     participant AZ as azidentity
-    participant AAD as Azure AD
+    participant AAD as Entra ID
 
     Client->>Server: tool call (e.g., list_events)
     Server->>MW: AuthMiddleware intercepts
@@ -251,7 +251,7 @@ flowchart TD
 ### Out of Scope ("Here, But Not Further")
 
 * Multi-account support -- only a single authenticated account is supported.
-* Custom Azure AD app registration -- the Microsoft Office first-party client ID is used exclusively.
+* Custom Entra ID app registration -- the Microsoft Office first-party client ID is used exclusively.
 * Token refresh logic internals -- handled by `azidentity` library.
 * MCP Elicitation API -- while `mcp-go` supports elicitation requests, `LoggingMessageNotification` is used because it is more widely supported by MCP clients. Elicitation may be considered in a future CR.
 * Changes to the OS keychain cache initialization (`InitCache`) -- the existing implementation is retained.
@@ -379,7 +379,7 @@ flowchart LR
 |-----------|-----------|-------------|--------|-----------------|
 | `internal/auth/errors_test.go` | `TestIsAuthError_DeviceCodeCredential` | Detects DeviceCodeCredential errors | `fmt.Errorf("DeviceCodeCredential: context deadline exceeded")` | `true` |
 | `internal/auth/errors_test.go` | `TestIsAuthError_AuthenticationRequired` | Detects authentication required errors | `fmt.Errorf("authentication required")` | `true` |
-| `internal/auth/errors_test.go` | `TestIsAuthError_AADSTSError` | Detects Azure AD STS error codes | `fmt.Errorf("AADSTS70000: error")` | `true` |
+| `internal/auth/errors_test.go` | `TestIsAuthError_AADSTSError` | Detects Entra ID STS error codes | `fmt.Errorf("AADSTS70000: error")` | `true` |
 | `internal/auth/errors_test.go` | `TestIsAuthError_HTTP401` | Detects HTTP 401 Unauthorized | OData error with 401 status | `true` |
 | `internal/auth/errors_test.go` | `TestIsAuthError_NonAuthError` | Does not match non-auth errors | `fmt.Errorf("network timeout")` | `false` |
 | `internal/auth/errors_test.go` | `TestIsAuthError_NilError` | Handles nil error | `nil` | `false` |
@@ -610,7 +610,7 @@ go tool cover -func=coverage.out
 
 **Likelihood:** medium
 **Impact:** medium
-**Mitigation:** The device code flow has a ~15-minute Azure AD timeout. If the MCP client has its own request timeout shorter than this, the tool call may time out before the user completes authentication. The error message instructs the user to try again, and the authentication state is not corrupted -- the next tool call will re-attempt. The middleware uses a separate context for the `cred.Authenticate` call that is not bound to the tool call's deadline.
+**Mitigation:** The device code flow has a ~15-minute Entra ID timeout. If the MCP client has its own request timeout shorter than this, the tool call may time out before the user completes authentication. The error message instructs the user to try again, and the authentication state is not corrupted -- the next tool call will re-attempt. The middleware uses a separate context for the `cred.Authenticate` call that is not bound to the tool call's deadline.
 
 ### Risk 4: RegisterTools signature change breaks existing tests
 

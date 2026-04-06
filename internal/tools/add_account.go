@@ -56,7 +56,7 @@ func NewAddAccountTool() mcp.Tool {
 			mcp.Description("OAuth client ID. Defaults to the server's configured client ID."),
 		),
 		mcp.WithString("tenant_id",
-			mcp.Description("Azure AD tenant ID. Defaults to the server's configured tenant ID."),
+			mcp.Description("Entra ID tenant ID. Defaults to the server's configured tenant ID."),
 		),
 		mcp.WithString("auth_method",
 			mcp.Description("Authentication method: 'browser', 'device_code', or 'auth_code'. Defaults to the server's configured method."),
@@ -126,7 +126,7 @@ type pendingAccount struct {
 	// clientID is the OAuth client ID used for this account.
 	clientID string
 
-	// tenantID is the Azure AD tenant ID used for this account.
+	// tenantID is the Entra ID tenant ID used for this account.
 	tenantID string
 
 	// authMethod is the authentication method (always "device_code" for pending accounts).
@@ -363,7 +363,7 @@ func (s *addAccountState) handleAddAccount(registry *auth.AccountRegistry, cfg c
 //   - authMethod: "browser", "device_code", or "auth_code".
 //   - cacheName: the OS keychain cache partition name for this account.
 //   - clientID: the OAuth client ID used for this account.
-//   - tenantID: the Azure AD tenant ID used for this account.
+//   - tenantID: the Entra ID tenant ID used for this account.
 //   - label: the account label, included in fallback messages.
 //   - logger: structured logger for the tool.
 //
@@ -557,7 +557,7 @@ func (e *DeviceCodeFallbackError) Error() string { return e.Message }
 //   - authMethod: the authentication method (always "device_code").
 //   - cacheName: the OS keychain cache partition name for this account.
 //   - clientID: the OAuth client ID used for this account.
-//   - tenantID: the Azure AD tenant ID used for this account.
+//   - tenantID: the Entra ID tenant ID used for this account.
 //   - label: the account label, included in fallback messages.
 //   - logger: structured logger for the tool.
 //

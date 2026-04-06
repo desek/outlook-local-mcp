@@ -33,7 +33,7 @@ type AccountEntry struct {
 	// after a server restart.
 	ClientID string
 
-	// TenantID is the Azure AD tenant identifier used to authenticate this
+	// TenantID is the Entra ID tenant identifier used to authenticate this
 	// account (e.g., "common", "organizations", or a specific tenant GUID).
 	// Stored for persistence so the account can be reconstructed after a
 	// server restart.

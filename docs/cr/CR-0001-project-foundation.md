@@ -73,7 +73,7 @@ flowchart TD
    - `github.com/microsoft/kiota-abstractions-go` at latest stable
 3. The project **MUST** define a `config` struct in `main.go` with the following fields:
    - `ClientID` (string) for the OAuth client ID
-   - `TenantID` (string) for the Azure AD tenant
+   - `TenantID` (string) for the Entra ID tenant
    - `AuthRecordPath` (string) for the authentication record file path
    - `CacheName` (string) for the OS-level token cache partition name
    - `DefaultTimezone` (string) for the default event timezone
@@ -208,7 +208,7 @@ The following table defines the exact environment variable names, struct field m
 | Environment Variable | Config Field | Default Value | Purpose |
 |---|---|---|---|
 | `OUTLOOK_MCP_CLIENT_ID` | `ClientID` | `d3590ed6-52b3-4102-aeff-aad2292ab01c` | Microsoft Office first-party OAuth client ID |
-| `OUTLOOK_MCP_TENANT_ID` | `TenantID` | `common` | Azure AD tenant; supports `common`, `organizations`, `consumers`, or a tenant GUID |
+| `OUTLOOK_MCP_TENANT_ID` | `TenantID` | `common` | Entra ID tenant; supports `common`, `organizations`, `consumers`, or a tenant GUID |
 | `OUTLOOK_MCP_AUTH_RECORD_PATH` | `AuthRecordPath` | `~/.outlook-local-mcp/auth_record.json` | Path to the persisted authentication record (non-secret metadata) |
 | `OUTLOOK_MCP_CACHE_NAME` | `CacheName` | `outlook-local-mcp` | Name for the OS-native persistent token cache partition |
 | `OUTLOOK_MCP_DEFAULT_TIMEZONE` | `DefaultTimezone` | `UTC` | Default IANA timezone when not specified in tool calls |

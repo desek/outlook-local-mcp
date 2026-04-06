@@ -427,7 +427,7 @@ go tool cover -func=coverage.out
 
 ## Dependencies
 
-* **CR-0001** (Configuration) -- provides application configuration including Azure AD credentials and tenant settings
+* **CR-0001** (Configuration) -- provides application configuration including Entra ID credentials and tenant settings
 * **CR-0002** (Logging) -- provides structured logging used for fallback path logging and error reporting
 * **CR-0004** (Graph Client, MCP Server) -- provides the authenticated Graph API client and MCP server infrastructure for tool registration
 * **CR-0005** (Error Handling, Pagination, Serialization) -- provides shared utilities for Graph API error handling, CalendarView pagination, and JSON serialization

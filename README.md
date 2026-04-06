@@ -1,6 +1,6 @@
 # Outlook Local MCP Server
 
-A Model Context Protocol (MCP) server that provides calendar management tools backed by the Microsoft Graph API v1.0. Built as a single Go binary, it communicates over stdio (JSON-RPC) and authenticates using the OAuth 2.0 device code flow by default -- no Azure AD app registration required.
+A Model Context Protocol (MCP) server that provides calendar management tools backed by the Microsoft Graph API v1.0. Built as a single Go binary, it communicates over stdio (JSON-RPC) and authenticates using the OAuth 2.0 device code flow by default -- no Entra ID app registration required.
 
 <p align="center">
   <img src="docs/assets/demo.gif" alt="outlook-local-mcp demo">
@@ -35,7 +35,7 @@ Download the `.mcpb` file from the [latest release](https://github.com/desek/out
 
 ---
 
-On first tool call, sign in with a device code. No Azure AD app registration or admin consent needed.
+On first tool call, sign in with a device code. No Entra ID app registration or admin consent needed.
 
 ## Features
 
@@ -133,7 +133,7 @@ See CR-0029 for full details on the MCPB extension packaging.
 
 ## Authentication
 
-The server uses the Microsoft Office first-party client ID (`outlook-desktop`) by default, which is pre-authorized for Graph Calendar scopes in all tenants -- no admin consent required. You can also use any [well-known client ID](#well-known-client-ids) or your own Azure AD app registration. Authentication is lazy -- it is deferred until the first tool call rather than blocking at startup (see CR-0022).
+The server uses the Microsoft Office first-party client ID (`outlook-desktop`) by default, which is pre-authorized for Graph Calendar scopes in all tenants -- no admin consent required. You can also use any [well-known client ID](#well-known-client-ids) or your own Entra ID app registration. Authentication is lazy -- it is deferred until the first tool call rather than blocking at startup (see CR-0022).
 
 Three authentication methods are available, controlled by the `OUTLOOK_MCP_AUTH_METHOD` environment variable. When not set explicitly, the method is inferred from the client ID: well-known client IDs default to `device_code`; custom app registrations default to `browser` (see CR-0034).
 
@@ -149,7 +149,7 @@ On first use, the server has no cached token. When the MCP client invokes any to
 
 **Device code auth (default):**
 
-1. The server captures the device code from Azure AD and attempts to display it via MCP Elicitation.
+1. The server captures the device code from Entra ID and attempts to display it via MCP Elicitation.
 2. If Elicitation is supported, the user sees the device code in a prompt. If not, the device code and verification URL are returned as tool result text so the user can see them directly in the chat (see CR-0031). The tool returns immediately without blocking.
 3. After the user completes sign-in in their browser, calling any tool (or `account_add` again) picks up the cached token automatically.
 
@@ -237,7 +237,7 @@ All configuration is via environment variables prefixed with `OUTLOOK_MCP_`.
 | Variable | Default | Description |
 |---|---|---|
 | `CLIENT_ID` | `outlook-desktop` | OAuth client ID. Accepts a well-known friendly name or raw UUID. See [Well-Known Client IDs](#well-known-client-ids) |
-| `TENANT_ID` | `common` | Azure AD tenant: `common`, `organizations`, `consumers`, or a tenant GUID |
+| `TENANT_ID` | `common` | Entra ID tenant: `common`, `organizations`, `consumers`, or a tenant GUID |
 | `AUTH_RECORD_PATH` | `~/.outlook-local-mcp/auth_record.json` | Path to the authentication record file |
 | `AUTH_METHOD` | *(inferred)* | Authentication method: `device_code` (default for well-known client IDs), `browser` (default for custom client IDs), or `auth_code` (manual). When unset, inferred from client ID. See CR-0034 |
 | `ACCOUNTS_PATH` | `~/.outlook-local-mcp/accounts.json` | Path to the persistent accounts configuration file for multi-account support. Defaults to the same directory as `AUTH_RECORD_PATH`. See CR-0032 |
@@ -321,7 +321,7 @@ Register and authenticate a new Microsoft account. Creates a per-account credent
 |---|---|---|---|
 | `label` | string | Yes | Unique label for the account (1-64 chars, alphanumeric/underscore/hyphen) |
 | `client_id` | string | No | OAuth client ID. Defaults to the server's configured client ID |
-| `tenant_id` | string | No | Azure AD tenant ID. Defaults to the server's configured tenant ID |
+| `tenant_id` | string | No | Entra ID tenant ID. Defaults to the server's configured tenant ID |
 | `auth_method` | string | No | `auth_code`, `browser`, or `device_code`. Defaults to the server's configured auth method |
 
 ---

@@ -105,7 +105,7 @@ type statusConfigIdentity struct {
 	// ClientID is the OAuth 2.0 application (client) ID.
 	ClientID string `json:"client_id"`
 
-	// TenantID is the Azure AD tenant identifier.
+	// TenantID is the Entra ID tenant identifier.
 	TenantID string `json:"tenant_id"`
 
 	// AuthMethod is the effective authentication method (e.g., "device_code",
