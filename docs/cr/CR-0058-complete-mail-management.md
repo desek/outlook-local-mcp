@@ -15,7 +15,7 @@ source-commit: 390d994
 
 ## Change Summary
 
-Extend the mail subsystem from passive reading to intelligent mail assistance across four pillars: (1) deep email reading with conversation threading and attachment access for historical context, (2) draft creation and lifecycle management as a compose-without-send workflow where the user retains full control of the send action, (3) enhanced multi-approach search combining OData filtering and KQL full-text search, and (4) metadata management — categories with colors, flags, and importance — enabling the model to signal which emails it has processed, drafted responses for, or flagged for attention. The model never sends email; it reads, prepares, organizes, and flags.
+Extend the mail subsystem from passive reading to intelligent mail assistance across four pillars: (1) deep email reading with conversation threading and attachment access for historical context, (2) draft creation and lifecycle management as a compose-without-send workflow where the user retains full control of the send action, (3) enhanced multi-approach search combining OData filtering and KQL full-text search, and (4) metadata management — categories with colors, flags, importance, and machine-readable provenance tagging — enabling the model to signal which emails it has processed, drafted responses for, or flagged for attention. A dual-layer tracking system uses categories for user-visible signals in Outlook's UI and MAPI extended properties for programmatic identification of MCP-created content. The model never sends email; it reads, prepares, organizes, and flags.
 
 ## Motivation and Background
 
@@ -34,12 +34,26 @@ The original CR-0058 proposed full lifecycle management including send/reply/for
 
 This workflow makes the model a powerful email assistant without granting it the ability to send on the user's behalf.
 
+### Dual-Layer Tracking: Categories + Provenance
+
+The system uses two complementary tracking mechanisms:
+
+| Layer | Mechanism | Audience | Visibility | Purpose |
+|-------|-----------|----------|------------|---------|
+| **User-visible** | Categories (colored labels) | Human | All Outlook clients (desktop, web, mobile) | At-a-glance triage: "Model Read", "Draft Prepared", "Urgent" |
+| **Machine-readable** | MAPI extended properties | Model/API | Hidden — only visible via Graph API `$expand` | Programmatic identification: "was this draft created by the MCP server?" |
+
+Categories alone are insufficient for reliable programmatic tracking — users can manually remove or reassign them. Provenance extended properties are immutable once set and survive category changes, providing a tamper-resistant audit trail. Conversely, provenance alone is insufficient for user workflows — extended properties are invisible in Outlook's UI. Together, they form a complete tracking system: categories for human triage, provenance for machine identification.
+
+The provenance implementation reuses the existing calendar provenance pattern (`internal/graph/provenance.go`) — same GUID namespace, same property format, same `$expand` detection pattern.
+
 ## Change Drivers
 
 * **CR-0043 deferred items**: Addresses attachment download, search enhancement, message flag/category modification, and partially addresses draft management.
 * **Safety-first design**: The model should never send email. Drafts preserve human oversight for irreversible external actions.
 * **Organizational signal**: Categories and flags create a shared visual language between the model and the user within Outlook's native UI.
 * **Context depth**: Conversation threading and attachment download give the model complete historical context for accurate responses.
+* **Provenance trail**: Machine-readable extended properties let the model reliably identify its own drafts and processed messages across sessions, independent of user-visible category changes.
 
 ## Current State
 
@@ -60,6 +74,7 @@ This workflow makes the model a powerful email assistant without granting it the
 * **No metadata management** — the model cannot mark messages as read, flag them, or assign categories.
 * **Limited filtering** — `mail_list_messages` lacks filters for read status, draft status, attachments, importance, and flag state.
 * **No category management** — the model cannot create or list Outlook categories for organizational labeling.
+* **No provenance tracking** — no way to programmatically identify which messages or drafts were created/processed by the MCP server.
 
 ### Current State Diagram
 
@@ -345,6 +360,32 @@ flowchart TB
 79. `mail_update_message` description **MUST** include guidance on using categories as organizational labels (e.g., "Model Read", "Draft Prepared") and flags as pin equivalents.
 80. `mail_list_categories` description **MUST** recommend listing existing categories before creating new ones to avoid duplicates.
 
+#### Mail Provenance Tagging
+
+##### Provenance on Draft Creation
+
+81. When `MailManageEnabled` is `true` and the server's `ProvenanceTag` is configured, `mail_create_draft`, `mail_create_reply_draft`, and `mail_create_forward_draft` **MUST** set a single-value extended property on the created draft with the provenance tag, using the existing `ProvenanceGUID` namespace.
+82. The provenance property ID **MUST** follow the same format as calendar events: `String {ProvenanceGUID} Name <tagName>`.
+83. The provenance property value **MUST** be `"true"`, consistent with the calendar provenance pattern.
+
+##### Provenance Detection on Read
+
+84. `mail_get_message` **MUST** include the provenance extended property in the `$expand` clause when `ProvenanceTag` is configured, using the same `ProvenanceExpandFilter` function as calendar events.
+85. `mail_get_message` **MUST** include a `provenance` boolean field in the response (all output modes) indicating whether the provenance extended property is present on the message.
+86. `mail_get_conversation` **MUST** include the `provenance` field per message in the thread when `ProvenanceTag` is configured.
+87. Provenance detection on read tools **MUST** work regardless of `MailManageEnabled` — it only requires `MailEnabled=true` and `ProvenanceTag` to be configured. This allows read-only users to see provenance set by a manage-enabled session.
+
+##### Provenance Filtering
+
+88. `mail_list_messages` **MUST** accept an optional `provenance` boolean parameter that, when `true`, adds a `singleValueExtendedProperties/any(ep: ep/id eq '{propertyID}' and ep/value eq 'true')` clause to the OData `$filter` to return only MCP-created/processed messages.
+89. The `provenance` filter parameter **MUST** compose with all other filter parameters using `and`.
+90. The `provenance` filter parameter **MUST** only be accepted when `ProvenanceTag` is configured. When `ProvenanceTag` is empty and `provenance=true` is requested, **MUST** return an error explaining that provenance tagging is not configured.
+
+##### Provenance Helpers
+
+91. The `internal/graph` package **MUST** add a `HasMessageProvenanceTag(msg models.Messageable, propertyID string) bool` function parallel to the existing `HasProvenanceTag` for calendar events.
+92. The existing `NewProvenanceProperty`, `BuildProvenancePropertyID`, and `ProvenanceExpandFilter` functions **MUST** be reused without modification — they are already resource-type agnostic.
+
 ### Non-Functional Requirements
 
 1. Each new tool **MUST** be defined in its own file following the project's single-purpose file structure.
@@ -375,9 +416,11 @@ flowchart TB
 | `internal/tools/list_categories.go` | **New**: `mail_list_categories` tool + handler |
 | `internal/tools/create_category.go` | **New**: `mail_create_category` tool + handler |
 | `internal/tools/delete_category.go` | **New**: `mail_delete_category` tool + handler |
-| `internal/tools/list_messages.go` | Add `is_read`, `is_draft`, `has_attachments`, `importance`, `flag_status` filter params |
+| `internal/tools/list_messages.go` | Add `is_read`, `is_draft`, `has_attachments`, `importance`, `flag_status`, `provenance` filter params |
+| `internal/tools/get_message.go` | Add provenance `$expand` and `provenance` field in response |
 | `internal/tools/search_messages.go` | Enhanced KQL guidance in tool description |
 | `internal/graph/mail_serialize.go` | Add attachment content serialization; add category serialization |
+| `internal/graph/provenance.go` | Add `HasMessageProvenanceTag` for mail messages |
 | `internal/graph/category_serialize.go` | **New**: category serialization helpers |
 | `internal/tools/text_format.go` | Add formatters: conversation thread, attachment detail, categories list |
 | `internal/validate/validate.go` | Add `ValidateRecipients`, `ValidateContentType`, `ValidateCategoryColor` |
@@ -395,8 +438,10 @@ flowchart TB
 * 2 new read tools (conversation, attachment) available with `MailEnabled`.
 * 5 new draft management tools available with `MailManageEnabled`.
 * 4 new metadata management tools (update message, category CRUD) available with `MailManageEnabled`.
-* 5 new filter parameters on `mail_list_messages`.
+* 6 new filter parameters on `mail_list_messages` (including provenance).
 * Enhanced KQL guidance on `mail_search_messages`.
+* Mail provenance tagging on MCP-created drafts via MAPI extended properties, reusing the calendar provenance GUID namespace.
+* Provenance detection on `mail_get_message` and `mail_get_conversation`.
 * Text formatters for new tool outputs.
 * Annotation and handler unit tests.
 
@@ -407,7 +452,7 @@ flowchart TB
 * **Message move** — moving messages between folders (`/me/messages/{id}/move`). Deferred.
 * **Delta sync** — incremental message retrieval (`/me/mailFolders/{id}/messages/delta`). Deferred.
 * **Shared/delegated mailbox access** — the `shared_mailbox` parameter and `Mail.ReadWrite.Shared` scope. Deferred.
-* **Mail provenance tagging** — MAPI extended properties for MCP-origin tracking. The category system serves this role instead.
+* **Provenance on non-draft messages** — manually setting provenance on messages the model reads (as opposed to creates). The `mail_update_message` tool modifies visible metadata; provenance is reserved for MCP-created content (drafts). For "model has read this" signaling, use categories.
 * **Attachment upload** — attaching files to drafts. The Graph API supports this but requires multipart upload handling. Deferred.
 * **Rich text (HTML) editor experience** — the `body` parameter accepts plain text or HTML strings. No WYSIWYG editing.
 * **Mail rules / inbox automation** — server-side rules (`/me/mailFolders/inbox/messageRules`). Deferred.
@@ -418,7 +463,7 @@ flowchart TB
 
 * **Full send/reply/forward operations (original CR-0058).** Rejected: email sending is irreversible with high blast radius. The draft-centric approach preserves productivity while keeping human oversight for the send action. This can be revisited as a future opt-in tier if there is demand.
 
-* **Use extended properties (provenance) instead of categories for tracking.** Rejected: extended properties are invisible in Outlook's UI. Categories appear as colored labels in all Outlook clients (desktop, web, mobile), making model activity visible at a glance without additional tooling.
+* **Categories OR provenance (pick one).** Rejected: each serves a different audience. Categories are user-visible in Outlook but can be manually removed — unreliable for programmatic identification. Extended properties are immutable and machine-readable but invisible in Outlook — useless for human triage. The dual-layer approach gives both audiences what they need.
 
 * **Single `mail_manage_message` tool for all metadata operations.** Rejected: overloaded tool with unrelated parameters (read status vs flag vs categories vs importance) creates ambiguity for the model. A single `mail_update_message` with optional fields is appropriate since all use PATCH on the same endpoint.
 
@@ -503,19 +548,22 @@ The draft-centric workflow makes the MCP server a practical email assistant: the
 ### Phase 4: Draft Management
 
 **`internal/tools/create_draft.go`:**
-- `NewCreateDraftTool()` + `HandleCreateDraft(retryCfg, timeout)`.
+- `NewCreateDraftTool()` + `HandleCreateDraft(retryCfg, timeout, provenancePropertyID)`.
 - Builds `models.Message` with recipients, subject, body, importance.
+- When `provenancePropertyID` is non-empty, sets `SingleValueExtendedProperties` on the message.
 - Calls `POST /me/messages`.
 - Returns draft ID and confirmation.
 
 **`internal/tools/create_reply_draft.go`:**
-- `NewCreateReplyDraftTool()` + `HandleCreateReplyDraft(retryCfg, timeout)`.
+- `NewCreateReplyDraftTool()` + `HandleCreateReplyDraft(retryCfg, timeout, provenancePropertyID)`.
 - Calls `POST /me/messages/{id}/createReply` or `createReplyAll`.
+- When provenance configured: the `createReply`/`createReplyAll` endpoint returns the draft, then a follow-up `PATCH` sets the provenance property (Graph API does not support extended properties in the `createReply` request body).
 - Returns draft ID with threading confirmation.
 
 **`internal/tools/create_forward_draft.go`:**
-- `NewCreateForwardDraftTool()` + `HandleCreateForwardDraft(retryCfg, timeout)`.
+- `NewCreateForwardDraftTool()` + `HandleCreateForwardDraft(retryCfg, timeout, provenancePropertyID)`.
 - Calls `POST /me/messages/{id}/createForward` with optional recipients and comment.
+- When provenance configured: follow-up `PATCH` sets provenance on the returned draft.
 - Returns draft ID.
 
 **`internal/tools/update_draft.go`:**
@@ -548,7 +596,25 @@ The draft-centric workflow makes the MCP server a practical email assistant: the
 - `NewDeleteCategoryTool()` + `HandleDeleteCategory(retryCfg, timeout)`.
 - Calls `DELETE /me/outlook/masterCategories/{id}`.
 
-### Phase 6: Serialization and Formatting
+### Phase 6: Provenance Integration
+
+**`internal/graph/provenance.go`:**
+- Add `HasMessageProvenanceTag(msg models.Messageable, propertyID string) bool` — parallel to existing `HasProvenanceTag` for events.
+- Existing `NewProvenanceProperty`, `BuildProvenancePropertyID`, and `ProvenanceExpandFilter` are reused without changes.
+
+**`internal/tools/get_message.go`:**
+- When `provenancePropertyID` is non-empty, add `$expand=singleValueExtendedProperties($filter=id eq '...')` to the request.
+- Include `provenance: true/false` in all output modes.
+
+**`internal/tools/get_conversation.go`:**
+- When `provenancePropertyID` is non-empty, add the same `$expand` clause.
+- Include `provenance` per message in the thread response.
+
+**`internal/tools/list_messages.go`:**
+- Add `provenance` boolean filter parameter.
+- When `provenance=true`, add `singleValueExtendedProperties/any(ep: ep/id eq '{id}' and ep/value eq 'true')` to `$filter`.
+
+### Phase 7: Serialization and Formatting
 
 **`internal/graph/category_serialize.go`** (new):
 - `SerializeCategory(cat)`, `SerializeSummaryCategory(cat)`.
@@ -558,7 +624,7 @@ The draft-centric workflow makes the MCP server a practical email assistant: the
 - `FormatAttachmentText()` — attachment metadata with size.
 - `FormatCategoriesText()` — numbered category list with color names.
 
-### Phase 7: Server Registration, Manifest, and Tests
+### Phase 8: Server Registration, Manifest, and Tests
 
 **`internal/server/server.go`:**
 - Register read tools (`mail_get_conversation`, `mail_get_attachment`) with `wrap` under `MailEnabled`.
@@ -604,13 +670,16 @@ flowchart LR
         E2 --> E3["create_category"]
         E3 --> E4["delete_category"]
     end
-    subgraph P6["Phase 6: Format"]
-        F1["Serializers\nFormatters"]
+    subgraph P6["Phase 6: Provenance"]
+        F1["HasMessageProvenanceTag\nprovenance on drafts\nprovenance detection"]
     end
-    subgraph P7["Phase 7: Ship"]
-        G1["server.go\nmanifest\ntests"]
+    subgraph P7["Phase 7: Format"]
+        G1["Serializers\nFormatters"]
     end
-    P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7
+    subgraph P8["Phase 8: Ship"]
+        H1["server.go\nmanifest\ntests"]
+    end
+    P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8
 ```
 
 ## Test Strategy
@@ -650,6 +719,15 @@ flowchart LR
 | `list_messages_test.go` | `TestListMessages_IsReadFilter` | isRead filter applied |
 | `list_messages_test.go` | `TestListMessages_IsDraftFilter` | isDraft filter applied |
 | `list_messages_test.go` | `TestListMessages_CombinedFilters` | Multiple filters composed with 'and' |
+| `list_messages_test.go` | `TestListMessages_ProvenanceFilter` | Provenance extended property filter applied |
+| `list_messages_test.go` | `TestListMessages_ProvenanceNoTag` | Error when provenance=true but ProvenanceTag empty |
+| `provenance_test.go` | `TestHasMessageProvenanceTag_Present` | Provenance detected on message |
+| `provenance_test.go` | `TestHasMessageProvenanceTag_Absent` | No provenance returns false |
+| `create_draft_test.go` | `TestCreateDraft_WithProvenance` | Provenance property set when configured |
+| `create_reply_draft_test.go` | `TestCreateReplyDraft_WithProvenance` | Provenance set via follow-up PATCH |
+| `create_forward_draft_test.go` | `TestCreateForwardDraft_WithProvenance` | Provenance set via follow-up PATCH |
+| `get_message_test.go` | `TestGetMessage_ProvenanceDetection` | Provenance field included when tag configured |
+| `get_conversation_test.go` | `TestGetConversation_ProvenancePerMessage` | Provenance field per message in thread |
 | `tool_annotations_test.go` | 11 tests | Annotation sets for all new tools |
 
 ### Tests to Modify
@@ -657,6 +735,7 @@ flowchart LR
 | Test File | Test Name | Change |
 |-----------|-----------|--------|
 | `list_messages_test.go` | Existing tests | Add new filter parameter coverage |
+| `get_message_test.go` | Existing tests | Add provenance field coverage |
 
 ## Acceptance Criteria
 
@@ -756,7 +835,43 @@ Then OAuth scopes include Mail.ReadWrite and MailboxSettings.ReadWrite
   And OAuth scopes do NOT include Mail.Read (superseded by Mail.ReadWrite)
 ```
 
-### AC-10: No send capability
+### AC-10: Mail provenance on drafts
+
+```gherkin
+Given ProvenanceTag is configured and MailManageEnabled is true
+When mail_create_draft is called
+Then the created draft has the provenance extended property set with value "true"
+
+Given ProvenanceTag is configured
+When mail_create_reply_draft is called
+Then the reply draft has the provenance extended property set via follow-up PATCH
+```
+
+### AC-11: Provenance detection on read
+
+```gherkin
+Given a message with the provenance extended property set
+When mail_get_message is called with ProvenanceTag configured
+Then the response includes provenance=true
+
+Given a conversation containing MCP-created and non-MCP messages
+When mail_get_conversation is called with ProvenanceTag configured
+Then each message in the thread includes a provenance field (true or false)
+```
+
+### AC-12: Provenance filtering
+
+```gherkin
+Given an inbox with MCP-created drafts and regular messages
+When mail_list_messages is called with provenance=true
+Then only messages with the provenance extended property are returned
+
+Given ProvenanceTag is not configured
+When mail_list_messages is called with provenance=true
+Then an error is returned explaining provenance tagging is not configured
+```
+
+### AC-13: No send capability
 
 ```gherkin
 Given any server configuration (MailEnabled, MailManageEnabled, ReadOnly)
@@ -765,7 +880,7 @@ Then no tool exists that calls POST /me/sendMail, /me/messages/{id}/send,
   And the Mail.Send OAuth scope is never requested
 ```
 
-### AC-11: All quality checks pass
+### AC-14: All quality checks pass
 
 ```gherkin
 Given all code changes are applied
@@ -858,7 +973,7 @@ make ci
 
 ## Estimated Effort
 
-18–26 person-hours, distributed as:
+20–28 person-hours, distributed as:
 
 | Phase | Effort |
 |-------|--------|
@@ -867,15 +982,17 @@ make ci
 | Phase 3: Search filter enhancements | 1–2 hours |
 | Phase 4: Draft management (5 tools) | 4–6 hours |
 | Phase 5: Metadata management (4 tools) | 3–4 hours |
-| Phase 6: Serialization + formatting | 2–3 hours |
-| Phase 7: Registration + manifest + tests | 4–5 hours |
+| Phase 6: Provenance integration | 2–3 hours |
+| Phase 7: Serialization + formatting | 2–3 hours |
+| Phase 8: Registration + manifest + tests | 4–5 hours |
 
 ## Decision Outcome
 
-Chosen approach: "Draft-centric workflow with metadata signaling", because it provides the model with full email assistance capability (read, compose, organize) while maintaining human oversight for the highest-risk action (sending). Categories replace provenance tagging with a user-visible mechanism. The `Mail.Send` scope is never requested, eliminating the risk of automated email dispatch. This design can be extended with an opt-in send tier in a future CR if there is demand.
+Chosen approach: "Draft-centric workflow with dual-layer tracking", because it provides the model with full email assistance capability (read, compose, organize) while maintaining human oversight for the highest-risk action (sending). A dual-layer tracking system combines user-visible categories (colored labels in Outlook) with machine-readable provenance tags (MAPI extended properties) — categories for human triage, provenance for programmatic identification. The `Mail.Send` scope is never requested, eliminating the risk of automated email dispatch. This design can be extended with an opt-in send tier in a future CR if there is demand.
 
 ## Related Items
 
+* CR-0040: MCP Event Provenance Tagging — established the MAPI extended property pattern (`ProvenanceGUID`, `BuildProvenancePropertyID`, `NewProvenanceProperty`, `HasProvenanceTag`, `ProvenanceExpandFilter`) reused for mail provenance.
 * CR-0043: Mail Read & Event-Email Correlation — introduced the 4 read-only tools and deferred all features addressed here.
 * CR-0052: MCP Tool Annotations — annotation matrix for all new tools.
 * CR-0051: Token-Efficient Response Defaults — three-tier output model for new read tools.
