@@ -216,6 +216,32 @@ flowchart TD
 41. `account_remove` description **MUST** be updated to mention that `account_logout` is available for disconnecting without removing.
 42. The `account` parameter description on all tools that have it **MUST** be updated to note that both label and UPN are accepted.
 
+#### account_remove Parity
+
+43. `account_remove` **MUST** clear the cached token from the account's keychain partition (parity with `account_logout`), so removal leaves no residual credentials on disk or in the keychain.
+44. `account_remove` **MUST** succeed regardless of the account's `Authenticated` state (connected or disconnected accounts can both be removed).
+45. When `account_remove` removes the last registered account, the server **MUST** leave a valid empty `accounts.json` (or absent file) and continue running; subsequent tool calls **MUST** surface the standard "no accounts configured" error path.
+
+#### Zero-Account State
+
+46. When zero accounts are registered (none in the registry, none in `accounts.json`), the `AccountResolver` **MUST** return an error directing the user to `account_add`, without mentioning `account_login` (since there is nothing to log in to).
+47. `account_list` **MUST** succeed with an empty result when zero accounts are registered (not an error).
+48. `status` **MUST** report zero accounts cleanly with no errors when none are registered.
+
+#### LLM Guidance on Account Selection
+
+The current tool descriptions implicitly encourage the LLM to "just use the default account" when multiple accounts exist but no `account` parameter is supplied. This has led to incidents where the LLM silently operated on the wrong mailbox instead of asking the user. Disconnected accounts compound the problem: they are invisible today and the LLM never surfaces them.
+
+49. Every tool that accepts an `account` parameter **MUST** include explicit guidance in its description instructing the LLM to:
+    * Never assume a "default" account.
+    * Always inspect the current account landscape (via `account_list` or prior context) before acting.
+    * Consider **all** registered accounts, including disconnected ones, when deciding which mailbox the user intends.
+    * Prefer elicitation or a clarifying question when intent is ambiguous rather than silently picking a connected account.
+50. The `account` parameter description **MUST** state that omitting it yields auto-selection **only** when exactly one account is authenticated and no disconnected accounts are registered; otherwise the LLM is expected to determine the account explicitly.
+51. `account_list` and `status` tool descriptions **MUST** state that their output is the authoritative source for account selection decisions and that disconnected accounts are first-class entries that **MUST NOT** be ignored.
+52. When `AccountResolver` auto-selects (exactly one authenticated account) **while disconnected accounts also exist**, the resolution result **MUST** include a human-readable advisory in the tool's confirmation / account line indicating that other (disconnected) accounts exist and naming them by UPN — so the LLM is prompted to raise them to the user instead of silently using the one connected account.
+53. Tool descriptions for `account_login`, `account_logout`, `account_refresh`, and `account_remove` **MUST** direct the LLM to proactively suggest these operations to the user when account-state conditions warrant (e.g., a disconnected account surfaced in `account_list`).
+
 ### Non-Functional Requirements
 
 1. Each new tool **MUST** be defined in its own file: `login_account.go`, `logout_account.go`, `refresh_account.go`.
@@ -240,7 +266,7 @@ flowchart TD
 | `internal/tools/refresh_account.go` | **New file**: `NewRefreshAccountTool()` + `HandleRefreshAccount()` |
 | `internal/tools/add_account.go` | Resolve and persist UPN after authentication; set `entry.Email` |
 | `internal/tools/list_accounts.go` | Include auth_method in output; update text format |
-| `internal/tools/remove_account.go` | Update description to mention `account_logout` |
+| `internal/tools/remove_account.go` | Update description to mention `account_logout`; clear keychain token cache on remove; allow remove of disconnected accounts |
 | `internal/tools/status.go` | Add UPN and auth_method to `statusAccount` |
 | `internal/tools/text_format.go` | Update `FormatAccountsText` format; update `FormatStatusText` |
 | `internal/tools/client.go` | Update `account` parameter descriptions across tools |
@@ -573,7 +599,37 @@ Then the error message lists the disconnected account with UPN
   And suggests using account_login or account_add
 ```
 
-### AC-13: Extension manifest includes new tools
+### AC-13: account_remove clears token cache and works on disconnected accounts
+
+```gherkin
+Given an account "work" with Authenticated=false
+When account_remove is called with label="work"
+Then the account is removed from the registry and accounts.json
+  And the keychain token cache for the account's CacheName is cleared
+```
+
+### AC-14: Removing the last account leaves a clean zero-account state
+
+```gherkin
+Given exactly one account "work" is registered
+When account_remove is called with label="work"
+Then accounts.json contains no account entries (or the file is absent)
+  And the server continues running
+  And a subsequent calendar tool call returns an error directing the user to account_add
+  And the error does not mention account_login
+```
+
+### AC-15: account_list and status succeed with zero accounts
+
+```gherkin
+Given zero accounts are registered
+When account_list is called
+Then the call succeeds with an empty result (no error)
+And when status is called
+Then the accounts section is empty and no error is raised
+```
+
+### AC-16: Extension manifest includes new tools
 
 ```gherkin
 Given the extension manifest at extension/manifest.json
@@ -581,7 +637,29 @@ When the tools array is inspected
 Then it contains entries for account_login, account_logout, and account_refresh
 ```
 
-### AC-14: All quality checks pass
+### AC-17: Auto-selection with one connected account surfaces disconnected siblings
+
+```gherkin
+Given one account "work" is authenticated (alice@contoso.com)
+  And one account "personal" is disconnected (bob@outlook.com)
+When a calendar tool is called without an account parameter
+Then the tool executes against "work"
+  And the response's account advisory line names "personal (bob@outlook.com)" as disconnected
+  And the advisory instructs the LLM/user to consider account_login if "personal" was intended
+```
+
+### AC-18: Tool descriptions forbid silent default-account assumption
+
+```gherkin
+Given any tool that accepts an account parameter
+When its description is inspected
+Then it explicitly states that the LLM must not assume a default account
+  And it instructs the LLM to consider all registered accounts, including disconnected ones
+  And it states that omitting account auto-selects only when exactly one account is authenticated
+    and no disconnected accounts exist
+```
+
+### AC-19: All quality checks pass
 
 ```gherkin
 Given all code changes are applied
