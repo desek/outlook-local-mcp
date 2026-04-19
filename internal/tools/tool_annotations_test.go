@@ -228,6 +228,13 @@ func TestLoginAccount_Annotations(t *testing.T) {
 	})
 }
 
+// TestLogoutAccount_Annotations verifies all 5 annotations on account_logout (CR-0056).
+func TestLogoutAccount_Annotations(t *testing.T) {
+	assertAnnotations(t, tools.NewLogoutAccountTool(), annotationExpectation{
+		title: "Log Out Account", readOnly: false, destructive: false, idempotent: true, openWorld: false,
+	})
+}
+
 // TestRemoveAccountToolAnnotations verifies all 5 annotations on account_remove.
 func TestRemoveAccountToolAnnotations(t *testing.T) {
 	assertAnnotations(t, tools.NewRemoveAccountTool(), annotationExpectation{
