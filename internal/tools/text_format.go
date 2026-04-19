@@ -396,6 +396,12 @@ func FormatMessageDetailText(message map[string]any) string {
 		b.WriteString("[Has attachments]\n")
 	}
 
+	// Provenance indicator (only when the server has provenance tagging
+	// configured and the field is present on the message map).
+	if prov, ok := message["provenance"].(bool); ok && prov {
+		b.WriteString("[Created by this MCP server]\n")
+	}
+
 	// Body preview.
 	bodyPreview, _ := message["bodyPreview"].(string)
 	if bodyPreview != "" {
@@ -478,6 +484,10 @@ func FormatConversationText(thread map[string]any) string {
 		}
 		if len(parts) > 0 {
 			fmt.Fprintf(&b, "   %s\n", strings.Join(parts, " | "))
+		}
+
+		if prov, ok := m["provenance"].(bool); ok && prov {
+			b.WriteString("   [Created by this MCP server]\n")
 		}
 
 		bodyPreview, _ := m["bodyPreview"].(string)

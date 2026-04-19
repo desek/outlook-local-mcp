@@ -102,7 +102,7 @@ var conversationFullSelectFields = []string{
 //   - Paginates with a max_results cap.
 //   - Serializes each message per the requested output mode and returns the
 //     thread via SerializeConversationThread.
-func NewHandleGetConversation(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func NewHandleGetConversation(retryCfg graph.RetryConfig, timeout time.Duration, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := slog.With("tool", "mail_get_conversation")
 		start := time.Now()
@@ -188,6 +188,9 @@ func NewHandleGetConversation(retryCfg graph.RetryConfig, timeout time.Duration)
 			Top:     &top,
 			Filter:  &filter,
 		}
+		if provenancePropertyID != "" {
+			qp.Expand = []string{graph.ProvenanceExpandFilter(provenancePropertyID)}
+		}
 		cfg := &users.ItemMessagesRequestBuilderGetRequestConfiguration{QueryParameters: qp}
 
 		timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
@@ -217,11 +220,16 @@ func NewHandleGetConversation(retryCfg graph.RetryConfig, timeout time.Duration)
 			return mcp.NewToolResultError(fmt.Sprintf("failed to create page iterator: %s", pErr.Error())), nil
 		}
 		iterErr := pageIterator.Iterate(ctx, func(msg models.Messageable) bool {
+			var m map[string]any
 			if outputMode == "raw" {
-				messages = append(messages, graph.SerializeMessage(msg))
+				m = graph.SerializeMessage(msg)
 			} else {
-				messages = append(messages, graph.SerializeSummaryMessage(msg))
+				m = graph.SerializeSummaryMessage(msg)
 			}
+			if provenancePropertyID != "" {
+				m["provenance"] = graph.HasMessageProvenanceTag(msg, provenancePropertyID)
+			}
+			messages = append(messages, m)
 			return len(messages) < maxResults
 		})
 		if iterErr != nil {

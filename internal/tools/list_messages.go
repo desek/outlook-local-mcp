@@ -105,6 +105,9 @@ func NewListMessagesTool() mcp.Tool {
 			mcp.Description("Filter by follow-up flag status."),
 			mcp.Enum("notFlagged", "flagged", "complete"),
 		),
+		mcp.WithBoolean("provenance",
+			mcp.Description("Filter to messages created by this MCP server (requires provenance tagging to be configured on the server)."),
+		),
 		mcp.WithNumber("max_results",
 			mcp.Description("Maximum number of messages to return (default 25, max 100)."),
 			mcp.Min(1),
@@ -147,7 +150,7 @@ func NewListMessagesTool() mcp.Tool {
 //   - Returns Graph API errors via mcp.NewToolResultError with RedactGraphError.
 //   - Returns timeout errors via mcp.NewToolResultError with TimeoutErrorMessage.
 //   - Logs entry at debug level, completion at info level, errors at error level.
-func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := slog.With("tool", "mail_list_messages")
 		start := time.Now()
@@ -233,6 +236,12 @@ func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration) fu
 		}
 		if v, ok := getBoolArg(request, "has_attachments"); ok {
 			filterOpts.hasAttachments = &v
+		}
+		if v, ok := getBoolArg(request, "provenance"); ok && v {
+			if provenancePropertyID == "" {
+				return mcp.NewToolResultError("provenance filter requested but provenance tagging is not configured on the server"), nil
+			}
+			filterOpts.provenancePropertyID = provenancePropertyID
 		}
 
 		timezone := request.GetString("timezone", "")
@@ -414,15 +423,16 @@ func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration) fu
 // Pointer fields represent tri-state booleans: nil means "no filter", while a
 // set pointer emits `eq true` or `eq false`. String fields are empty to skip.
 type messageFilterOptions struct {
-	startDatetime  string
-	endDatetime    string
-	fromEmail      string
-	conversationID string
-	importance     string
-	flagStatus     string
-	isRead         *bool
-	isDraft        *bool
-	hasAttachments *bool
+	startDatetime        string
+	endDatetime          string
+	fromEmail            string
+	conversationID       string
+	importance           string
+	flagStatus           string
+	isRead               *bool
+	isDraft              *bool
+	hasAttachments       *bool
+	provenancePropertyID string
 }
 
 // buildMessageFilter constructs an OData $filter string from the provided
@@ -459,6 +469,12 @@ func buildMessageFilter(o messageFilterOptions) string {
 	}
 	if o.flagStatus != "" {
 		parts = append(parts, fmt.Sprintf("flag/flagStatus eq '%s'", o.flagStatus))
+	}
+	if o.provenancePropertyID != "" {
+		parts = append(parts, fmt.Sprintf(
+			"singleValueExtendedProperties/any(ep: ep/id eq '%s' and ep/value eq 'true')",
+			o.provenancePropertyID,
+		))
 	}
 
 	return strings.Join(parts, " and ")

@@ -10,9 +10,11 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/graph"
@@ -64,7 +66,7 @@ func TestGetConversationTool_HasParameters(t *testing.T) {
 
 // TestNewHandleGetConversation_ReturnsHandler validates handler construction.
 func TestNewHandleGetConversation_ReturnsHandler(t *testing.T) {
-	if NewHandleGetConversation(graph.RetryConfig{}, 0) == nil {
+	if NewHandleGetConversation(graph.RetryConfig{}, 0, "") == nil {
 		t.Fatal("expected non-nil handler")
 	}
 }
@@ -78,7 +80,7 @@ func TestGetConversation_ByMessageID(t *testing.T) {
 	defer srv.Close()
 	ctx := auth.WithGraphClient(context.Background(), client)
 
-	handler := NewHandleGetConversation(graph.RetryConfig{}, 0)
+	handler := NewHandleGetConversation(graph.RetryConfig{}, 0, "")
 	request := mcp.CallToolRequest{}
 	request.Params.Arguments = map[string]any{
 		"message_id": "AAMkAGI2TGULAAA=",
@@ -108,7 +110,7 @@ func TestGetConversation_ByConversationID(t *testing.T) {
 	defer srv.Close()
 	ctx := auth.WithGraphClient(context.Background(), client)
 
-	handler := NewHandleGetConversation(graph.RetryConfig{}, 0)
+	handler := NewHandleGetConversation(graph.RetryConfig{}, 0, "")
 	request := mcp.CallToolRequest{}
 	request.Params.Arguments = map[string]any{
 		"conversation_id": "convo-123",
@@ -136,7 +138,7 @@ func TestGetConversation_ChronologicalOrder(t *testing.T) {
 	defer srv.Close()
 	ctx := auth.WithGraphClient(context.Background(), client)
 
-	handler := NewHandleGetConversation(graph.RetryConfig{}, 0)
+	handler := NewHandleGetConversation(graph.RetryConfig{}, 0, "")
 	request := mcp.CallToolRequest{}
 	request.Params.Arguments = map[string]any{
 		"conversation_id": "convo-123",
@@ -182,12 +184,64 @@ func TestGetConversation_MissingParams(t *testing.T) {
 	defer srv.Close()
 	ctx := auth.WithGraphClient(context.Background(), client)
 
-	handler := NewHandleGetConversation(graph.RetryConfig{}, 0)
+	handler := NewHandleGetConversation(graph.RetryConfig{}, 0, "")
 	result, err := handler(ctx, mcp.CallToolRequest{})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !result.IsError {
 		t.Fatal("expected error result when both identifiers missing")
+	}
+}
+
+// TestGetConversation_ProvenancePerMessage validates that when provenance
+// tagging is configured, each serialized message in the thread includes a
+// "provenance" boolean reflecting presence of the extended property.
+func TestGetConversation_ProvenancePerMessage(t *testing.T) {
+	propID := graph.BuildProvenancePropertyID("com.github.desek.outlook-local-mcp.created")
+
+	client, srv := newTestGraphClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		//nolint:errcheck // test helper
+		fmt.Fprintf(w, `{"value":[`+
+			`{"id":"m1","subject":"First","conversationId":"conv-1","receivedDateTime":"2026-03-12T09:00:00Z","singleValueExtendedProperties":[{"id":"%s","value":"true"}]},`+
+			`{"id":"m2","subject":"Second","conversationId":"conv-1","receivedDateTime":"2026-03-12T10:00:00Z"}`+
+			`]}`, propID)
+	}))
+	defer srv.Close()
+
+	handler := NewHandleGetConversation(graph.RetryConfig{}, 30*time.Second, propID)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"conversation_id": "conv-1",
+		"output":          "summary",
+	}
+	ctx := auth.WithGraphClient(context.Background(), client)
+	result, err := handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %s", result.Content[0].(mcp.TextContent).Text)
+	}
+
+	var thread map[string]any
+	if err := json.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &thread); err != nil {
+		t.Fatalf("failed to parse response: %v", err)
+	}
+	msgs, ok := thread["messages"].([]any)
+	if !ok {
+		t.Fatalf("messages missing or wrong type: %T", thread["messages"])
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+	first := msgs[0].(map[string]any)
+	second := msgs[1].(map[string]any)
+	if first["provenance"] != true {
+		t.Errorf("msg[0].provenance = %v, want true", first["provenance"])
+	}
+	if second["provenance"] != false {
+		t.Errorf("msg[1].provenance = %v, want false", second["provenance"])
 	}
 }

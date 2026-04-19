@@ -119,9 +119,9 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	// All mail tools are read-only and use the standard middleware chain.
 	if cfg.MailEnabled {
 		s.AddTool(tools.NewListMailFoldersTool(), wrap("mail_list_folders", "read", tools.NewHandleListMailFolders(retryCfg, timeout)))
-		s.AddTool(tools.NewListMessagesTool(), wrap("mail_list_messages", "read", tools.NewHandleListMessages(retryCfg, timeout)))
+		s.AddTool(tools.NewListMessagesTool(), wrap("mail_list_messages", "read", tools.NewHandleListMessages(retryCfg, timeout, provenancePropertyID)))
 		s.AddTool(tools.NewSearchMessagesTool(), wrap("mail_search_messages", "read", tools.NewHandleSearchMessages(retryCfg, timeout)))
-		s.AddTool(tools.NewGetMessageTool(), wrap("mail_get_message", "read", tools.NewHandleGetMessage(retryCfg, timeout)))
+		s.AddTool(tools.NewGetMessageTool(), wrap("mail_get_message", "read", tools.NewHandleGetMessage(retryCfg, timeout, provenancePropertyID)))
 	}
 
 	// CR-0030: complete_auth fallback tool for auth_code method. Only

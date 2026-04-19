@@ -56,7 +56,7 @@ func TestListMessagesTool_HasParameters(t *testing.T) {
 // TestNewHandleListMessages_ReturnsHandler validates that NewHandleListMessages
 // returns a non-nil handler function.
 func TestNewHandleListMessages_ReturnsHandler(t *testing.T) {
-	handler := NewHandleListMessages(graph.RetryConfig{}, 0)
+	handler := NewHandleListMessages(graph.RetryConfig{}, 0, "")
 	if handler == nil {
 		t.Fatal("expected non-nil handler function")
 	}
@@ -69,7 +69,7 @@ func TestListMessagesToolCanBeAddedToServer(t *testing.T) {
 		server.WithToolCapabilities(false),
 		server.WithRecovery(),
 	)
-	s.AddTool(NewListMessagesTool(), NewHandleListMessages(graph.RetryConfig{}, 0))
+	s.AddTool(NewListMessagesTool(), NewHandleListMessages(graph.RetryConfig{}, 0, ""))
 }
 
 // TestListMessages_DefaultFolder validates that the handler proceeds past the
@@ -77,7 +77,7 @@ func TestListMessagesToolCanBeAddedToServer(t *testing.T) {
 // specified. The handler will fail at the Graph API call (no mock response),
 // but should not return the "no account selected" error.
 func TestListMessages_DefaultFolder(t *testing.T) {
-	handler := NewHandleListMessages(graph.RetryConfig{}, 0)
+	handler := NewHandleListMessages(graph.RetryConfig{}, 0, "")
 	request := mcp.CallToolRequest{}
 
 	client, srv := newTestGraphClient(t, nil)
@@ -101,7 +101,7 @@ func TestListMessages_DefaultFolder(t *testing.T) {
 // Graph API call (no mock response), but should not return the "no account
 // selected" error.
 func TestListMessages_SpecificFolder(t *testing.T) {
-	handler := NewHandleListMessages(graph.RetryConfig{}, 0)
+	handler := NewHandleListMessages(graph.RetryConfig{}, 0, "")
 	request := mcp.CallToolRequest{}
 	request.Params.Arguments = map[string]any{
 		"folder_id": "AAMkAGI2TGULAAA=",
@@ -126,7 +126,7 @@ func TestListMessages_SpecificFolder(t *testing.T) {
 // TestListMessages_NoClient validates that the handler returns a tool error
 // when no Graph client is present in the context.
 func TestListMessages_NoClient(t *testing.T) {
-	handler := NewHandleListMessages(graph.RetryConfig{}, 0)
+	handler := NewHandleListMessages(graph.RetryConfig{}, 0, "")
 	request := mcp.CallToolRequest{}
 
 	result, err := handler(context.Background(), request)
@@ -259,11 +259,62 @@ func TestListMessages_NoFilters(t *testing.T) {
 	}
 }
 
+// TestListMessages_ProvenanceFilter validates that buildMessageFilter appends
+// the singleValueExtendedProperties/any clause when a provenance property ID
+// is supplied on the filter options, and that the clause is ANDed with other
+// filters.
+func TestListMessages_ProvenanceFilter(t *testing.T) {
+	propID := "String {73830cef-ea4a-4459-b555-80a4619f667d} Name test.tag"
+	filter := buildMessageFilter(messageFilterOptions{provenancePropertyID: propID})
+	expected := "singleValueExtendedProperties/any(ep: ep/id eq '" + propID + "' and ep/value eq 'true')"
+	if filter != expected {
+		t.Errorf("filter = %q, want %q", filter, expected)
+	}
+
+	filter = buildMessageFilter(messageFilterOptions{
+		fromEmail:            "alice@contoso.com",
+		provenancePropertyID: propID,
+	})
+	expected = "from/emailAddress/address eq 'alice@contoso.com' and " +
+		"singleValueExtendedProperties/any(ep: ep/id eq '" + propID + "' and ep/value eq 'true')"
+	if filter != expected {
+		t.Errorf("combined filter = %q, want %q", filter, expected)
+	}
+}
+
+// TestListMessages_ProvenanceNoTag validates that the handler returns an error
+// when the caller requests provenance=true but the server was not configured
+// with a provenance tag (propertyID is empty).
+func TestListMessages_ProvenanceNoTag(t *testing.T) {
+	handler := NewHandleListMessages(graph.RetryConfig{}, 0, "")
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{
+		"provenance": true,
+	}
+
+	client, srv := newTestGraphClient(t, nil)
+	defer srv.Close()
+	ctx := auth.WithGraphClient(context.Background(), client)
+
+	result, err := handler(ctx, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected error when provenance=true but tag unset")
+	}
+	text := result.Content[0].(mcp.TextContent).Text
+	expected := "provenance filter requested but provenance tagging is not configured on the server"
+	if text != expected {
+		t.Errorf("error text = %q, want %q", text, expected)
+	}
+}
+
 // TestListMessages_MaxResultsClamped validates that max_results values exceeding
 // 100 are clamped to 100. This is tested indirectly by verifying the handler
 // does not error for a value over 100 and still proceeds to the Graph API call.
 func TestListMessages_MaxResultsClamped(t *testing.T) {
-	handler := NewHandleListMessages(graph.RetryConfig{}, 0)
+	handler := NewHandleListMessages(graph.RetryConfig{}, 0, "")
 	request := mcp.CallToolRequest{}
 	request.Params.Arguments = map[string]any{
 		"max_results": float64(200),
