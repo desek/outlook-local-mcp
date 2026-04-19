@@ -235,6 +235,13 @@ func TestLogoutAccount_Annotations(t *testing.T) {
 	})
 }
 
+// TestRefreshAccount_Annotations verifies all 5 annotations on account_refresh (CR-0056).
+func TestRefreshAccount_Annotations(t *testing.T) {
+	assertAnnotations(t, tools.NewRefreshAccountTool(), annotationExpectation{
+		title: "Refresh Account Token", readOnly: false, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
 // TestRemoveAccountToolAnnotations verifies all 5 annotations on account_remove.
 func TestRemoveAccountToolAnnotations(t *testing.T) {
 	assertAnnotations(t, tools.NewRemoveAccountTool(), annotationExpectation{
