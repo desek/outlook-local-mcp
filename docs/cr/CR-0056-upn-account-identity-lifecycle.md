@@ -178,7 +178,7 @@ flowchart TD
 
 16. The system **MUST** provide an `account_logout` tool that disconnects an account without removing it.
 17. `account_logout` **MUST** accept a required `label` parameter.
-18. `account_logout` **MUST** set `Authenticated = false`, clear the `Client` field, and clear the `Credential` field on the registry entry.
+18. `account_logout` **MUST** set `Authenticated = false`, clear the `Client` field, clear the `Credential` field, and clear the `Authenticator` field on the registry entry.
 19. `account_logout` **MUST** clear the cached token from the account's keychain partition.
 20. `account_logout` **MUST** return an error if the account is already disconnected.
 21. `account_logout` **MUST NOT** remove the account from the registry or `accounts.json`.
@@ -237,7 +237,7 @@ The current tool descriptions implicitly encourage the LLM to "just use the defa
     * Always inspect the current account landscape (via `account_list` or prior context) before acting.
     * Consider **all** registered accounts, including disconnected ones, when deciding which mailbox the user intends.
     * Prefer elicitation or a clarifying question when intent is ambiguous rather than silently picking a connected account.
-50. The `account` parameter description **MUST** state that omitting it yields auto-selection **only** when exactly one account is authenticated and no disconnected accounts are registered; otherwise the LLM is expected to determine the account explicitly.
+50. The `account` parameter description **MUST** state that omitting it yields silent auto-selection **only** when exactly one account is authenticated and zero other accounts (connected or disconnected) are registered; when exactly one account is authenticated but additional disconnected accounts also exist, the resolver **MUST** still auto-select the single authenticated account but **MUST** attach the disconnected-account advisory described in requirement 52; in all other cases the LLM **MUST** determine the account explicitly.
 51. `account_list` and `status` tool descriptions **MUST** state that their output is the authoritative source for account selection decisions and that disconnected accounts are first-class entries that **MUST NOT** be ignored.
 52. When `AccountResolver` auto-selects (exactly one authenticated account) **while disconnected accounts also exist**, the resolution result **MUST** include a human-readable advisory in the tool's confirmation / account line indicating that other (disconnected) accounts exist and naming them by UPN — so the LLM is prompted to raise them to the user instead of silently using the one connected account.
 53. Tool descriptions for `account_login`, `account_logout`, `account_refresh`, and `account_remove` **MUST** direct the LLM to proactively suggest these operations to the user when account-state conditions warrant (e.g., a disconnected account surfaced in `account_list`).
@@ -274,6 +274,17 @@ The current tool descriptions implicitly encourage the LLM to "just use the defa
 | `extension/manifest.json` | Add three new tool entries |
 | `docs/prompts/mcp-tool-crud-test.md` | Add test steps for new tools |
 | `internal/tools/tool_annotations_test.go` | Add annotation tests for three new tools |
+| `internal/tools/login_account_test.go` | **New file**: handler unit tests for `account_login` |
+| `internal/tools/logout_account_test.go` | **New file**: handler unit tests for `account_logout` including keychain clearing |
+| `internal/tools/refresh_account_test.go` | **New file**: handler unit tests for `account_refresh` |
+| `internal/tools/remove_account_test.go` | Add tests for keychain clearing, disconnected removal, and last-account clean state |
+| `internal/tools/list_accounts_test.go` | Add zero-account test; update for auth_method/UPN format |
+| `internal/tools/status_test.go` | Add zero-account test; add UPN/auth_method assertions |
+| `internal/tools/tool_descriptions_test.go` | **New file**: verify account-parameter description forbids default assumption and lifecycle tools describe proactive suggestions |
+| `internal/auth/registry_test.go` | Add `GetByUPN` and `Update` tests |
+| `internal/auth/accounts_test.go` | Add `UpdateAccountUPN` tests |
+| `internal/auth/restore_test.go` | Add UPN-to-Email population test |
+| `extension/manifest_test.go` | **New file**: verify manifest contains new tool entries |
 
 ## Scope Boundaries
 
@@ -472,6 +483,20 @@ flowchart LR
 | `tool_annotations_test.go` | `TestRefreshAccount_Annotations` | Verify annotation set | `NewRefreshAccountTool()` | ReadOnly=false, Destructive=false, Idempotent=true, OpenWorld=true |
 | `text_format_test.go` | `TestFormatAccountsText_WithUPNAndMethod` | New format with UPN and auth_method | Account with all fields | Line matches "N. label — upn (state, auth_method)" |
 | `text_format_test.go` | `TestFormatStatusText_WithUPN` | Status accounts show UPN | Status with UPN | Line contains UPN |
+| `add_account_test.go` | `TestAddAccount_PersistsUPN` | UPN persisted to accounts.json after add (AC-1) | account_add with successful auth, mock /me returns "alice@contoso.com" | accounts.json contains `upn: "alice@contoso.com"` |
+| `restore_test.go` | `TestRestoreAccounts_PopulatesEmailFromUPN` | Restore populates Email from persisted UPN (AC-2) | accounts.json with upn field, restore server | Registry entry has Email == persisted UPN, no /me call made |
+| `logout_account_test.go` | `TestLogoutAccount_ClearsKeychain` | Keychain token cache cleared on logout (FR-19) | Entry with Authenticated=true, cached token in keychain | Keychain entry for CacheName removed |
+| `refresh_account_test.go` | `TestRefreshAccount_ReturnsExpiry` | Response includes new token expiry (FR-27) | Entry with mock credential returning ExpiresOn=T | Response text/summary includes expiry T |
+| `remove_account_test.go` | `TestRemoveAccount_ClearsKeychain` | Keychain token cache cleared on remove (AC-13) | Entry with cached token | Keychain entry removed, registry entry removed |
+| `remove_account_test.go` | `TestRemoveAccount_Disconnected` | Remove works on disconnected account (AC-13) | Entry with Authenticated=false | Entry removed, accounts.json updated |
+| `remove_account_test.go` | `TestRemoveAccount_LastAccountCleanState` | Last account removal leaves clean zero-state (AC-14) | Registry with exactly one entry, remove it | accounts.json empty or absent, server still running, subsequent resolver error mentions account_add and not account_login |
+| `list_accounts_test.go` | `TestListAccounts_ZeroAccounts` | account_list succeeds with zero accounts (AC-15) | Empty registry | Call succeeds, empty result, no error |
+| `status_test.go` | `TestStatus_ZeroAccounts` | status succeeds with zero accounts (AC-15) | Empty registry | Call succeeds, accounts section empty, no error |
+| `manifest_test.go` | `TestManifest_NewTools` | Manifest contains new tool entries (AC-16) | Parse `extension/manifest.json` | tools array includes `account_login`, `account_logout`, `account_refresh` |
+| `account_resolver_test.go` | `TestAutoSelect_AdvisoryForDisconnectedSiblings` | Auto-select advises about disconnected siblings (AC-17, FR-52) | One authenticated + one disconnected entry, no account param | Resolution succeeds against authenticated account, resolver result includes advisory naming disconnected account by UPN |
+| `tool_descriptions_test.go` | `TestAccountParamDescription_ForbidsDefaultAssumption` | account parameter description forbids default assumption (AC-18, FR-49, FR-50) | Every tool with account parameter | Description explicitly forbids default-account assumption and mentions disconnected accounts |
+| `tool_descriptions_test.go` | `TestAccountLifecycleTools_DescribeProactiveSuggestion` | Descriptions direct LLM to proactively suggest lifecycle tools (FR-53) | Tool descriptions for login/logout/refresh/remove | Descriptions contain proactive-suggestion guidance |
+| `account_resolver_test.go` | `TestResolveAccount_ZeroAccounts_NoLoginHint` | Zero-account error mentions account_add, not account_login (FR-46, AC-14) | Empty registry | Error string contains `account_add`, does not contain `account_login` |
 
 ### Tests to Modify
 
@@ -655,8 +680,8 @@ Given any tool that accepts an account parameter
 When its description is inspected
 Then it explicitly states that the LLM must not assume a default account
   And it instructs the LLM to consider all registered accounts, including disconnected ones
-  And it states that omitting account auto-selects only when exactly one account is authenticated
-    and no disconnected accounts exist
+  And it states that omitting account silently auto-selects only when exactly one account is authenticated and no other accounts (connected or disconnected) are registered
+  And it states that when disconnected accounts coexist with a single authenticated account, auto-selection still occurs but an advisory naming disconnected accounts is surfaced
 ```
 
 ### AC-19: All quality checks pass
@@ -780,3 +805,40 @@ Chosen approach: "UPN as persistent identity with explicit lifecycle tools and f
 * CR-0055: Email-Based Account Identity Display — introduced lazy email resolution and display; this CR fulfills its deferred items (persistent email, elicitation, status).
 * CR-0037: Claude Desktop UX Improvements — introduced the status tool and file-based token cache.
 * CR-0038: CGO-Enabled Builds with Runtime Keychain Fallback — established the token cache infrastructure that `account_logout` clears.
+
+<!--
+## Review Summary (CR Reviewer Pass, 2026-04-19)
+
+Findings: 6
+Fixes applied: 6
+Unresolved items needing human decision: 0
+
+### Findings and Fixes
+
+1. **Contradiction — FR-50 vs FR-52 / AC-17 (auto-selection semantics).**
+   FR-50 previously required that omitting `account` "yields auto-selection only when exactly one account is authenticated and no disconnected accounts are registered," which directly contradicted FR-52 and AC-17, both of which require auto-selection to proceed (with an advisory) when a single authenticated account coexists with disconnected siblings.
+   **Fix:** Rewrote FR-50 to distinguish silent auto-selection (single authenticated, no other accounts) from advisory-accompanied auto-selection (single authenticated + disconnected siblings). AC-18 text updated to match. Resolution favors the Implementation Approach (Phase 2) and FR-52/AC-17.
+
+2. **Gap — FR-18 missing `Authenticator` field clearing.**
+   Implementation Approach Phase 4 clears `Client`, `Credential`, and `Authenticator`; FR-18 only listed the first two.
+   **Fix:** Added `Authenticator` to FR-18.
+
+3. **AC-coverage gaps (ACs with no mapped Test Strategy entry):** AC-1, AC-2, AC-13, AC-14, AC-15, AC-16, AC-17, AC-18 were not backed by a named test.
+   **Fix:** Added explicit Test Strategy rows: `TestAddAccount_PersistsUPN`, `TestRestoreAccounts_PopulatesEmailFromUPN`, `TestRemoveAccount_ClearsKeychain`, `TestRemoveAccount_Disconnected`, `TestRemoveAccount_LastAccountCleanState`, `TestListAccounts_ZeroAccounts`, `TestStatus_ZeroAccounts`, `TestManifest_NewTools`, `TestAutoSelect_AdvisoryForDisconnectedSiblings`, `TestAccountParamDescription_ForbidsDefaultAssumption`, `TestAccountLifecycleTools_DescribeProactiveSuggestion`, `TestResolveAccount_ZeroAccounts_NoLoginHint`.
+
+4. **Requirement-coverage gaps for FR-19 (keychain clear on logout) and FR-27 (refresh returns expiry).**
+   **Fix:** Added `TestLogoutAccount_ClearsKeychain` and `TestRefreshAccount_ReturnsExpiry`.
+
+5. **Requirement-coverage gap for FR-46 (zero-account error mentions `account_add`, not `account_login`).**
+   **Fix:** Added `TestResolveAccount_ZeroAccounts_NoLoginHint`.
+
+6. **Scope consistency — Affected Components omitted new/modified test files referenced in the Test Strategy.**
+   **Fix:** Added `login_account_test.go`, `logout_account_test.go`, `refresh_account_test.go`, `remove_account_test.go`, `list_accounts_test.go`, `status_test.go`, `tool_descriptions_test.go`, `registry_test.go`, `accounts_test.go`, `restore_test.go`, and `extension/manifest_test.go` to Affected Components.
+
+### Not Flagged
+
+- Requirements use MUST/MUST NOT uniformly. The only occurrences of `should`/`may` are in non-normative Alternative Approaches and Risks prose, which is acceptable.
+- Mermaid diagrams (Current and Proposed resolution flows, Implementation Flow) are consistent with the Implementation Approach after the FR-50 correction.
+- FR-39/FR-40/FR-41 (description updates for existing account tools) are behaviorally covered by AC-18 plus the new `tool_descriptions_test.go` tests; no further AC is needed.
+-->
+
