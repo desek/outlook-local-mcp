@@ -939,6 +939,37 @@ func TestLoadConfig_MailEnabledFalse(t *testing.T) {
 	}
 }
 
+// TestMailManageImpliesMailEnabled validates that when
+// OUTLOOK_MCP_MAIL_MANAGE_ENABLED is true and OUTLOOK_MCP_MAIL_ENABLED is
+// explicitly false, LoadConfig forces MailEnabled to true. Mail management
+// is a superset of read-only mail access and must not leave MailEnabled off.
+func TestMailManageImpliesMailEnabled(t *testing.T) {
+	clearOutlookEnvVars(t)
+	t.Setenv("OUTLOOK_MCP_MAIL_ENABLED", "false")
+	t.Setenv("OUTLOOK_MCP_MAIL_MANAGE_ENABLED", "true")
+
+	cfg := LoadConfig()
+
+	if !cfg.MailManageEnabled {
+		t.Error("MailManageEnabled should be true when OUTLOOK_MCP_MAIL_MANAGE_ENABLED=true")
+	}
+	if !cfg.MailEnabled {
+		t.Error("MailEnabled should be forced to true when MailManageEnabled is true, even if OUTLOOK_MCP_MAIL_ENABLED=false")
+	}
+}
+
+// TestLoadConfig_MailManageEnabledDefault validates that MailManageEnabled
+// defaults to false when OUTLOOK_MCP_MAIL_MANAGE_ENABLED is not set.
+func TestLoadConfig_MailManageEnabledDefault(t *testing.T) {
+	clearOutlookEnvVars(t)
+
+	cfg := LoadConfig()
+
+	if cfg.MailManageEnabled {
+		t.Error("MailManageEnabled should default to false when OUTLOOK_MCP_MAIL_MANAGE_ENABLED is unset")
+	}
+}
+
 // TestInferAuthMethod_ReturnsSource validates that InferAuthMethod returns
 // the correct source string for each determination path: explicit override,
 // well-known client ID inference, and default fallback.

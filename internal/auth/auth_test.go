@@ -572,6 +572,71 @@ func TestScopes_WithMail(t *testing.T) {
 	}
 }
 
+// TestScopes_MailManage validates that Scopes returns calendar + Mail.ReadWrite
+// (and not Mail.Read) when MailManageEnabled is true.
+func TestScopes_MailManage(t *testing.T) {
+	cfg := config.Config{MailEnabled: true, MailManageEnabled: true}
+	scopes := Scopes(cfg)
+
+	if len(scopes) != 2 {
+		t.Fatalf("Scopes() returned %d scopes, want 2", len(scopes))
+	}
+	if scopes[0] != "Calendars.ReadWrite" {
+		t.Errorf("Scopes()[0] = %q, want %q", scopes[0], "Calendars.ReadWrite")
+	}
+	if scopes[1] != "Mail.ReadWrite" {
+		t.Errorf("Scopes()[1] = %q, want %q", scopes[1], "Mail.ReadWrite")
+	}
+	for _, s := range scopes {
+		if s == "Mail.Read" {
+			t.Errorf("Scopes() must not include Mail.Read when MailManageEnabled is true; got %v", scopes)
+		}
+	}
+}
+
+// TestScopes_MailManageImpliesRead validates that enabling MailManageEnabled
+// via LoadConfig forces MailEnabled to true and causes Scopes() to request
+// Mail.ReadWrite.
+func TestScopes_MailManageImpliesRead(t *testing.T) {
+	// Simulate the config LoadConfig produces when only MailManageEnabled is set.
+	cfg := config.Config{MailEnabled: false, MailManageEnabled: true}
+	// Scopes() itself must not depend on MailEnabled when MailManageEnabled is true.
+	scopes := Scopes(cfg)
+
+	var hasReadWrite bool
+	for _, s := range scopes {
+		if s == "Mail.ReadWrite" {
+			hasReadWrite = true
+		}
+		if s == "Mail.Read" {
+			t.Errorf("Scopes() must not include Mail.Read when MailManageEnabled is true; got %v", scopes)
+		}
+	}
+	if !hasReadWrite {
+		t.Errorf("Scopes() must include Mail.ReadWrite when MailManageEnabled is true; got %v", scopes)
+	}
+}
+
+// TestScopes_NoMailSend validates that Scopes never requests Mail.Send
+// regardless of configuration. Sending mail is intentionally not in the
+// server's capability surface.
+func TestScopes_NoMailSend(t *testing.T) {
+	cases := []config.Config{
+		{},
+		{MailEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true},
+		{MailManageEnabled: true},
+	}
+	for i, cfg := range cases {
+		scopes := Scopes(cfg)
+		for _, s := range scopes {
+			if s == "Mail.Send" {
+				t.Errorf("case %d: Scopes() must not include Mail.Send; got %v", i, scopes)
+			}
+		}
+	}
+}
+
 // mockAuthenticator is a test double for the Authenticator interface.
 type mockAuthenticator struct {
 	record azidentity.AuthenticationRecord

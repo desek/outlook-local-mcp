@@ -135,6 +135,16 @@ type Config struct {
 	// (default: "false").
 	MailEnabled bool
 
+	// MailManageEnabled controls whether draft-centric mail management is active.
+	// When true, the Mail.ReadWrite OAuth scope is requested (instead of Mail.Read)
+	// so that the server can create, update, and delete drafts in addition to
+	// reading mail. Enabling this option also implicitly enables MailEnabled:
+	// LoadConfig forces MailEnabled to true whenever MailManageEnabled is true,
+	// since management capabilities are a superset of read-only mail access.
+	// Mail.Send is never requested; sending remains a user-only action. Configurable
+	// via OUTLOOK_MCP_MAIL_MANAGE_ENABLED (default: "false").
+	MailManageEnabled bool
+
 	// ProvenanceTag is the name component of the single-value extended property
 	// used to tag MCP-created calendar events. The full property ID is built by
 	// combining a dedicated GUID with this tag name at startup. When set to an
@@ -277,6 +287,14 @@ func LoadConfig() Config {
 	cfg.TokenStorage = GetEnv("OUTLOOK_MCP_TOKEN_STORAGE", "auto")
 
 	cfg.MailEnabled = strings.EqualFold(GetEnv("OUTLOOK_MCP_MAIL_ENABLED", "false"), "true")
+	cfg.MailManageEnabled = strings.EqualFold(GetEnv("OUTLOOK_MCP_MAIL_MANAGE_ENABLED", "false"), "true")
+
+	// Mail management is a superset of read-only mail access. Enabling
+	// MailManageEnabled implicitly enables MailEnabled so that mail tool
+	// registration and scope selection remain consistent.
+	if cfg.MailManageEnabled {
+		cfg.MailEnabled = true
+	}
 
 	// ProvenanceTag uses os.Getenv directly so that an explicit empty value
 	// disables tagging, while an unset variable uses the default tag name.

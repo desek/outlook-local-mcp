@@ -22,21 +22,43 @@ import (
 const calendarScope = "Calendars.ReadWrite"
 
 // mailScope is the OAuth scope requested for read-only Microsoft Graph mail
-// operations. It is only included when MailEnabled is true in the config.
+// operations. It is only included when MailEnabled is true in the config and
+// MailManageEnabled is false.
 const mailScope = "Mail.Read"
 
+// mailReadWriteScope is the OAuth scope requested for draft-centric mail
+// management. It is a superset of Mail.Read and permits creating, updating,
+// and deleting messages (including drafts). It is requested in place of
+// mailScope when MailManageEnabled is true. Mail.Send is intentionally never
+// requested: sending remains a user-only action performed in Outlook.
+const mailReadWriteScope = "Mail.ReadWrite"
+
 // Scopes returns the OAuth scope slice based on the application configuration.
-// When cfg.MailEnabled is false, only the calendar scope is returned. When
-// cfg.MailEnabled is true, the mail scope is appended.
+// The calendar scope is always included. Mail scopes are selected according to
+// configuration:
+//
+//   - When cfg.MailManageEnabled is true, mailReadWriteScope ("Mail.ReadWrite")
+//     is appended. This scope subsumes Mail.Read, so mailScope is not also
+//     added.
+//   - Otherwise, when cfg.MailEnabled is true, mailScope ("Mail.Read") is
+//     appended.
+//   - When both flags are false, no mail scope is requested.
+//
+// Scopes never includes "Mail.Send"; sending mail is deliberately outside the
+// server's capability surface.
 //
 // Parameters:
-//   - cfg: the application configuration providing MailEnabled.
+//   - cfg: the application configuration providing MailEnabled and
+//     MailManageEnabled.
 //
 // Returns the slice of OAuth scopes to request during authentication and
 // Graph client initialization.
 func Scopes(cfg config.Config) []string {
 	scopes := []string{calendarScope}
-	if cfg.MailEnabled {
+	switch {
+	case cfg.MailManageEnabled:
+		scopes = append(scopes, mailReadWriteScope)
+	case cfg.MailEnabled:
 		scopes = append(scopes, mailScope)
 	}
 	return scopes
