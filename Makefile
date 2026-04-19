@@ -8,7 +8,7 @@ build:
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 test:
-	go test -race -coverprofile=coverage.out ./...
+	CGO_ENABLED=0 go test -race -coverprofile=coverage.out ./...
 
 lint:
 	golangci-lint run
