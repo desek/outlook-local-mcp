@@ -11,9 +11,9 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
@@ -69,9 +69,10 @@ func NewRefreshAccountTool() mcp.Tool {
 //     token request.
 //
 // Returns a tool handler function compatible with the MCP server's AddTool
-// method. The handler returns a JSON success message with the label and new
-// token expiry on success, or an error result if lookup fails, the account is
-// disconnected, or the credential rejects the token request.
+// method. The handler returns a plain-text confirmation naming the account
+// (label and UPN when known) and the new token expiry on success, or an
+// error result if lookup fails, the account is disconnected, or the
+// credential rejects the token request.
 //
 // Side effects: invokes the Microsoft identity platform via the credential's
 // GetToken method. The underlying credential's token cache is updated with the
@@ -110,18 +111,25 @@ func HandleRefreshAccount(registry *auth.AccountRegistry, cfg config.Config) fun
 
 		expiry := tok.ExpiresOn.UTC().Format(time.RFC3339)
 
-		result := map[string]any{
-			"refreshed": true,
-			"label":     label,
-			"expiry":    expiry,
-			"message":   fmt.Sprintf("Account %q token refreshed; new expiry %s.", label, expiry),
+		// Plain-text confirmation per CLAUDE.md "MCP Tool Response Tiering":
+		// write tools return text confirmations unconditionally. The first
+		// line names the action and the account (label plus UPN when known);
+		// the second surfaces the new expiry so the caller can confirm that
+		// the refresh took effect (FR-27).
+		var b strings.Builder
+		header := fmt.Sprintf("Account token refreshed: %s", label)
+		if entry.Email != "" {
+			header = fmt.Sprintf("%s (%s)", header, entry.Email)
 		}
-		data, err := json.Marshal(result)
-		if err != nil {
-			return mcp.NewToolResultError("failed to serialize response"), nil
+		b.WriteString(header)
+		b.WriteString("\n")
+		b.WriteString(fmt.Sprintf("New expiry: %s", expiry))
+		if line := AccountInfoLine(ctx); line != "" {
+			b.WriteString("\n")
+			b.WriteString(line)
 		}
 
 		logger.Info("account token refreshed", "label", label, "expiry", expiry)
-		return mcp.NewToolResultText(string(data)), nil
+		return mcp.NewToolResultText(b.String()), nil
 	}
 }

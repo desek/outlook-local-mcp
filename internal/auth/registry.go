@@ -124,21 +124,18 @@ func (r *AccountRegistry) Add(entry *AccountEntry) error {
 	return nil
 }
 
-// Remove deletes an account from the registry by label. The "default" account
-// cannot be removed, as it serves as the fallback for single-account
-// operation and elicitation-unsupported clients.
+// Remove deletes an account from the registry by label. Any registered label
+// may be removed, including "default"; CR-0056 FR-44/FR-45 require removal to
+// succeed regardless of connection state and to leave a clean zero-account
+// state when the last account is removed.
 //
 // Parameters:
 //   - label: the label of the account to remove.
 //
-// Returns an error if the label is "default" or the account does not exist.
+// Returns an error if no account with the given label exists.
 //
 // Side effects: removes the entry from the registry.
 func (r *AccountRegistry) Remove(label string) error {
-	if label == "default" {
-		return fmt.Errorf("cannot remove the default account")
-	}
-
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

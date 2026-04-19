@@ -8,9 +8,9 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
@@ -53,15 +53,14 @@ func TestHandleRemoveAccount_Success(t *testing.T) {
 	}
 
 	text := extractText(t, result)
-	var resp map[string]any
-	if err := json.Unmarshal([]byte(text), &resp); err != nil {
-		t.Fatalf("json.Unmarshal() error: %v", err)
+	if !strings.Contains(text, "Account removed") {
+		t.Errorf("response text = %q, want to contain 'Account removed'", text)
 	}
-	if resp["removed"] != true {
-		t.Errorf("removed = %v, want true", resp["removed"])
+	if !strings.Contains(text, "work") {
+		t.Errorf("response text = %q, want to contain label 'work'", text)
 	}
-	if resp["label"] != "work" {
-		t.Errorf("label = %v, want work", resp["label"])
+	if !strings.Contains(text, "Token cache cleared") {
+		t.Errorf("response text = %q, want to contain 'Token cache cleared'", text)
 	}
 
 	// Verify account no longer in registry.
@@ -70,9 +69,11 @@ func TestHandleRemoveAccount_Success(t *testing.T) {
 	}
 }
 
-// TestHandleRemoveAccount_DefaultBlocked verifies that removing the "default"
-// account is rejected by the registry.
-func TestHandleRemoveAccount_DefaultBlocked(t *testing.T) {
+// TestHandleRemoveAccount_DefaultAllowed verifies that the "default" label is
+// not protected from removal. CR-0056 FR-44/FR-45 require removal to succeed
+// for any registered account and to leave a clean zero-account state when
+// the last account is removed.
+func TestHandleRemoveAccount_DefaultAllowed(t *testing.T) {
 	registry := auth.NewAccountRegistry()
 	if err := registry.Add(&auth.AccountEntry{Label: "default"}); err != nil {
 		t.Fatalf("registry.Add() error: %v", err)
@@ -87,9 +88,11 @@ func TestHandleRemoveAccount_DefaultBlocked(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-
-	if !result.IsError {
-		t.Error("expected error result when removing default account")
+	if result.IsError {
+		t.Fatalf("expected success removing default account, got error: %v", result)
+	}
+	if _, exists := registry.Get("default"); exists {
+		t.Error("expected 'default' account to be removed from registry")
 	}
 }
 

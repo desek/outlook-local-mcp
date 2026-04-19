@@ -70,15 +70,19 @@ func TestRemove_ExistingAccount(t *testing.T) {
 	}
 }
 
-func TestRemove_DefaultRejected(t *testing.T) {
+// TestRemove_DefaultAllowed verifies that the "default" label is removable
+// like any other label. CR-0056 FR-44/FR-45 require removal to succeed for
+// any registered account regardless of connection state or label, and AC-14
+// requires a clean zero-account state after the last account is removed.
+func TestRemove_DefaultAllowed(t *testing.T) {
 	r := NewAccountRegistry()
 	_ = r.Add(newTestEntry("default"))
 
-	if err := r.Remove("default"); err == nil {
-		t.Fatal("expected error when removing default account")
+	if err := r.Remove("default"); err != nil {
+		t.Fatalf("expected default account to be removable, got: %v", err)
 	}
-	if r.Count() != 1 {
-		t.Error("default account should still exist")
+	if r.Count() != 0 {
+		t.Errorf("Count = %d, want 0", r.Count())
 	}
 }
 

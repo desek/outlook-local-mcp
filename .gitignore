@@ -41,3 +41,6 @@ dist/
 extension/bin/
 *.mcpb
 .local/
+
+# Local test reports
+TEST-REPORT.md

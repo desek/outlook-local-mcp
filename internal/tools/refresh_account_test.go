@@ -9,8 +9,8 @@ package tools
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,7 +43,7 @@ func (m *refreshMockCredential) GetToken(_ context.Context, opts policy.TokenReq
 
 // TestRefreshAccount_Success verifies that account_refresh issues a GetToken
 // call with EnableCAE=true and the configured scopes, flips no state, and
-// reports success in the JSON response.
+// reports success in the plain-text response.
 func TestRefreshAccount_Success(t *testing.T) {
 	expiry := time.Date(2026, 4, 19, 12, 0, 0, 0, time.UTC)
 	cred := &refreshMockCredential{expiry: expiry}
@@ -78,15 +78,12 @@ func TestRefreshAccount_Success(t *testing.T) {
 		t.Error("expected non-empty Scopes on refresh GetToken call")
 	}
 
-	var resp map[string]any
-	if err := json.Unmarshal([]byte(extractText(t, result)), &resp); err != nil {
-		t.Fatalf("json.Unmarshal() error: %v", err)
+	text := extractText(t, result)
+	if !strings.Contains(text, "refreshed") {
+		t.Errorf("response text = %q, want to contain 'refreshed'", text)
 	}
-	if resp["refreshed"] != true {
-		t.Errorf("refreshed = %v, want true", resp["refreshed"])
-	}
-	if resp["label"] != "work" {
-		t.Errorf("label = %v, want work", resp["label"])
+	if !strings.Contains(text, "work") {
+		t.Errorf("response text = %q, want to contain label 'work'", text)
 	}
 }
 
@@ -150,18 +147,12 @@ func TestRefreshAccount_ExpiryInResponse(t *testing.T) {
 	}
 
 	text := extractText(t, result)
-	var resp map[string]any
-	if err := json.Unmarshal([]byte(text), &resp); err != nil {
-		t.Fatalf("json.Unmarshal() error: %v", err)
-	}
-
 	want := expiry.Format(time.RFC3339)
-	if resp["expiry"] != want {
-		t.Errorf("expiry = %v, want %q", resp["expiry"], want)
+	if !strings.Contains(text, want) {
+		t.Errorf("response text = %q, want to contain expiry %q", text, want)
 	}
-	msg, _ := resp["message"].(string)
-	if !contains(msg, want) {
-		t.Errorf("message = %q, want to contain %q", msg, want)
+	if !strings.Contains(text, "New expiry") {
+		t.Errorf("response text = %q, want to contain 'New expiry'", text)
 	}
 }
 

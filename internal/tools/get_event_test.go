@@ -72,7 +72,7 @@ func TestGetEventTool_HasFourParameters(t *testing.T) {
 // TestNewHandleGetEvent_ReturnsHandler validates that NewHandleGetEvent
 // returns a non-nil handler function.
 func TestNewHandleGetEvent_ReturnsHandler(t *testing.T) {
-	handler := NewHandleGetEvent(graph.RetryConfig{}, 0, "")
+	handler := NewHandleGetEvent(graph.RetryConfig{}, 0, "", "")
 	if handler == nil {
 		t.Fatal("expected non-nil handler function")
 	}
@@ -86,13 +86,13 @@ func TestGetEventToolCanBeAddedToServer(t *testing.T) {
 		server.WithRecovery(),
 	)
 	// Must not panic.
-	s.AddTool(NewGetEventTool(), NewHandleGetEvent(graph.RetryConfig{}, 0, ""))
+	s.AddTool(NewGetEventTool(), NewHandleGetEvent(graph.RetryConfig{}, 0, "", ""))
 }
 
 // TestHandleGetEvent_NoClientInContext validates that the handler returns
 // a tool error when no Graph client is present in the context.
 func TestHandleGetEvent_NoClientInContext(t *testing.T) {
-	handler := NewHandleGetEvent(graph.RetryConfig{}, 0, "")
+	handler := NewHandleGetEvent(graph.RetryConfig{}, 0, "", "")
 	request := mcp.CallToolRequest{}
 	request.Params.Arguments = map[string]any{
 		"event_id": "AAMkAGTest123",
@@ -114,7 +114,7 @@ func TestHandleGetEvent_NoClientInContext(t *testing.T) {
 // TestHandleGetEvent_MissingEventId validates that the handler returns
 // a tool error with a recovery hint when event_id is not provided.
 func TestHandleGetEvent_MissingEventId(t *testing.T) {
-	handler := NewHandleGetEvent(graph.RetryConfig{}, 0, "")
+	handler := NewHandleGetEvent(graph.RetryConfig{}, 0, "", "")
 	request := mcp.CallToolRequest{}
 	request.Params.Arguments = map[string]any{}
 
@@ -561,7 +561,7 @@ func TestGetEvent_CreatedByMcpInResponse(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	handler := NewHandleGetEvent(graph.RetryConfig{}, 30*time.Second, propID)
+	handler := NewHandleGetEvent(graph.RetryConfig{}, 30*time.Second, "", propID)
 	req := mcp.CallToolRequest{}
 	req.Params.Arguments = map[string]any{
 		"event_id": "evt-prov",
@@ -588,5 +588,70 @@ func TestGetEvent_CreatedByMcpInResponse(t *testing.T) {
 	}
 	if got != true {
 		t.Errorf("createdByMcp = %v, want true", got)
+	}
+}
+
+// TestHandleGetEvent_DefaultsToServerTimezone verifies that when the caller
+// omits the timezone parameter, the handler falls back to the server-configured
+// default timezone and sends it as the Graph API Prefer: outlook.timezone
+// header so event times render in the operator's local timezone rather than
+// UTC. Regression for TEST-REPORT.md F3.
+func TestHandleGetEvent_DefaultsToServerTimezone(t *testing.T) {
+	var capturedPrefer string
+	client, srv := newTestGraphClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPrefer = r.Header.Get("Prefer")
+		w.Header().Set("Content-Type", "application/json")
+		//nolint:errcheck // test helper
+		fmt.Fprint(w, `{"id":"evt-tz","subject":"TZ Test","start":{"dateTime":"2026-04-19T12:00:00.0000000","timeZone":"Europe/Stockholm"},"end":{"dateTime":"2026-04-19T13:00:00.0000000","timeZone":"Europe/Stockholm"}}`)
+	}))
+	defer srv.Close()
+
+	handler := NewHandleGetEvent(graph.RetryConfig{}, 30*time.Second, "Europe/Stockholm", "")
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"event_id": "evt-tz"}
+
+	ctx := auth.WithGraphClient(context.Background(), client)
+	result, err := handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got: %v", result.Content[0].(mcp.TextContent).Text)
+	}
+	if !strings.Contains(capturedPrefer, `outlook.timezone="Europe/Stockholm"`) {
+		t.Errorf("Prefer header = %q, want to contain outlook.timezone=\"Europe/Stockholm\"", capturedPrefer)
+	}
+}
+
+// TestHandleGetEvent_ExplicitTimezoneOverridesDefault verifies that when the
+// caller provides a timezone, the handler forwards the caller's value rather
+// than the server default.
+func TestHandleGetEvent_ExplicitTimezoneOverridesDefault(t *testing.T) {
+	var capturedPrefer string
+	client, srv := newTestGraphClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		capturedPrefer = r.Header.Get("Prefer")
+		w.Header().Set("Content-Type", "application/json")
+		//nolint:errcheck // test helper
+		fmt.Fprint(w, `{"id":"evt-tz","subject":"TZ Test"}`)
+	}))
+	defer srv.Close()
+
+	handler := NewHandleGetEvent(graph.RetryConfig{}, 30*time.Second, "Europe/Stockholm", "")
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"event_id": "evt-tz",
+		"timezone": "America/New_York",
+	}
+
+	ctx := auth.WithGraphClient(context.Background(), client)
+	result, err := handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success, got: %v", result.Content[0].(mcp.TextContent).Text)
+	}
+	if !strings.Contains(capturedPrefer, `outlook.timezone="America/New_York"`) {
+		t.Errorf("Prefer header = %q, want caller-provided timezone", capturedPrefer)
 	}
 }
