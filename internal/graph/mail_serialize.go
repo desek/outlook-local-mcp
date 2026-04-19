@@ -292,6 +292,98 @@ func SerializeSummaryMessage(msg models.Messageable) map[string]any {
 	return result
 }
 
+// SerializeAttachment extracts attachment metadata and, when the attachment
+// is a FileAttachment, the base64-encoded content bytes. The returned map is
+// suitable for JSON serialization in MCP tool responses.
+//
+// Fields always present: id, name, contentType, size, isInline,
+// lastModifiedDateTime, odataType. When att is a FileAttachment, the map also
+// includes contentBytes (base64 string).
+//
+// Parameters:
+//   - att: an Attachmentable from the Microsoft Graph SDK. May be nil.
+//
+// Returns a map containing the attachment fields. Returns an empty map when
+// att is nil.
+//
+// Side effects: none.
+func SerializeAttachment(att models.Attachmentable) map[string]any {
+	if att == nil {
+		return map[string]any{}
+	}
+	result := map[string]any{
+		"id":                   SafeStr(att.GetId()),
+		"name":                 SafeStr(att.GetName()),
+		"contentType":          SafeStr(att.GetContentType()),
+		"isInline":             SafeBool(att.GetIsInline()),
+		"lastModifiedDateTime": "",
+	}
+	if sz := att.GetSize(); sz != nil {
+		result["size"] = int64(*sz)
+	} else {
+		result["size"] = int64(0)
+	}
+	if t := att.GetLastModifiedDateTime(); t != nil {
+		result["lastModifiedDateTime"] = t.Format(time.RFC3339)
+	}
+	if ot := att.GetOdataType(); ot != nil {
+		result["odataType"] = *ot
+	} else {
+		result["odataType"] = ""
+	}
+	if fa, ok := att.(*models.FileAttachment); ok && fa != nil {
+		if b := fa.GetContentBytes(); b != nil {
+			result["contentBytes"] = base64.StdEncoding.EncodeToString(b)
+		} else {
+			result["contentBytes"] = ""
+		}
+	}
+	return result
+}
+
+// SerializeSummaryAttachment returns a compact attachment map suitable for
+// the "summary" output mode of mail_get_attachment. The field set matches
+// SerializeAttachment but is intentionally frozen here to document the
+// summary contract; today the two maps are equivalent because attachment
+// metadata is already small.
+//
+// Parameters:
+//   - att: an Attachmentable from the Microsoft Graph SDK. May be nil.
+//
+// Returns a map containing the summary attachment fields.
+//
+// Side effects: none.
+func SerializeSummaryAttachment(att models.Attachmentable) map[string]any {
+	full := SerializeAttachment(att)
+	summaryKeys := []string{"id", "name", "contentType", "size", "isInline", "contentBytes"}
+	out := make(map[string]any, len(summaryKeys))
+	for _, k := range summaryKeys {
+		if v, ok := full[k]; ok {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// SerializeConversationThread wraps an ordered slice of per-message maps with
+// the shared conversationId and a message count. The slice is assumed to be
+// sorted chronologically (oldest first).
+//
+// Parameters:
+//   - conversationID: the conversation identifier shared by every message.
+//   - messages: the serialized message maps in chronological order.
+//
+// Returns a map with "conversationId", "count", and "messages" keys.
+//
+// Side effects: none.
+func SerializeConversationThread(conversationID string, messages []map[string]any) map[string]any {
+	return map[string]any{
+		"conversationId": conversationID,
+		"count":          len(messages),
+		"messages":       messages,
+	}
+}
+
 // ToSummaryMessageMap converts a full serialized message map (from
 // SerializeMessage) to summary format by extracting only the summary fields.
 // Fields not present in the full map are omitted from the result.

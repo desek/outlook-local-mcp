@@ -116,6 +116,20 @@ func TestSearchMessagesToolAnnotations(t *testing.T) {
 	})
 }
 
+// TestGetConversationToolAnnotations verifies all 5 annotations on mail_get_conversation (CR-0058).
+func TestGetConversationToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewGetConversationTool(), annotationExpectation{
+		title: "Get Email Conversation", readOnly: true, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
+// TestGetAttachmentToolAnnotations verifies all 5 annotations on mail_get_attachment (CR-0058).
+func TestGetAttachmentToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewGetAttachmentTool(), annotationExpectation{
+		title: "Get Email Attachment", readOnly: true, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
 // TestGetMessageToolAnnotations verifies all 5 annotations on mail_get_message.
 func TestGetMessageToolAnnotations(t *testing.T) {
 	assertAnnotations(t, tools.NewGetMessageTool(), annotationExpectation{

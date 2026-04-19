@@ -436,6 +436,96 @@ func formatRecipientAddresses(recipients any) string {
 	return strings.Join(addrs, ", ")
 }
 
+// FormatConversationText formats a serialized conversation thread into a
+// numbered plain-text listing ordered chronologically. Each entry shows the
+// message subject, sender address, received date, and a body preview.
+//
+// Parameters:
+//   - thread: a map produced by graph.SerializeConversationThread, expected to
+//     contain "conversationId", "count", and "messages" keys.
+//
+// Returns a formatted plain-text string. Returns "No messages found." when the
+// thread contains no messages.
+//
+// Side effects: none.
+func FormatConversationText(thread map[string]any) string {
+	messages, _ := thread["messages"].([]map[string]any)
+	if len(messages) == 0 {
+		return "No messages found."
+	}
+
+	var b strings.Builder
+	convoID, _ := thread["conversationId"].(string)
+	if convoID != "" {
+		fmt.Fprintf(&b, "Conversation: %s\n\n", convoID)
+	}
+	for i, m := range messages {
+		subject, _ := m["subject"].(string)
+		if subject == "" {
+			subject = "(No subject)"
+		}
+		fmt.Fprintf(&b, "%d. %s\n", i+1, subject)
+
+		fromAddr := extractFromAddress(m)
+		receivedDT, _ := m["receivedDateTime"].(string)
+		displayDate := formatReceivedDate(receivedDT)
+		var parts []string
+		if fromAddr != "" {
+			parts = append(parts, "From: "+fromAddr)
+		}
+		if displayDate != "" {
+			parts = append(parts, displayDate)
+		}
+		if len(parts) > 0 {
+			fmt.Fprintf(&b, "   %s\n", strings.Join(parts, " | "))
+		}
+
+		bodyPreview, _ := m["bodyPreview"].(string)
+		if bodyPreview != "" {
+			fmt.Fprintf(&b, "   Preview: %s\n", bodyPreview)
+		}
+
+		if i < len(messages)-1 {
+			b.WriteString("\n")
+		}
+	}
+	fmt.Fprintf(&b, "\n%d message(s) in thread.", len(messages))
+	return b.String()
+}
+
+// FormatAttachmentText formats a serialized attachment map into a human-readable
+// plain-text detail view showing name, content type, size, and an indicator
+// that the content is delivered as base64 in summary/raw output modes.
+//
+// Parameters:
+//   - att: a map produced by graph.SerializeAttachment.
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatAttachmentText(att map[string]any) string {
+	var b strings.Builder
+	name, _ := att["name"].(string)
+	if name == "" {
+		name = "(Unnamed attachment)"
+	}
+	b.WriteString(name)
+	b.WriteString("\n")
+	if ct, _ := att["contentType"].(string); ct != "" {
+		fmt.Fprintf(&b, "Content-Type: %s\n", ct)
+	}
+	fmt.Fprintf(&b, "Size: %d bytes\n", toInt(att["size"]))
+	if inline, ok := att["isInline"].(bool); ok && inline {
+		b.WriteString("Inline: true\n")
+	}
+	if _, ok := att["contentBytes"]; ok {
+		b.WriteString("Content available as base64 via output=summary or output=raw.")
+	} else {
+		b.WriteString("This attachment has no downloadable file content (not a file attachment).")
+	}
+	return b.String()
+}
+
 // FormatMailFoldersText formats a slice of serialized mail folder maps into a
 // numbered plain-text listing with unread and total item counts.
 //
