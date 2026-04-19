@@ -34,7 +34,7 @@ func NewListCalendarsTool() mcp.Tool {
 		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 		mcp.WithString("output",
 			mcp.Description("Output mode: 'text' (default) returns plain-text listing, 'summary' returns compact JSON, 'raw' returns full Graph API fields."),

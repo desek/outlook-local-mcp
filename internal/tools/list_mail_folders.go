@@ -36,7 +36,7 @@ func NewListMailFoldersTool() mcp.Tool {
 		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithOpenWorldHintAnnotation(true),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 		mcp.WithNumber("max_results",
 			mcp.Description("Maximum number of folders to return (default 25)."),

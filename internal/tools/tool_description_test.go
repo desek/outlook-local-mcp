@@ -306,9 +306,12 @@ func TestMeetingConfirmationInstructions_AskUserQuestionGuidance(t *testing.T) {
 }
 
 // TestCalendarTools_AccountParamDescription verifies that all 12 calendar tools
-// have the updated account parameter description containing "the default
-// account is used" and NOT containing the old elicitation-specific text
-// "you will be prompted to select".
+// carry the CR-0056 account-parameter description: it must forbid default-
+// account assumption, mention both label and UPN as accepted values, and
+// reference disconnected accounts as first-class entries. It must NOT contain
+// the legacy elicitation text "you will be prompted to select" nor the
+// pre-CR-0056 phrasing "the default account is used" which silently allowed
+// default-account fallback.
 func TestCalendarTools_AccountParamDescription(t *testing.T) {
 	calendarTools := []mcp.Tool{
 		tools.NewListCalendarsTool(),
@@ -325,8 +328,15 @@ func TestCalendarTools_AccountParamDescription(t *testing.T) {
 		tools.NewRescheduleMeetingTool(),
 	}
 
-	const wantSubstring = "the default account is used"
-	const bannedSubstring = "you will be prompted to select"
+	wantSubstrings := []string{
+		"Never assume a default account",
+		"UPN",
+		"disconnected",
+	}
+	bannedSubstrings := []string{
+		"you will be prompted to select",
+		"the default account is used",
+	}
 
 	for _, tool := range calendarTools {
 		t.Run(tool.Name, func(t *testing.T) {
@@ -346,11 +356,15 @@ func TestCalendarTools_AccountParamDescription(t *testing.T) {
 				t.Fatal("missing or non-string 'description' on account property")
 			}
 
-			if !strings.Contains(desc, wantSubstring) {
-				t.Errorf("account description missing %q:\n  got: %s", wantSubstring, desc)
+			for _, want := range wantSubstrings {
+				if !strings.Contains(desc, want) {
+					t.Errorf("account description missing %q:\n  got: %s", want, desc)
+				}
 			}
-			if strings.Contains(desc, bannedSubstring) {
-				t.Errorf("account description contains banned text %q:\n  got: %s", bannedSubstring, desc)
+			for _, banned := range bannedSubstrings {
+				if strings.Contains(desc, banned) {
+					t.Errorf("account description contains banned text %q:\n  got: %s", banned, desc)
+				}
 			}
 		})
 	}

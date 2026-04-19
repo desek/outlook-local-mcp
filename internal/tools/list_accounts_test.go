@@ -65,8 +65,9 @@ func TestHandleListAccounts_WithAccounts(t *testing.T) {
 	client, srv := newTestGraphClient(t, nil)
 	defer srv.Close()
 	if err := registry.Add(&auth.AccountEntry{
-		Label:  "default",
-		Client: client,
+		Label:         "default",
+		Client:        client,
+		Authenticated: true,
 	}); err != nil {
 		t.Fatalf("registry.Add(default) error: %v", err)
 	}
@@ -143,6 +144,29 @@ func TestHandleListAccounts_AuthenticatedStatus(t *testing.T) {
 	}
 	if accounts[0]["authenticated"] != false {
 		t.Errorf("authenticated = %v, want false for nil client", accounts[0]["authenticated"])
+	}
+}
+
+// TestListAccounts_ZeroAccounts verifies that the text-mode output renders
+// the "No accounts registered." message when the registry is empty (CR-0056
+// FR-39).
+func TestListAccounts_ZeroAccounts(t *testing.T) {
+	registry := auth.NewAccountRegistry()
+	handler := HandleListAccounts(registry)
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"output": "text"}
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error result: %v", result)
+	}
+
+	text := extractText(t, result)
+	if text != "No accounts registered." {
+		t.Errorf("result = %q, want %q", text, "No accounts registered.")
 	}
 }
 

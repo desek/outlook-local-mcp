@@ -95,7 +95,7 @@ func NewUpdateEventTool() mcp.Tool {
 			mcp.Description("Enable or disable the reminder"),
 		),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 	)
 }

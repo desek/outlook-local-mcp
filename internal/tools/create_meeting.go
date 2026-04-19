@@ -106,7 +106,7 @@ func NewCreateMeetingTool() mcp.Tool {
 			mcp.Description("Target calendar ID. Omit for default calendar."),
 		),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 	)
 }

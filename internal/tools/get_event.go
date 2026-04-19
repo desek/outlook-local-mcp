@@ -56,7 +56,7 @@ func NewGetEventTool() mcp.Tool {
 			mcp.Description("IANA timezone name for returned event times (e.g., America/New_York)."),
 		),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 		mcp.WithString("output",
 			mcp.Description("Output mode: 'text' (default) shows body preview in plain text, 'summary' returns compact JSON with bodyPreview field, 'raw' returns full Graph API fields including full body with HTML content."),

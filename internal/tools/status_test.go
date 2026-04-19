@@ -403,3 +403,19 @@ func TestStatus_BackwardCompatTopLevel(t *testing.T) {
 		}
 	}
 }
+
+// TestStatus_ZeroAccounts verifies that the status tool reports an empty
+// accounts array when the registry has no entries (CR-0056 FR-39 zero-account
+// state).
+func TestStatus_ZeroAccounts(t *testing.T) {
+	registry := auth.NewAccountRegistry()
+	resp := callStatus(t, testConfig(), registry, time.Now())
+
+	accounts, ok := resp["accounts"].([]any)
+	if !ok {
+		t.Fatalf("expected accounts array, got %T", resp["accounts"])
+	}
+	if len(accounts) != 0 {
+		t.Errorf("expected 0 accounts, got %d", len(accounts))
+	}
+}

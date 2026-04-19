@@ -52,7 +52,7 @@ func NewRescheduleEventTool() mcp.Tool {
 			mcp.Description("IANA timezone for the new start time. Defaults to the server's configured timezone."),
 		),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 	)
 }

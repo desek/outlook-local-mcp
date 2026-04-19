@@ -56,7 +56,7 @@ func NewCancelMeetingTool() mcp.Tool {
 			mcp.Description("Optional custom cancellation message sent to all attendees."),
 		),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 	)
 }

@@ -24,10 +24,10 @@ import (
 func NewListAccountsTool() mcp.Tool {
 	return mcp.NewTool("account_list",
 		mcp.WithDescription(
-			"List all registered accounts with their email addresses and authentication status. "+
-				"Call this to identify which account label corresponds to which email address.\n\n"+
-				"IMPORTANT: Always present the email address alongside the account label when "+
-				"reporting results to the user, so they know which email each account maps to.",
+			"List every registered account — authenticated and disconnected — with label, User Principal Name (UPN), authentication state, and auth_method. "+
+				"This output is the authoritative source for account selection decisions: always call account_list before acting when account intent is ambiguous, and consider every entry (including disconnected ones) — disconnected accounts MUST NOT be ignored. "+
+				"When reporting results to the user, present each account's UPN alongside its label and state so the user can confirm which mailbox each label maps to. "+
+				"When a disconnected account is surfaced, proactively offer account_login (to reconnect) or account_remove (to discard) rather than silently falling back to another account.",
 		),
 		mcp.WithTitleAnnotation("List Accounts"),
 		mcp.WithReadOnlyHintAnnotation(true),
@@ -76,8 +76,9 @@ func HandleListAccounts(registry *auth.AccountRegistry) func(ctx context.Context
 			}
 			results = append(results, map[string]any{
 				"label":         entry.Label,
-				"authenticated": entry.Client != nil,
+				"authenticated": entry.Authenticated,
 				"email":         entry.Email,
+				"auth_method":   entry.AuthMethod,
 			})
 		}
 

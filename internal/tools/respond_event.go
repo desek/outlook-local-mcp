@@ -52,7 +52,7 @@ func NewRespondEventTool() mcp.Tool {
 			mcp.Description("Whether to send the response to the organizer. Defaults to true."),
 		),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 	)
 }

@@ -9,6 +9,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -174,5 +175,113 @@ func TestHandleRemoveAccount_CleansUpConfig(t *testing.T) {
 	}
 	if accounts[0].Label != "redeploy" {
 		t.Errorf("remaining account = %q, want %q", accounts[0].Label, "redeploy")
+	}
+}
+
+// TestRemoveAccount_ClearsTokenCache verifies that account_remove deletes the
+// file-based token cache artifacts for the account's cache partition (CR-0056
+// FR-43). It overrides HOME so ClearTokenCache targets a temporary directory.
+func TestRemoveAccount_ClearsTokenCache(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	cacheDir := filepath.Join(home, ".outlook-local-mcp")
+	if err := os.MkdirAll(cacheDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	cacheName := "test-remove-cache"
+	cacheFiles := []string{
+		filepath.Join(cacheDir, cacheName+".bin"),
+		filepath.Join(cacheDir, cacheName+".cae.bin"),
+		filepath.Join(cacheDir, cacheName+"_msal.bin"),
+	}
+	for _, p := range cacheFiles {
+		if err := os.WriteFile(p, []byte("stale"), 0o600); err != nil {
+			t.Fatalf("WriteFile(%s): %v", p, err)
+		}
+	}
+
+	registry := auth.NewAccountRegistry()
+	if err := registry.Add(&auth.AccountEntry{Label: "work", CacheName: cacheName}); err != nil {
+		t.Fatalf("registry.Add: %v", err)
+	}
+
+	accountsPath := filepath.Join(t.TempDir(), "accounts.json")
+	handler := HandleRemoveAccount(registry, accountsPath)
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"label": "work"}
+	result, err := handler(context.Background(), request)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error result: %v", result)
+	}
+
+	for _, p := range cacheFiles {
+		if _, statErr := os.Stat(p); !os.IsNotExist(statErr) {
+			t.Errorf("expected cache file %s to be removed, stat err = %v", p, statErr)
+		}
+	}
+}
+
+// TestRemoveAccount_AllowsDisconnected verifies that a disconnected
+// (Authenticated=false) non-default account is still removable (CR-0056 FR-44).
+func TestRemoveAccount_AllowsDisconnected(t *testing.T) {
+	registry := auth.NewAccountRegistry()
+	if err := registry.Add(&auth.AccountEntry{Label: "work", Authenticated: false}); err != nil {
+		t.Fatalf("registry.Add: %v", err)
+	}
+
+	accountsPath := filepath.Join(t.TempDir(), "accounts.json")
+	handler := HandleRemoveAccount(registry, accountsPath)
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"label": "work"}
+
+	result, err := handler(context.Background(), request)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error result removing disconnected account: %v", result)
+	}
+	if _, exists := registry.Get("work"); exists {
+		t.Error("expected disconnected account to be removed from registry")
+	}
+}
+
+// TestRemoveAccount_LastAccountCleanState verifies that removing the last
+// non-default account leaves accounts.json as a valid file with an empty
+// accounts array (CR-0056 FR-45).
+func TestRemoveAccount_LastAccountCleanState(t *testing.T) {
+	registry := auth.NewAccountRegistry()
+	if err := registry.Add(&auth.AccountEntry{Label: "only"}); err != nil {
+		t.Fatalf("registry.Add: %v", err)
+	}
+
+	accountsPath := filepath.Join(t.TempDir(), "accounts.json")
+	if err := auth.SaveAccounts(accountsPath, []auth.AccountConfig{
+		{Label: "only", ClientID: "cid", TenantID: "common", AuthMethod: "browser"},
+	}); err != nil {
+		t.Fatalf("SaveAccounts: %v", err)
+	}
+
+	handler := HandleRemoveAccount(registry, accountsPath)
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"label": "only"}
+	result, err := handler(context.Background(), request)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error result: %v", result)
+	}
+
+	accounts, err := auth.LoadAccounts(accountsPath)
+	if err != nil {
+		t.Fatalf("LoadAccounts: %v", err)
+	}
+	if len(accounts) != 0 {
+		t.Errorf("expected empty accounts list, got %d entries", len(accounts))
 	}
 }

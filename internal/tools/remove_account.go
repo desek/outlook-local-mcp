@@ -27,10 +27,19 @@ func NewRemoveAccountTool() mcp.Tool {
 		mcp.WithDestructiveHintAnnotation(true),
 		mcp.WithIdempotentHintAnnotation(true),
 		mcp.WithOpenWorldHintAnnotation(false),
-		mcp.WithDescription("Remove a registered account. The default account cannot be removed."),
+		mcp.WithDescription(
+			"Remove a registered account from the registry and accounts.json and clear its cached tokens. "+
+				"Works regardless of the account's connection state — both authenticated and disconnected accounts can be removed. "+
+				"This operation is irreversible and destroys the account's configuration (client_id, tenant_id, auth_method, persisted UPN). "+
+				"When the user only wants to disconnect an account temporarily, suggest account_logout instead — it preserves the configuration so account_login can reconnect the account later. "+
+				"Proactively suggest account_remove only when the user clearly intends to discard the account permanently (for example, when a disconnected account surfaced via account_list is no longer relevant). "+
+				"Never assume a default account: before calling, inspect account_list (or the current account landscape) and consider every registered account, including disconnected ones. "+
+				"When intent is ambiguous, ask the user which account to remove rather than guessing. "+
+				"The default account cannot be removed.",
+		),
 		mcp.WithString("label",
 			mcp.Required(),
-			mcp.Description("The label of the account to remove."),
+			mcp.Description("The label of the account to remove. Must match a registered account label (UPN-based lookup is not accepted by this tool)."),
 		),
 	)
 }
@@ -61,14 +70,33 @@ func HandleRemoveAccount(registry *auth.AccountRegistry, accountsPath string) fu
 
 		logger.Debug("tool called", "label", label)
 
+		// Capture the cache partition name before removing from registry so we
+		// can clear the persisted token cache after removal. CR-0056 FR-43
+		// requires removal to leave no residual credentials on disk or in the
+		// keychain, regardless of Authenticated state (FR-44).
+		var cacheName string
+		if entry, ok := registry.Get(label); ok {
+			cacheName = entry.CacheName
+		}
+
 		if err := registry.Remove(label); err != nil {
 			logger.Warn("remove account failed", "label", label, "error", err.Error())
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		// Remove the account identity configuration from accounts.json.
+		// Remove the account identity configuration from accounts.json. When
+		// this removes the last entry, RemoveAccountConfig leaves a valid
+		// accounts.json with an empty accounts array (FR-45); the subsequent
+		// resolver error path directs the user to account_add.
 		if err := auth.RemoveAccountConfig(accountsPath, label); err != nil {
 			logger.Warn("failed to remove account config from accounts.json", "label", label, "error", err.Error())
+		}
+
+		// Best-effort keychain and file cache cleanup (CR-0056 FR-43).
+		if cacheName != "" {
+			if err := auth.ClearTokenCache(cacheName); err != nil {
+				logger.Warn("failed to clear token cache", "label", label, "error", err.Error())
+			}
 		}
 
 		result := map[string]any{

@@ -100,7 +100,7 @@ func NewSearchEventsTool(provenanceEnabled bool) mcp.Tool {
 			mcp.Description("IANA timezone name for returned event times (e.g., America/New_York)."),
 		),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 		mcp.WithString("output",
 			mcp.Description("Output mode: 'text' (default) returns plain-text listing, 'summary' returns compact JSON, 'raw' returns full Graph API fields."),
