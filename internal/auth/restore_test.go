@@ -414,3 +414,50 @@ func TestAuthRecordDir(t *testing.T) {
 		}
 	}
 }
+
+// TestRestoreAccounts_PopulatesEmailFromUPN verifies the AC-2 contract: at
+// startup, RestoreAccounts copies the persisted UPN into AccountEntry.Email
+// without issuing any Graph API call. This is the CR-0056 behavior that
+// eliminates the per-restart /me fetch.
+//
+// The test seeds accounts.json with a non-empty UPN and uses
+// fakeCredentialFactory (mock credentials) together with a counting Graph
+// client factory — because RestoreAccounts' device_code branch skips
+// silent auth and never invokes the factory, the counter also serves to
+// confirm no network-bound Graph client is instantiated during restore.
+func TestRestoreAccounts_PopulatesEmailFromUPN(t *testing.T) {
+	dir := t.TempDir()
+	accountsPath := filepath.Join(dir, "accounts.json")
+
+	accounts := []AccountConfig{
+		{
+			Label:      "contoso",
+			ClientID:   "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3",
+			TenantID:   "common",
+			AuthMethod: "device_code",
+			UPN:        "alice@contoso.com",
+		},
+	}
+	if err := SaveAccounts(accountsPath, accounts); err != nil {
+		t.Fatalf("SaveAccounts: %v", err)
+	}
+
+	registry := NewAccountRegistry()
+	var factoryCalls atomic.Int32
+
+	RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, countingGraphClientFactory(&factoryCalls), []string{"Calendars.ReadWrite"})
+
+	entry, ok := registry.Get("contoso")
+	if !ok {
+		t.Fatal("account 'contoso' not found in registry")
+	}
+	if entry.Email != "alice@contoso.com" {
+		t.Errorf("entry.Email = %q, want %q (populated from persisted UPN, no Graph call)", entry.Email, "alice@contoso.com")
+	}
+	// device_code skips silent auth entirely so the Graph client factory
+	// must not have been invoked. This is the strongest in-process signal
+	// that no Graph /me call occurred during restore.
+	if calls := factoryCalls.Load(); calls != 0 {
+		t.Errorf("GraphClientFactory called %d times, want 0 (no Graph API call permitted during restore)", calls)
+	}
+}

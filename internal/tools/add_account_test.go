@@ -1727,3 +1727,49 @@ func TestDeviceCode_PendingAuth_Timeout(t *testing.T) {
 		t.Errorf("pending map should be empty after timeout cleanup, got %d entries", pendingLen)
 	}
 }
+
+// TestAddAccount_PersistsUPN verifies the AC-1 contract: after account_add
+// completes, the corresponding entry in accounts.json contains a non-empty
+// "upn" value matching the identity resolved from the Graph /me endpoint.
+//
+// HandleAddAccount cannot be exercised end-to-end without a real interactive
+// authentication flow and a live Graph client. Instead, this test drives the
+// closest testable surface: it seeds accounts.json with a freshly added
+// account (UPN empty, as add_account writes it before /me resolves), mirrors
+// what HandleAddAccount does after authentication (entry.Email is populated
+// from the Graph /me response), and then invokes
+// auth.EnsureEmailAndPersistUPN — the same helper HandleAddAccount calls on
+// the success path at add_account.go:256,340. The assertion verifies that
+// the persisted accounts.json now carries the resolved UPN.
+func TestAddAccount_PersistsUPN(t *testing.T) {
+	dir := t.TempDir()
+	accountsPath := dir + "/accounts.json"
+
+	// Seed accounts.json as HandleAddAccount does right after label
+	// validation and before /me resolution: the record exists, but UPN is
+	// empty and will be backfilled once the Graph /me lookup succeeds.
+	seed := []auth.AccountConfig{
+		{Label: "work", ClientID: "cid", TenantID: "tid", AuthMethod: "browser"},
+	}
+	if err := auth.SaveAccounts(accountsPath, seed); err != nil {
+		t.Fatalf("SaveAccounts: %v", err)
+	}
+
+	// Simulate the post-authentication state: EnsureEmail has already set
+	// entry.Email from Graph /me. Client is nil here so EnsureEmail
+	// early-returns, exercising only the persistence branch — which is the
+	// behavior under test.
+	entry := &auth.AccountEntry{Label: "work", Email: "alice@contoso.com"}
+	auth.EnsureEmailAndPersistUPN(context.Background(), entry, accountsPath)
+
+	got, err := auth.LoadAccounts(accountsPath)
+	if err != nil {
+		t.Fatalf("LoadAccounts: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("accounts = %d, want 1", len(got))
+	}
+	if got[0].UPN != "alice@contoso.com" {
+		t.Errorf("persisted UPN = %q, want %q", got[0].UPN, "alice@contoso.com")
+	}
+}

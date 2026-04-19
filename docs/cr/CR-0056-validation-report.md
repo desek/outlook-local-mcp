@@ -6,7 +6,7 @@ Date: 2026-04-19
 
 ## Summary
 
-Requirements: 53/53 | Acceptance Criteria: 19/19 | Tests: 34/38 | Gaps: 4
+Requirements: 53/53 | Acceptance Criteria: 19/19 | Tests: 38/38 | Gaps: 0 (4 previously identified gaps now FIXED)
 
 Quality checks:
 
@@ -82,8 +82,8 @@ Quality checks:
 
 | AC # | Description | Status | Evidence |
 |------|-------------|--------|----------|
-| AC-1 | UPN persisted after account_add | PASS (indirect) | `add_account.go:256,340` invokes `EnsureEmailAndPersistUPN`; unit test `TestUpdateAccountUPN_Success`. No dedicated `TestAddAccount_PersistsUPN` — see Gaps. |
-| AC-2 | UPN available at startup without API call | PASS (indirect) | `restore.go:183-189`; covered indirectly by restore_test infrastructure but no dedicated `TestRestoreAccounts_PopulatesEmailFromUPN` — see Gaps. |
+| AC-1 | UPN persisted after account_add | PASS | `add_account.go:256,340` invokes `EnsureEmailAndPersistUPN`; `TestAddAccount_PersistsUPN` in `internal/tools/add_account_test.go` asserts `accounts.json` carries the resolved UPN after the persistence helper runs. |
+| AC-2 | UPN available at startup without API call | PASS | `restore.go:183-189`; `TestRestoreAccounts_PopulatesEmailFromUPN` in `internal/auth/restore_test.go` asserts `entry.Email` equals the persisted UPN and that `GraphClientFactory` is never invoked during restore. |
 | AC-3 | Dual lookup by UPN | PASS | `TestResolveAccount_ByUPN` |
 | AC-4 | account_login re-authenticates disconnected | PASS | `TestLoginAccount_Success` |
 | AC-5 | account_login rejects already connected | PASS | `TestLoginAccount_AlreadyConnected` |
@@ -97,9 +97,9 @@ Quality checks:
 | AC-13 | account_remove clears keychain + works on disconnected | PASS | `TestRemoveAccount_ClearsTokenCache`, `TestRemoveAccount_AllowsDisconnected` |
 | AC-14 | Last-account removal clean zero-state | PASS | `TestRemoveAccount_LastAccountCleanState` |
 | AC-15 | list + status succeed zero-account | PASS | `TestListAccounts_ZeroAccounts`, `TestStatus_ZeroAccounts` |
-| AC-16 | Extension manifest includes new tools | PASS (indirect) | `extension/manifest.json:140-148` — no `TestManifest_NewTools` automated check — see Gaps. |
+| AC-16 | Extension manifest includes new tools | PASS | `extension/manifest.json:140-148`; `TestManifest_NewTools` in `extension/manifest_test.go` parses the manifest and asserts `account_login`, `account_logout`, and `account_refresh` are present. |
 | AC-17 | Auto-select advisory for disconnected siblings | PASS | `TestAutoSelect_AdvisoryForDisconnectedSiblings` |
-| AC-18 | Descriptions forbid silent default assumption | PASS (indirect) | `client.go:35` AccountParamDescription contains required language; no dedicated `TestAccountParamDescription_ForbidsDefaultAssumption` — see Gaps. |
+| AC-18 | Descriptions forbid silent default assumption | PASS | `client.go:35`; `TestAccountParamDescription_ForbidsDefaultAssumption` and `TestAccountLifecycleTools_DescribeProactiveSuggestion` in `internal/tools/tool_descriptions_test.go` lock in the required language. |
 | AC-19 | All quality checks pass | PASS | build/lint/test all green |
 
 ## Test Strategy Verification
@@ -133,16 +133,16 @@ Quality checks:
 | tool_annotations_test.go | TestRefreshAccount_Annotations | Yes | Yes | Yes |
 | text_format_test.go | TestFormatAccountsText_WithUPNAndMethod | Yes | Yes | Yes |
 | text_format_test.go | TestFormatStatusText_WithUPN | Yes | Yes | Yes |
-| add_account_test.go | TestAddAccount_PersistsUPN | Yes | No | N/A — missing (see Gaps) |
-| restore_test.go | TestRestoreAccounts_PopulatesEmailFromUPN | Yes | No | N/A — missing (see Gaps) |
+| add_account_test.go | TestAddAccount_PersistsUPN | Yes | Yes | Yes — asserts UPN persisted via `auth.EnsureEmailAndPersistUPN` |
+| restore_test.go | TestRestoreAccounts_PopulatesEmailFromUPN | Yes | Yes | Yes — asserts Email populated from persisted UPN with zero Graph calls |
 | remove_account_test.go | TestRemoveAccount_ClearsKeychain | Yes | Yes (named `TestRemoveAccount_ClearsTokenCache`) | Equivalent — slight rename |
 | remove_account_test.go | TestRemoveAccount_Disconnected | Yes | Yes (named `TestRemoveAccount_AllowsDisconnected`) | Equivalent — slight rename |
 | remove_account_test.go | TestRemoveAccount_LastAccountCleanState | Yes | Yes | Yes |
 | list_accounts_test.go | TestListAccounts_ZeroAccounts | Yes | Yes | Yes |
 | status_test.go | TestStatus_ZeroAccounts | Yes | Yes | Yes |
-| manifest_test.go | TestManifest_NewTools | Yes | No | N/A — `extension/manifest_test.go` not created (see Gaps) |
-| tool_descriptions_test.go | TestAccountParamDescription_ForbidsDefaultAssumption | Yes | No | N/A — no new `tool_descriptions_test.go` added (see Gaps) |
-| tool_descriptions_test.go | TestAccountLifecycleTools_DescribeProactiveSuggestion | Yes | No | N/A — no new `tool_descriptions_test.go` added (see Gaps) |
+| manifest_test.go | TestManifest_NewTools | Yes | Yes | Yes — `extension/manifest_test.go` added |
+| tool_descriptions_test.go | TestAccountParamDescription_ForbidsDefaultAssumption | Yes | Yes | Yes — `internal/tools/tool_descriptions_test.go` added |
+| tool_descriptions_test.go | TestAccountLifecycleTools_DescribeProactiveSuggestion | Yes | Yes | Yes — `internal/tools/tool_descriptions_test.go` added |
 | text_format_test.go (modify) | TestFormatAccountsText | Yes | Yes | Yes — updated to new format |
 | text_format_test.go (modify) | TestFormatStatusText | Yes | Yes | Yes — updated to new format |
 | account_resolver_test.go (modify) | TestElicitAccountSelection | Yes | Yes | Yes — enum uses label+UPN |
@@ -150,12 +150,14 @@ Quality checks:
 
 ## Gaps
 
-1. **Missing `TestAddAccount_PersistsUPN`** (AC-1 direct coverage). The UPN persistence path is exercised transitively by `TestUpdateAccountUPN_Success` and is invoked at `add_account.go:256,340`, but no dedicated unit test asserts that a successful `account_add` flow results in `accounts.json` containing the resolved `upn` field.
+All four previously identified gaps have been FIXED.
 
-2. **Missing `TestRestoreAccounts_PopulatesEmailFromUPN`** (AC-2 direct coverage). `restore.go:183-189` implements the behavior; existing `TestRestoreAccounts_IdentityFieldsPreserved` verifies other identity fields but does not assert `entry.Email == persisted UPN` and does not assert "no Graph API call was made".
+1. **FIXED — `TestAddAccount_PersistsUPN`** (AC-1). Added to `internal/tools/add_account_test.go`. The test seeds `accounts.json` with a freshly added entry (empty UPN), simulates the post-authentication state by pre-populating `entry.Email`, invokes the same `auth.EnsureEmailAndPersistUPN` helper that `add_account.go:256,340` calls on success, and asserts the persisted record now carries `upn == "alice@contoso.com"`. **Scope note:** `HandleAddAccount` cannot be driven end-to-end without an interactive auth flow and a live Graph client, so the test targets the closest deterministic surface — the persistence helper that owns the UPN-write contract.
 
-3. **Missing `extension/manifest_test.go` / `TestManifest_NewTools`** (AC-16 direct coverage). The three tool names are present in `extension/manifest.json` but there is no automated parse-and-assert test.
+2. **FIXED — `TestRestoreAccounts_PopulatesEmailFromUPN`** (AC-2). Added to `internal/auth/restore_test.go`. Seeds `accounts.json` with `upn: "alice@contoso.com"`, calls `RestoreAccounts` using the existing `fakeCredentialFactory` + `countingGraphClientFactory`, and asserts `entry.Email == "alice@contoso.com"` plus `GraphClientFactory` call-count == 0 (the strongest in-process signal that no Graph API call was made).
 
-4. **Missing `internal/tools/tool_descriptions_test.go`** with `TestAccountParamDescription_ForbidsDefaultAssumption` and `TestAccountLifecycleTools_DescribeProactiveSuggestion` (AC-18, FR-49/50/53 direct coverage). The descriptions themselves contain the required "never assume a default account" and "proactively suggest" language, but no test locks in that contract. The existing `tool_description_test.go` covers unrelated calendar-tool descriptions.
+3. **FIXED — `TestManifest_NewTools`** (AC-16). Added `extension/manifest_test.go` (with a one-line `extension/doc.go` so the directory is a valid Go package). The test parses `manifest.json` and asserts `tools[]` contains `account_login`, `account_logout`, and `account_refresh`.
 
-All gaps are **test-coverage gaps only** — the underlying behaviors and descriptions are fully implemented and indirectly validated. No functional or acceptance behavior is missing.
+4. **FIXED — `TestAccountParamDescription_ForbidsDefaultAssumption` + `TestAccountLifecycleTools_DescribeProactiveSuggestion`** (AC-18, FR-49/50/53). Added `internal/tools/tool_descriptions_test.go`. Asserts `AccountParamDescription` contains the phrases "Never assume a default account" and "disconnected", and that the descriptions of `account_login`, `account_logout`, `account_refresh`, and `account_remove` each contain "proactively suggest".
+
+All four tests pass locally under `make lint` and `make test` on `dev/cr-0056`.
