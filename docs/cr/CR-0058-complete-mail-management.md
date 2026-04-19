@@ -458,28 +458,7 @@ The draft-centric workflow makes the MCP server a practical email assistant: the
 - `NewDeleteDraftTool()` + `HandleDeleteDraft(retryCfg, timeout)`.
 - Validates target is a draft before DELETE.
 
-### Phase 5: Metadata Management
-
-**`internal/tools/update_message.go`:**
-- `NewUpdateMessageTool()` + `HandleUpdateMessage(retryCfg, timeout)`.
-- PATCH with optional `isRead`, `flag` (status + optional dates), `categories`, `importance`.
-- Validates flag date dependencies.
-
-**`internal/tools/list_categories.go`:**
-- `NewListCategoriesTool()` + `HandleListCategories(retryCfg, timeout)`.
-- Calls `GET /me/outlook/masterCategories`.
-- Three-tier output: text (numbered list), summary (JSON array), raw.
-
-**`internal/tools/create_category.go`:**
-- `NewCreateCategoryTool()` + `HandleCreateCategory(retryCfg, timeout)`.
-- Validates color preset.
-- Calls `POST /me/outlook/masterCategories`.
-
-**`internal/tools/delete_category.go`:**
-- `NewDeleteCategoryTool()` + `HandleDeleteCategory(retryCfg, timeout)`.
-- Calls `DELETE /me/outlook/masterCategories/{id}`.
-
-### Phase 6: Provenance Integration
+### Phase 5: Provenance Integration
 
 **`internal/graph/provenance.go`:**
 - Add `HasMessageProvenanceTag(msg models.Messageable, propertyID string) bool` — parallel to existing `HasProvenanceTag` for events.
@@ -497,13 +476,13 @@ The draft-centric workflow makes the MCP server a practical email assistant: the
 - Add `provenance` boolean filter parameter.
 - When `provenance=true`, add `singleValueExtendedProperties/any(ep: ep/id eq '{id}' and ep/value eq 'true')` to `$filter`.
 
-### Phase 7: Serialization and Formatting
+### Phase 6: Serialization and Formatting
 
 **`internal/tools/text_format.go`:**
 - `FormatConversationText()` — chronological thread with message numbers and quoted excerpts.
 - `FormatAttachmentText()` — attachment metadata with size.
 
-### Phase 8: Server Registration, Manifest, and Tests
+### Phase 7: Server Registration, Manifest, and Tests
 
 **`internal/server/server.go`:**
 - Register read tools (`mail_get_conversation`, `mail_get_attachment`) with `wrap` under `MailEnabled`.
@@ -815,6 +794,22 @@ make ci
 ## Decision Outcome
 
 Chosen approach: "Draft-centric workflow with provenance tracking", because it provides the model with core email assistance capability (read, compose) while maintaining human oversight for the highest-risk action (sending). Machine-readable provenance tags (MAPI extended properties) allow the model to identify its own drafts programmatically. The `Mail.Send` scope is never requested, eliminating the risk of automated email dispatch. Metadata management (categories, flags, read status) is deferred to a future CR.
+
+## Review Summary
+
+**Findings:** 4
+
+**Fixes applied:**
+- Removed the orphaned "Phase 5: Metadata Management" prose block (which described `mail_update_message`, `mail_list_categories`, `mail_create_category`, `mail_delete_category`) — these tools are explicitly Out of Scope per Scope Boundaries and were deferred by checkpoint `dd68e38`.
+- Renumbered subsequent Implementation Approach prose phases: "Phase 6: Provenance Integration" → Phase 5; "Phase 7: Serialization and Formatting" → Phase 6; "Phase 8: Server Registration, Manifest, and Tests" → Phase 7. The Implementation Flow mermaid diagram and the Estimated Effort table already used this 7-phase numbering and required no changes.
+- Verified Affected Components table: no `update_message.go`, `list_categories.go`, `create_category.go`, or `delete_category.go` entries present — already aligned with the deferred scope.
+- Verified Functional Requirements use MUST/MUST NOT throughout (no normative "should"/"may"). Every FR has at least one AC (AC-1 through AC-12 cover all requirement clusters); every AC maps to at least one Test Strategy entry.
+
+**Notes (accepted as-is):**
+- Non-functional requirement numbering restarts at 1 after FR 92 — this is a conventional NFR-vs-FR separation; accepted.
+- Functional Requirement numbering jumps (52 → 76 → 81) leaving gaps. Retained per instruction: gaps reflect prior scope removals and do not introduce ambiguity because each requirement is self-identifying and uniquely referenced.
+
+**Unresolved items requiring human input:** none.
 
 ## Related Items
 
