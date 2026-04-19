@@ -175,6 +175,55 @@ func ValidateShowAs(value string) error {
 	}
 }
 
+// ValidateRecipients parses a comma-separated list of email addresses and
+// validates each entry with ValidateEmail. Empty-after-trim entries are
+// skipped. The paramName is included in error messages to identify the
+// offending parameter.
+//
+// Parameters:
+//   - value: the comma-separated recipients string. May be empty.
+//   - paramName: the parameter name for error messages.
+//
+// Returns the parsed slice of trimmed email addresses, or an error when any
+// entry is not a well-formed email address. Returns an empty (nil) slice
+// when value is empty or contains only whitespace.
+//
+// Side effects: none.
+func ValidateRecipients(value, paramName string) ([]string, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
+	}
+	parts := strings.Split(value, ",")
+	var out []string
+	for _, p := range parts {
+		addr := strings.TrimSpace(p)
+		if addr == "" {
+			continue
+		}
+		if err := ValidateEmail(addr); err != nil {
+			return nil, fmt.Errorf("invalid %s: %w", paramName, err)
+		}
+		out = append(out, addr)
+	}
+	return out, nil
+}
+
+// ValidateContentType validates that value is one of the accepted mail body
+// content types: "text" or "html" (case-insensitive).
+//
+// Parameters:
+//   - value: the content type string to validate.
+//
+// Returns nil if valid, or an error listing the accepted values.
+func ValidateContentType(value string) error {
+	switch strings.ToLower(value) {
+	case "text", "html":
+		return nil
+	default:
+		return fmt.Errorf("invalid content_type: %q (accepted: text, html)", value)
+	}
+}
+
 // ValidateAttendeeType validates that value is one of the accepted attendee
 // type values: required, optional, or resource (case-insensitive).
 //

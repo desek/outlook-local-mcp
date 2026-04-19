@@ -381,3 +381,53 @@ func TestTruncate(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRecipients_Valid(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name  string
+		value string
+		want  int
+	}{
+		{"empty", "", 0},
+		{"whitespace only", "   ", 0},
+		{"single", "alice@example.com", 1},
+		{"two with spaces", "alice@example.com, bob@example.com", 2},
+		{"trailing comma", "alice@example.com,", 1},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := ValidateRecipients(tc.value, "to_recipients")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(got) != tc.want {
+				t.Errorf("len = %d, want %d", len(got), tc.want)
+			}
+		})
+	}
+}
+
+func TestValidateRecipients_Invalid(t *testing.T) {
+	t.Parallel()
+	if _, err := ValidateRecipients("alice@example.com, not-an-email", "to_recipients"); err == nil {
+		t.Error("expected error for invalid email")
+	} else if !strings.Contains(err.Error(), "to_recipients") {
+		t.Errorf("expected param name in error, got: %v", err)
+	}
+}
+
+func TestValidateContentType(t *testing.T) {
+	t.Parallel()
+	for _, v := range []string{"text", "html", "TEXT", "Html"} {
+		if err := ValidateContentType(v); err != nil {
+			t.Errorf("expected %q to be valid, got: %v", v, err)
+		}
+	}
+	for _, v := range []string{"", "xml", "markdown"} {
+		if err := ValidateContentType(v); err == nil {
+			t.Errorf("expected %q to be invalid", v)
+		}
+	}
+}
