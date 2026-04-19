@@ -125,6 +125,34 @@
       "description": "Get full details of a single email message by its ID. Returns body content, all recipients, headers, and attachment metadata."
     },
     {
+      "name": "mail_get_conversation",
+      "description": "Get all messages in a conversation thread by conversation ID, ordered chronologically. Useful for reading full email threads."
+    },
+    {
+      "name": "mail_get_attachment",
+      "description": "Download a specific attachment from a message by message ID and attachment ID. Returns metadata and base64-encoded content subject to size limits."
+    },
+    {
+      "name": "mail_create_draft",
+      "description": "Create a new email draft in the Drafts folder. Supports to/cc/bcc recipients, subject, body (text or HTML), importance, and attachments. Requires Mail.ReadWrite."
+    },
+    {
+      "name": "mail_create_reply_draft",
+      "description": "Create a reply draft to an existing message, with optional reply-all. Preserves quoted content; requires Mail.ReadWrite."
+    },
+    {
+      "name": "mail_create_forward_draft",
+      "description": "Create a forward draft for an existing message with new recipients. Preserves the original message body; requires Mail.ReadWrite."
+    },
+    {
+      "name": "mail_update_draft",
+      "description": "Update fields of an existing mail draft (subject, body, recipients, importance). PATCH semantics — only specified fields change. Requires Mail.ReadWrite."
+    },
+    {
+      "name": "mail_delete_draft",
+      "description": "Delete a mail draft by ID. Only messages in the Drafts folder may be deleted through this tool. Requires Mail.ReadWrite."
+    },
+    {
       "name": "account_add",
       "description": "Add and authenticate a new Microsoft account with isolated token cache and auth record."
     },

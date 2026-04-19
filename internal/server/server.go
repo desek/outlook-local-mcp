@@ -122,6 +122,22 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		s.AddTool(tools.NewListMessagesTool(), wrap("mail_list_messages", "read", tools.NewHandleListMessages(retryCfg, timeout, provenancePropertyID)))
 		s.AddTool(tools.NewSearchMessagesTool(), wrap("mail_search_messages", "read", tools.NewHandleSearchMessages(retryCfg, timeout)))
 		s.AddTool(tools.NewGetMessageTool(), wrap("mail_get_message", "read", tools.NewHandleGetMessage(retryCfg, timeout, provenancePropertyID)))
+
+		// CR-0058: Additional read-only mail tools for conversation threading and
+		// attachment retrieval. Registered under MailEnabled since these only
+		// require Mail.Read (or Mail.ReadWrite when MailManageEnabled escalates).
+		s.AddTool(tools.NewGetConversationTool(), wrap("mail_get_conversation", "read", tools.NewHandleGetConversation(retryCfg, timeout, provenancePropertyID)))
+		s.AddTool(tools.NewGetAttachmentTool(), wrap("mail_get_attachment", "read", tools.NewHandleGetAttachment(retryCfg, timeout, cfg.MaxAttachmentSizeBytes)))
+	}
+
+	// CR-0058: Mail management (draft-centric write) tools. Gated on the
+	// MailManageEnabled feature flag which requires Mail.ReadWrite scope.
+	if cfg.MailManageEnabled {
+		s.AddTool(tools.NewCreateDraftTool(), wrapWrite("mail_create_draft", "write", tools.NewHandleCreateDraft(retryCfg, timeout, provenancePropertyID)))
+		s.AddTool(tools.NewCreateReplyDraftTool(), wrapWrite("mail_create_reply_draft", "write", tools.NewHandleCreateReplyDraft(retryCfg, timeout, provenancePropertyID)))
+		s.AddTool(tools.NewCreateForwardDraftTool(), wrapWrite("mail_create_forward_draft", "write", tools.NewHandleCreateForwardDraft(retryCfg, timeout, provenancePropertyID)))
+		s.AddTool(tools.NewUpdateDraftTool(), wrapWrite("mail_update_draft", "write", tools.NewHandleUpdateDraft(retryCfg, timeout)))
+		s.AddTool(tools.NewDeleteDraftTool(), wrapWrite("mail_delete_draft", "delete", tools.NewHandleDeleteDraft(retryCfg, timeout)))
 	}
 
 	// CR-0030: complete_auth fallback tool for auth_code method. Only
@@ -129,7 +145,10 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	// for browser or device_code flows.
 	toolCount := 21
 	if cfg.MailEnabled {
-		toolCount += 4
+		toolCount += 6
+	}
+	if cfg.MailManageEnabled {
+		toolCount += 5
 	}
 	if cfg.AuthMethod == "auth_code" {
 		s.AddTool(tools.NewCompleteAuthTool(), authMW(observability.WithObservability("complete_auth", m, t, audit.AuditWrap("complete_auth", "write", tools.HandleCompleteAuth(cred, cfg.AuthRecordPath, registry, auth.Scopes(cfg))))))
