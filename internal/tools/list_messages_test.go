@@ -42,7 +42,9 @@ func TestListMessagesTool_HasParameters(t *testing.T) {
 
 	expectedParams := []string{
 		"folder_id", "start_datetime", "end_datetime", "from",
-		"conversation_id", "max_results", "timezone", "account", "output",
+		"conversation_id", "is_read", "is_draft", "has_attachments",
+		"importance", "flag_status",
+		"max_results", "timezone", "account", "output",
 	}
 	for _, param := range expectedParams {
 		if _, ok := schema.Properties[param]; !ok {
@@ -143,7 +145,10 @@ func TestListMessages_NoClient(t *testing.T) {
 // TestListMessages_DateRangeFilter validates that buildMessageFilter constructs
 // the correct OData $filter for date range parameters.
 func TestListMessages_DateRangeFilter(t *testing.T) {
-	filter := buildMessageFilter("2026-03-01T00:00:00Z", "2026-03-15T23:59:59Z", "", "")
+	filter := buildMessageFilter(messageFilterOptions{
+		startDatetime: "2026-03-01T00:00:00Z",
+		endDatetime:   "2026-03-15T23:59:59Z",
+	})
 	expected := "receivedDateTime ge 2026-03-01T00:00:00Z and receivedDateTime le 2026-03-15T23:59:59Z"
 	if filter != expected {
 		t.Errorf("filter = %q, want %q", filter, expected)
@@ -153,7 +158,7 @@ func TestListMessages_DateRangeFilter(t *testing.T) {
 // TestListMessages_ConversationIdFilter validates that buildMessageFilter
 // constructs the correct OData $filter for conversation ID.
 func TestListMessages_ConversationIdFilter(t *testing.T) {
-	filter := buildMessageFilter("", "", "", "AAQkAGI2TGuLAAA=")
+	filter := buildMessageFilter(messageFilterOptions{conversationID: "AAQkAGI2TGuLAAA="})
 	expected := "conversationId eq 'AAQkAGI2TGuLAAA='"
 	if filter != expected {
 		t.Errorf("filter = %q, want %q", filter, expected)
@@ -163,23 +168,83 @@ func TestListMessages_ConversationIdFilter(t *testing.T) {
 // TestListMessages_FromFilter validates that buildMessageFilter constructs the
 // correct OData $filter for sender email address.
 func TestListMessages_FromFilter(t *testing.T) {
-	filter := buildMessageFilter("", "", "alice@contoso.com", "")
+	filter := buildMessageFilter(messageFilterOptions{fromEmail: "alice@contoso.com"})
 	expected := "from/emailAddress/address eq 'alice@contoso.com'"
 	if filter != expected {
 		t.Errorf("filter = %q, want %q", filter, expected)
 	}
 }
 
+// TestListMessages_IsReadFilter validates that buildMessageFilter emits an
+// isRead eq clause only when a non-nil pointer is supplied.
+func TestListMessages_IsReadFilter(t *testing.T) {
+	filter := buildMessageFilter(messageFilterOptions{isRead: boolPtr(false)})
+	expected := "isRead eq false"
+	if filter != expected {
+		t.Errorf("filter = %q, want %q", filter, expected)
+	}
+	filter = buildMessageFilter(messageFilterOptions{isRead: boolPtr(true)})
+	expected = "isRead eq true"
+	if filter != expected {
+		t.Errorf("filter = %q, want %q", filter, expected)
+	}
+	if buildMessageFilter(messageFilterOptions{}) != "" {
+		t.Error("expected nil is_read pointer to produce no filter clause")
+	}
+}
+
+// TestListMessages_IsDraftFilter validates that buildMessageFilter emits the
+// expected isDraft clause when the tri-state pointer is set.
+func TestListMessages_IsDraftFilter(t *testing.T) {
+	filter := buildMessageFilter(messageFilterOptions{isDraft: boolPtr(true)})
+	expected := "isDraft eq true"
+	if filter != expected {
+		t.Errorf("filter = %q, want %q", filter, expected)
+	}
+}
+
+// TestListMessages_HasAttachmentsFilter validates the hasAttachments clause.
+func TestListMessages_HasAttachmentsFilter(t *testing.T) {
+	filter := buildMessageFilter(messageFilterOptions{hasAttachments: boolPtr(true)})
+	expected := "hasAttachments eq true"
+	if filter != expected {
+		t.Errorf("filter = %q, want %q", filter, expected)
+	}
+}
+
+// TestListMessages_ImportanceFilter validates the importance eq clause.
+func TestListMessages_ImportanceFilter(t *testing.T) {
+	filter := buildMessageFilter(messageFilterOptions{importance: "high"})
+	expected := "importance eq 'high'"
+	if filter != expected {
+		t.Errorf("filter = %q, want %q", filter, expected)
+	}
+}
+
+// TestListMessages_FlagStatusFilter validates the flag/flagStatus clause.
+func TestListMessages_FlagStatusFilter(t *testing.T) {
+	filter := buildMessageFilter(messageFilterOptions{flagStatus: "flagged"})
+	expected := "flag/flagStatus eq 'flagged'"
+	if filter != expected {
+		t.Errorf("filter = %q, want %q", filter, expected)
+	}
+}
+
 // TestListMessages_CombinedFilters validates that buildMessageFilter ANDs
-// multiple filter conditions together.
+// multiple filter conditions together, including the Phase 3 additions.
 func TestListMessages_CombinedFilters(t *testing.T) {
-	filter := buildMessageFilter(
-		"2026-03-01T00:00:00Z",
-		"2026-03-15T23:59:59Z",
-		"alice@contoso.com",
-		"AAQkAGI2TGuLAAA=",
-	)
-	expected := "receivedDateTime ge 2026-03-01T00:00:00Z and receivedDateTime le 2026-03-15T23:59:59Z and from/emailAddress/address eq 'alice@contoso.com' and conversationId eq 'AAQkAGI2TGuLAAA='"
+	filter := buildMessageFilter(messageFilterOptions{
+		startDatetime:  "2026-03-01T00:00:00Z",
+		endDatetime:    "2026-03-15T23:59:59Z",
+		fromEmail:      "alice@contoso.com",
+		conversationID: "AAQkAGI2TGuLAAA=",
+		isRead:         boolPtr(false),
+		isDraft:        boolPtr(false),
+		hasAttachments: boolPtr(true),
+		importance:     "high",
+		flagStatus:     "flagged",
+	})
+	expected := "receivedDateTime ge 2026-03-01T00:00:00Z and receivedDateTime le 2026-03-15T23:59:59Z and from/emailAddress/address eq 'alice@contoso.com' and conversationId eq 'AAQkAGI2TGuLAAA=' and isRead eq false and isDraft eq false and hasAttachments eq true and importance eq 'high' and flag/flagStatus eq 'flagged'"
 	if filter != expected {
 		t.Errorf("filter = %q, want %q", filter, expected)
 	}
@@ -188,7 +253,7 @@ func TestListMessages_CombinedFilters(t *testing.T) {
 // TestListMessages_NoFilters validates that buildMessageFilter returns an empty
 // string when no filter parameters are provided.
 func TestListMessages_NoFilters(t *testing.T) {
-	filter := buildMessageFilter("", "", "", "")
+	filter := buildMessageFilter(messageFilterOptions{})
 	if filter != "" {
 		t.Errorf("filter = %q, want empty string", filter)
 	}
