@@ -221,6 +221,27 @@ func TestCancelMeetingToolAnnotations(t *testing.T) {
 	})
 }
 
+// TestLoginAccount_Annotations verifies all 5 annotations on account_login (CR-0056).
+func TestLoginAccount_Annotations(t *testing.T) {
+	assertAnnotations(t, tools.NewLoginAccountTool(), annotationExpectation{
+		title: "Log In Account", readOnly: false, destructive: false, idempotent: false, openWorld: true,
+	})
+}
+
+// TestLogoutAccount_Annotations verifies all 5 annotations on account_logout (CR-0056).
+func TestLogoutAccount_Annotations(t *testing.T) {
+	assertAnnotations(t, tools.NewLogoutAccountTool(), annotationExpectation{
+		title: "Log Out Account", readOnly: false, destructive: false, idempotent: true, openWorld: false,
+	})
+}
+
+// TestRefreshAccount_Annotations verifies all 5 annotations on account_refresh (CR-0056).
+func TestRefreshAccount_Annotations(t *testing.T) {
+	assertAnnotations(t, tools.NewRefreshAccountTool(), annotationExpectation{
+		title: "Refresh Account Token", readOnly: false, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
 // TestRemoveAccountToolAnnotations verifies all 5 annotations on account_remove.
 func TestRemoveAccountToolAnnotations(t *testing.T) {
 	assertAnnotations(t, tools.NewRemoveAccountTool(), annotationExpectation{

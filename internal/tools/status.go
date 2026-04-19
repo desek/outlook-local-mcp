@@ -26,7 +26,10 @@ import (
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewStatusTool() mcp.Tool {
 	return mcp.NewTool("status",
-		mcp.WithDescription("Return server health summary: version, timezone, account authentication state, and uptime. No parameters required. Does not call Graph API."),
+		mcp.WithDescription(
+			"Return server health summary: version, timezone, per-account authentication state (including UPN and auth_method), and uptime. No parameters required. Does not call Graph API. "+
+				"The accounts section is an authoritative source for account selection decisions: disconnected accounts are first-class entries that MUST NOT be ignored when deciding which account to operate on.",
+		),
 		mcp.WithTitleAnnotation("Server Status"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),
@@ -60,14 +63,24 @@ type statusResponse struct {
 	Config statusConfig `json:"config"`
 }
 
-// statusAccount represents a single account's label and authentication state
-// in the status response.
+// statusAccount represents a single account's label, UPN, auth method, and
+// authentication state in the status response.
 type statusAccount struct {
 	// Label is the unique human-readable identifier for this account.
 	Label string `json:"label"`
 
 	// Authenticated indicates whether this account has a valid credential.
 	Authenticated bool `json:"authenticated"`
+
+	// UPN is the persisted User Principal Name (e.g., "alice@contoso.com").
+	// Populated from the registry entry's Email field; may be empty for
+	// accounts created before CR-0056 that have not yet been resolved.
+	UPN string `json:"upn"`
+
+	// AuthMethod is the authentication method configured for this account
+	// (e.g., "browser", "device_code", "auth_code"). May be empty when the
+	// account was registered without a persisted method.
+	AuthMethod string `json:"auth_method"`
 }
 
 // statusConfig contains all six configuration groups exposed by the status
@@ -239,6 +252,8 @@ func HandleStatus(cfg config.Config, registry *auth.AccountRegistry, startTime t
 			accounts = append(accounts, statusAccount{
 				Label:         entry.Label,
 				Authenticated: entry.Authenticated,
+				UPN:           entry.Email,
+				AuthMethod:    entry.AuthMethod,
 			})
 		}
 

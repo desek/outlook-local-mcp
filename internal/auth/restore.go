@@ -180,6 +180,15 @@ func restoreOne(
 		CacheName:      cacheName,
 	}
 
+	// Populate Email from the persisted UPN so that downstream surfaces
+	// (elicitation, status, confirmation lines) can display identity
+	// information at startup without a Graph /me call. Accounts persisted
+	// before CR-0056 have an empty UPN and fall back to lazy resolution
+	// via EnsureEmail on first use.
+	if acct.UPN != "" {
+		entry.Email = acct.UPN
+	}
+
 	// Skip silent token acquisition for device_code accounts. Without a
 	// cached token, DeviceCodeCredential.GetToken triggers the device code
 	// callback (printing to stderr) and then times out — wasting 5 seconds

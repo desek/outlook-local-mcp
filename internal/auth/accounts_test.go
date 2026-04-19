@@ -124,6 +124,68 @@ func TestRemoveAccountConfig(t *testing.T) {
 	}
 }
 
+// TestUpdateAccountUPN_Success verifies that UpdateAccountUPN persists the
+// supplied UPN onto the matching account entry in accounts.json.
+func TestUpdateAccountUPN_Success(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "accounts.json")
+
+	initial := []AccountConfig{
+		{Label: "work", ClientID: "aaaa", TenantID: "tenant-a", AuthMethod: "browser"},
+	}
+	if err := SaveAccounts(path, initial); err != nil {
+		t.Fatalf("SaveAccounts: %v", err)
+	}
+
+	if err := UpdateAccountUPN(path, "work", "alice@contoso.com"); err != nil {
+		t.Fatalf("UpdateAccountUPN: %v", err)
+	}
+
+	got, err := LoadAccounts(path)
+	if err != nil {
+		t.Fatalf("LoadAccounts: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("LoadAccounts returned %d accounts, want 1", len(got))
+	}
+	if got[0].UPN != "alice@contoso.com" {
+		t.Errorf("UPN = %q, want %q", got[0].UPN, "alice@contoso.com")
+	}
+}
+
+// TestUpdateAccountUPN_NotFound verifies that UpdateAccountUPN is a silent
+// no-op when the label is not present in accounts.json, leaving the file
+// unchanged.
+func TestUpdateAccountUPN_NotFound(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "accounts.json")
+
+	initial := []AccountConfig{
+		{Label: "work", ClientID: "aaaa", TenantID: "tenant-a", AuthMethod: "browser"},
+	}
+	if err := SaveAccounts(path, initial); err != nil {
+		t.Fatalf("SaveAccounts: %v", err)
+	}
+
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile before: %v", err)
+	}
+
+	if err := UpdateAccountUPN(path, "ghost", "nobody@example.com"); err != nil {
+		t.Fatalf("UpdateAccountUPN: %v", err)
+	}
+
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile after: %v", err)
+	}
+
+	if string(before) != string(after) {
+		t.Error("file content changed when label was not found")
+	}
+}
+
 // TestRemoveAccountConfig_NotFound verifies that RemoveAccountConfig returns
 // no error and leaves the file unchanged when the label is not found.
 func TestRemoveAccountConfig_NotFound(t *testing.T) {

@@ -43,7 +43,7 @@ func NewCompleteAuthTool() mcp.Tool {
 			mcp.Description("The full URL from the browser's address bar after signing in."),
 		),
 		mcp.WithString("account",
-			mcp.Description("Account label for multi-account setups. When omitted, the default account is used."),
+			mcp.Description("Account label (or UPN) that was provided to account_add when initiating this auth_code authentication. This ties the returned redirect URL back to the correct pending credential; do not assume a default account."),
 		),
 	)
 }

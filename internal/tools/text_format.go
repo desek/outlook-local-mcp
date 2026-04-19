@@ -492,12 +492,17 @@ func toInt(v any) int {
 }
 
 // FormatAccountsText formats a slice of account maps into a numbered
-// plain-text listing showing each account's label, authentication state,
-// and email address when available.
+// plain-text listing showing each account's label, User Principal Name (UPN)
+// when available, authentication state, and auth_method (CR-0056).
+//
+// Format: "N. label — upn (state, auth_method)". When the UPN is empty the
+// em-dash and UPN portion are omitted; when auth_method is empty only the
+// state is shown inside the parentheses.
 //
 // Parameters:
 //   - accounts: slice of account maps, each expected to contain "label"
-//     (string), "authenticated" (bool), and optionally "email" (string) keys.
+//     (string), "authenticated" (bool), and optionally "email" (string) and
+//     "auth_method" (string) keys.
 //
 // Returns a formatted plain-text string. Returns "No accounts registered."
 // when the slice is nil or empty.
@@ -515,15 +520,20 @@ func FormatAccountsText(accounts []map[string]any) string {
 			label = "(unnamed)"
 		}
 		authed, _ := a["authenticated"].(bool)
-		state := "not authenticated"
+		state := "disconnected"
 		if authed {
 			state = "authenticated"
 		}
 		email, _ := a["email"].(string)
+		method, _ := a["auth_method"].(string)
+		parenthetical := state
+		if method != "" {
+			parenthetical = state + ", " + method
+		}
 		if email != "" {
-			fmt.Fprintf(&b, "%d. %s (%s) — %s\n", i+1, label, state, email)
+			fmt.Fprintf(&b, "%d. %s — %s (%s)\n", i+1, label, email, parenthetical)
 		} else {
-			fmt.Fprintf(&b, "%d. %s (%s)\n", i+1, label, state)
+			fmt.Fprintf(&b, "%d. %s (%s)\n", i+1, label, parenthetical)
 		}
 	}
 
@@ -532,26 +542,40 @@ func FormatAccountsText(accounts []map[string]any) string {
 	return b.String()
 }
 
-// FormatAccountLine returns a formatted "Account: label (email)" line
-// suitable for appending to write-tool confirmation responses. When email is
-// empty, the email portion is omitted. When label is empty, an empty string
-// is returned.
+// FormatAccountLine returns a formatted "Account: label (upn)" line suitable
+// for appending to write-tool confirmation responses. UPN is always included
+// when non-empty (after CR-0056, UPN is persisted so it should almost always
+// be available). An optional disconnected-account advisory is appended on a
+// trailing line so the LLM raises the broader account landscape rather than
+// silently operating on the auto-selected account (CR-0056 FR-52 / AC-17).
 //
 // Parameters:
 //   - label: the account label (e.g., "default", "work").
-//   - email: the account email address; may be empty.
+//   - email: the account email/UPN address; may be empty.
+//   - advisory: optional advisory text produced by the AccountResolver when
+//     auto-selection coexists with disconnected accounts. Empty when no
+//     advisory applies.
 //
-// Returns a single-line string or empty string when label is empty.
+// Returns a single- or two-line string, or the empty string when label is
+// empty.
 //
 // Side effects: none.
-func FormatAccountLine(label, email string) string {
+func FormatAccountLine(label, email string, advisory ...string) string {
 	if label == "" {
 		return ""
 	}
+	var base string
 	if email != "" {
-		return fmt.Sprintf("Account: %s (%s)", label, email)
+		base = fmt.Sprintf("Account: %s (%s)", label, email)
+	} else {
+		base = "Account: " + label
 	}
-	return "Account: " + label
+	for _, a := range advisory {
+		if a != "" {
+			return base + "\n" + a
+		}
+	}
+	return base
 }
 
 // FormatStatusText formats a statusResponse struct into a human-readable
@@ -573,15 +597,26 @@ func FormatStatusText(status statusResponse) string {
 	fmt.Fprintf(&b, "Timezone: %s\n", status.Timezone)
 	fmt.Fprintf(&b, "Uptime: %s\n", formatUptime(status.ServerUptimeSeconds))
 
-	// Accounts section.
+	// Accounts section. Disconnected accounts are first-class entries and are
+	// rendered with their persisted UPN and auth_method so the LLM and user
+	// can see the full landscape (CR-0056 FR-31/FR-32).
 	if len(status.Accounts) > 0 {
 		b.WriteString("\nAccounts:\n")
 		for _, acct := range status.Accounts {
-			state := "not authenticated"
+			state := "disconnected"
 			if acct.Authenticated {
 				state = "authenticated"
 			}
-			fmt.Fprintf(&b, "  %s: %s\n", acct.Label, state)
+			switch {
+			case acct.UPN != "" && acct.AuthMethod != "":
+				fmt.Fprintf(&b, "  %s: %s — %s (%s)\n", acct.Label, state, acct.UPN, acct.AuthMethod)
+			case acct.UPN != "":
+				fmt.Fprintf(&b, "  %s: %s — %s\n", acct.Label, state, acct.UPN)
+			case acct.AuthMethod != "":
+				fmt.Fprintf(&b, "  %s: %s (%s)\n", acct.Label, state, acct.AuthMethod)
+			default:
+				fmt.Fprintf(&b, "  %s: %s\n", acct.Label, state)
+			}
 		}
 	}
 

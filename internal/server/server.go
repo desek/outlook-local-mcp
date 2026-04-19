@@ -21,9 +21,10 @@ import (
 //
 //	authMW -> accountResolverMW -> WithObservability -> ReadOnlyGuard (write tools) -> AuditWrap -> Handler
 //
-// Account management tools (add_account, remove_account, list_accounts) have
-// their own chains. They do NOT go through AccountResolver (they manage the
-// registry itself) or ReadOnlyGuard (they are not calendar operations).
+// Account management tools (add_account, remove_account, list_accounts,
+// login_account, logout_account, refresh_account) have their own chains.
+// They do NOT go through AccountResolver (they manage the registry itself)
+// or ReadOnlyGuard (they are not calendar operations).
 //
 // When cfg.AuthMethod is "auth_code", the complete_auth fallback tool is
 // registered to support clients that do not have elicitation capability.
@@ -71,7 +72,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	// CR-0006: Read-only calendar tools.
 	s.AddTool(tools.NewListCalendarsTool(), wrap("calendar_list", "read", tools.NewHandleListCalendars(retryCfg, timeout)))
 	s.AddTool(tools.NewListEventsTool(), wrap("calendar_list_events", "read", tools.NewHandleListEvents(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-	s.AddTool(tools.NewGetEventTool(), wrap("calendar_get_event", "read", tools.NewHandleGetEvent(retryCfg, timeout, provenancePropertyID)))
+	s.AddTool(tools.NewGetEventTool(), wrap("calendar_get_event", "read", tools.NewHandleGetEvent(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
 
 	// CR-0008: Create and update event tools.
 	s.AddTool(tools.NewCreateEventTool(), wrapWrite("calendar_create_event", "write", tools.HandleCreateEvent(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
@@ -103,6 +104,13 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	s.AddTool(tools.NewListAccountsTool(), authMW(observability.WithObservability("account_list", m, t, audit.AuditWrap("account_list", "read", tools.HandleListAccounts(registry)))))
 	s.AddTool(tools.NewRemoveAccountTool(), authMW(observability.WithObservability("account_remove", m, t, audit.AuditWrap("account_remove", "write", tools.HandleRemoveAccount(registry, cfg.AccountsPath)))))
 
+	// CR-0056: Account lifecycle tools (login, logout, refresh). Same pattern as
+	// other account management tools: authMW -> WithObservability -> AuditWrap.
+	// They manage the registry directly and do NOT use AccountResolver.
+	s.AddTool(tools.NewLoginAccountTool(), authMW(observability.WithObservability("account_login", m, t, audit.AuditWrap("account_login", "write", tools.HandleLoginAccount(registry, cfg)))))
+	s.AddTool(tools.NewLogoutAccountTool(), authMW(observability.WithObservability("account_logout", m, t, audit.AuditWrap("account_logout", "write", tools.HandleLogoutAccount(registry)))))
+	s.AddTool(tools.NewRefreshAccountTool(), authMW(observability.WithObservability("account_refresh", m, t, audit.AuditWrap("account_refresh", "write", tools.HandleRefreshAccount(registry, cfg)))))
+
 	// CR-0037: Status diagnostic tool. No auth middleware, no account
 	// resolver — purely reads in-memory state with no Graph API calls.
 	s.AddTool(tools.NewStatusTool(), observability.WithObservability("status", m, t, audit.AuditWrap("status", "read", tools.HandleStatus(cfg, registry, time.Now()))))
@@ -119,7 +127,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	// CR-0030: complete_auth fallback tool for auth_code method. Only
 	// registered when auth_code is active, since the tool is meaningless
 	// for browser or device_code flows.
-	toolCount := 18
+	toolCount := 21
 	if cfg.MailEnabled {
 		toolCount += 4
 	}

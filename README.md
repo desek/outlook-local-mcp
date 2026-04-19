@@ -39,8 +39,8 @@ On first tool call, sign in with a device code. No Entra ID app registration or 
 
 ## Features
 
-- **Up to 23 MCP tools** -- 14 calendar tools (list, get, search, free/busy, create event, create meeting, update event, update meeting, delete, cancel meeting, respond, reschedule event, reschedule meeting), 4 mail tools (list folders, list messages, search messages, get message; opt-in via `OUTLOOK_MCP_MAIL_ENABLED`), 3 account management tools (add, list, remove), 1 diagnostic tool (`status`), plus `complete_auth` (registered when using `auth_code` method). Without mail: 19 tools (18 without `complete_auth`). Event tools handle personal calendar entries; meeting tools handle events with attendees and include confirmation guidance (see CR-0054)
-- **Multi-account support** -- manage multiple Microsoft accounts simultaneously with per-account token isolation; accounts persist across server restarts via `accounts.json` (see CR-0025, CR-0032)
+- **Up to 26 MCP tools** -- 14 calendar tools (list, get, search, free/busy, create event, create meeting, update event, update meeting, delete, cancel meeting, respond, reschedule event, reschedule meeting), 4 mail tools (list folders, list messages, search messages, get message; opt-in via `OUTLOOK_MCP_MAIL_ENABLED`), 6 account management tools (add, list, remove, login, logout, refresh; see CR-0056), 1 diagnostic tool (`status`), plus `complete_auth` (registered when using `auth_code` method). Without mail: 22 tools (21 without `complete_auth`). Event tools handle personal calendar entries; meeting tools handle events with attendees and include confirmation guidance (see CR-0054)
+- **Multi-account support** -- manage multiple Microsoft accounts simultaneously with per-account token isolation and explicit lifecycle control (login/logout/refresh); accounts persist across server restarts via `accounts.json`, keyed by user-chosen label with the User Principal Name (UPN) persisted as canonical identity (see CR-0025, CR-0032, CR-0056)
 - **Lazy authentication** -- authenticates on first tool call, not at startup; device code flow (default) displays a URL and code for simple sign-in (see CR-0034). Smart auth method defaulting infers the best method based on client ID (see CR-0034)
 - **Persistent token cache** -- OS-native secure storage (macOS Keychain, Linux libsecret, Windows DPAPI) for desktop release builds (CGo-enabled); AES-256-GCM encrypted file cache (`~/.outlook-local-mcp/token_cache.bin`) as fallback or for container builds. Configurable via `OUTLOOK_MCP_TOKEN_STORAGE` (`auto`, `keychain`, `file`). See CR-0037, CR-0038
 - **Read-only mode** -- toggle to disable all write operations
@@ -199,22 +199,37 @@ Authentication prompts use the MCP Elicitation API when supported by the client.
 
 ## Multi-Account Support
 
-The server supports managing multiple Microsoft accounts simultaneously (see CR-0025, CR-0032). A "default" account is automatically registered at startup using the server's configured credentials. Additional accounts can be added at runtime via the `account_add` tool and are automatically persisted to `accounts.json`. On subsequent startups, persisted accounts are restored with silent token acquisition from the per-account cache. Accounts with expired tokens are still registered -- re-authentication is handled automatically by the auth middleware on first tool call.
+The server supports managing multiple Microsoft accounts simultaneously (see CR-0025, CR-0032, CR-0056). A "default" account is automatically registered at startup using the server's configured credentials. Additional accounts can be added at runtime via the `account_add` tool and are automatically persisted to `accounts.json`. On subsequent startups, persisted accounts are restored with silent token acquisition from the per-account cache. Accounts with expired tokens are still registered as **disconnected** -- they remain visible in `account_list` and `status` and can be reconnected explicitly via `account_login`, or will be re-authenticated automatically by the auth middleware on first tool call.
+
+### Account identity (UPN)
+
+Each account is keyed by a user-chosen `label`, but the User Principal Name (UPN, e.g. `alice@contoso.com`) resolved from Microsoft Graph `/me` is the canonical identity and is persisted to `accounts.json` in the `upn` field (see CR-0056). UPN is available immediately at startup without a Graph API call, is shown in all account surfaces (`account_list`, `status`, elicitation, write-tool confirmations), and can be used interchangeably with the label when passing the `account` parameter to any tool -- `account=alice@contoso.com` and `account=work` both resolve the same entry (label lookup is tried first, then case-insensitive UPN fallback).
 
 ### Account management tools
 
-- **`account_add`** -- Register and authenticate a new Microsoft account. Accepts a required `label` and optional `client_id`, `tenant_id`, and `auth_method` parameters. Each account gets an isolated token cache partition and auth record file.
-- **`account_list`** -- List all registered accounts and their authentication status.
-- **`account_remove`** -- Remove a registered account by label. The "default" account cannot be removed.
+- **`account_add`** -- Register and authenticate a new Microsoft account. Accepts a required `label` and optional `client_id`, `tenant_id`, and `auth_method` parameters. Resolves and persists the account's UPN after successful authentication. Each account gets an isolated token cache partition and auth record file.
+- **`account_list`** -- List all registered accounts (both connected and disconnected) with label, UPN, authentication state, and `auth_method`. This is the authoritative source for account selection decisions.
+- **`account_remove`** -- Remove a registered account by label. Works on both connected and disconnected accounts. Clears the keychain token cache for the account. Use `account_logout` instead to disconnect an account without removing its configuration. The "default" account cannot be removed.
+- **`account_login`** (CR-0056) -- Re-authenticate an existing disconnected account using its persisted `auth_method`, `client_id`, and `tenant_id`. Uses the same inline authentication flow as `account_add`. Errors if the account is already connected.
+- **`account_logout`** (CR-0056) -- Disconnect an account without removing it from the registry or `accounts.json`. Clears the Graph client, credential, authenticator, and keychain token cache; the account remains visible as disconnected and can be reconnected via `account_login`.
+- **`account_refresh`** (CR-0056) -- Force a token refresh for a connected account (calls `GetToken` with `ForceRefresh=true`). Returns the new token expiry. Useful after a permission change in Entra ID or when token staleness is suspected.
+
+Tool descriptions for `account_login`, `account_logout`, `account_refresh`, and `account_remove` direct the LLM to proactively suggest these operations when account-state conditions warrant (e.g., a disconnected account surfaced in `account_list`).
 
 ### Account selection
 
-All 14 calendar tools and 4 mail tools (when enabled) accept an optional `account` parameter to target a specific account:
+All 14 calendar tools and 4 mail tools (when enabled) accept an optional `account` parameter (label or UPN) to target a specific account:
 
-- **Explicit selection:** Pass `account: "work"` to use the account with that label.
-- **Single account:** When only one account is registered, it is auto-selected (no `account` parameter needed).
-- **Multiple accounts:** When multiple authenticated accounts are registered and no `account` parameter is provided, the server uses the MCP Elicitation API to prompt the user to select an account. Only authenticated accounts are considered for selection (see CR-0037).
-- **Elicitation unsupported or fails:** When the MCP client does not support elicitation or any elicitation error occurs, the "default" account is used as a fallback. If no default account exists, the error message lists available accounts and suggests using the `account` parameter (see CR-0037).
+- **Explicit selection:** Pass `account: "work"` or `account: "alice@contoso.com"` -- the resolver tries label lookup first, then UPN fallback (see CR-0056).
+- **Explicit selection of a disconnected account:** Returns an actionable error directing the user to `account_login` to re-authenticate.
+- **Single authenticated account, no others:** Auto-selected silently.
+- **Single authenticated account with disconnected siblings:** Auto-selected, but the resolution result includes an advisory naming the disconnected accounts by UPN so the LLM can surface them to the user instead of silently proceeding (see CR-0056, FR-52/AC-17).
+- **Multiple authenticated accounts:** The server uses the MCP Elicitation API to prompt for selection. The enum includes all registered accounts (authenticated and disconnected) formatted as `"label (upn)"` with state indication (see CR-0056). Selecting a disconnected entry returns an error directing to `account_login`.
+- **Zero authenticated + one or more disconnected:** Error message lists the disconnected accounts with their UPNs and suggests `account_login` (or `account_add` if none are registered).
+- **Zero accounts registered:** Error directs the user to `account_add` (no mention of `account_login`, since there is nothing to log in to).
+- **Elicitation unsupported or fails:** The "default" account is used as a fallback. If no default account exists, the error message lists available accounts and suggests using the `account` parameter (see CR-0037).
+
+Tool descriptions explicitly instruct the LLM to never assume a default account, to consult `account_list` or `status` before acting, and to consider disconnected accounts as first-class entries that must not be ignored (see CR-0056, FR-49/FR-50).
 
 ### MCP Elicitation requirement
 
@@ -225,7 +240,7 @@ Multi-account features (account selection prompts, inline authentication during 
 Each account has:
 - Its own token cache partition in OS-native secure storage (`{CACHE_NAME}-{label}`) or encrypted file (`~/.outlook-local-mcp/{CACHE_NAME}-{label}.bin`), depending on the `TOKEN_STORAGE` setting and build type (see CR-0038)
 - Its own auth record file (`{AUTH_RECORD_DIR}/{label}_auth_record.json`)
-- Its own identity configuration persisted in `accounts.json` (label, client_id, tenant_id, auth_method)
+- Its own identity configuration persisted in `accounts.json` (label, client_id, tenant_id, auth_method, upn -- see CR-0056)
 - Its own Graph client instance
 
 The `accounts.json` file stores only non-secret identity metadata. Tokens and credentials are managed separately by the OS-native token cache. The file is written atomically (write to temp file, then rename) to prevent corruption. Accounts persist across server restarts and are restored automatically on startup (see CR-0032).
@@ -309,13 +324,13 @@ Add to your `.mcp.json`:
 
 ## Tools Reference
 
-All calendar and mail tools accept an optional `account` parameter (string) to select which registered account to use. If omitted, the default account is used. Use `account_list` to see available accounts. When only one account is registered, it is auto-selected. When multiple authenticated accounts exist and the client supports MCP Elicitation, the server prompts for selection; otherwise, the default account is used as a fallback (see CR-0037).
+All calendar and mail tools accept an optional `account` parameter (string -- accepts either a label or a UPN, see CR-0056) to select which registered account to use. The LLM must never assume a default account: use `account_list` or `status` to inspect the authoritative account landscape (including disconnected accounts) and decide explicitly. When exactly one account is authenticated and no other accounts are registered, auto-selection happens silently. When exactly one account is authenticated but disconnected accounts also exist, auto-selection still happens but the result carries an advisory naming the disconnected accounts by UPN. When multiple authenticated accounts exist and the client supports MCP Elicitation, the server prompts for selection (enum shows `label (upn)` plus state); otherwise, the default account is used as a fallback (see CR-0037, CR-0056).
 
 ### Account Management Tools
 
 #### `account_add`
 
-Register and authenticate a new Microsoft account. Creates a per-account credential with isolated token cache and auth record. After successful authentication and registry addition, the account's identity configuration (label, client_id, tenant_id, auth_method) is persisted to `accounts.json` for automatic restoration on server restart (see CR-0032). Authentication is performed inline using MCP Elicitation when supported. When the client does not support elicitation, the tool returns actionable instructions via tool result text: auth URL and `complete_auth` instructions for `auth_code`, the device code for `device_code`, or a descriptive timeout message for `browser` (see CR-0031). For `device_code` without elicitation, the authentication goroutine continues polling in the background; calling `account_add` again with the same label completes registration once the user has authenticated in their browser (see CR-0035).
+Register and authenticate a new Microsoft account. Creates a per-account credential with isolated token cache and auth record. After successful authentication and registry addition, the account's identity configuration (label, client_id, tenant_id, auth_method, and the UPN resolved from Graph `/me`) is persisted to `accounts.json` for automatic restoration on server restart (see CR-0032, CR-0056). Authentication is performed inline using MCP Elicitation when supported. When the client does not support elicitation, the tool returns actionable instructions via tool result text: auth URL and `complete_auth` instructions for `auth_code`, the device code for `device_code`, or a descriptive timeout message for `browser` (see CR-0031). For `device_code` without elicitation, the authentication goroutine continues polling in the background; calling `account_add` again with the same label completes registration once the user has authenticated in their browser (see CR-0035).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -328,7 +343,7 @@ Register and authenticate a new Microsoft account. Creates a per-account credent
 
 #### `account_list`
 
-List all registered accounts and their authentication status.
+List all registered accounts (both authenticated and disconnected) with `label`, `upn`, authentication state, and `auth_method`. This is the authoritative source for account-selection decisions -- disconnected accounts are first-class entries and must not be ignored. Text format: `"N. label — upn (state, auth_method)"` (see CR-0056).
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
@@ -338,11 +353,41 @@ List all registered accounts and their authentication status.
 
 #### `account_remove`
 
-Remove a registered account from the server. The "default" account cannot be removed. Removes the account from both the in-memory registry and the persistent `accounts.json` file (see CR-0032). Does not delete the auth record file from disk.
+Remove a registered account from the server. Works on both connected and disconnected accounts. Removes the account from the in-memory registry and the persistent `accounts.json` file, and clears the keychain token cache partition for the account (see CR-0032, CR-0056). Does not delete the auth record file from disk. The "default" account cannot be removed. Use `account_logout` instead when you want to disconnect the account without removing its configuration.
 
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `label` | string | Yes | The label of the account to remove |
+
+---
+
+#### `account_login`
+
+Re-authenticate an existing disconnected account using its persisted `auth_method`, `client_id`, and `tenant_id`. Uses the same inline authentication flow as `account_add` (browser, device_code, or auth_code with elicitation). On success, the account's `Authenticated` flag is set to `true`, a new Graph client is created, and the UPN is refreshed from `/me`. Returns an error if the account is already connected (see CR-0056).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `label` | string | Yes | The label of the disconnected account to re-authenticate |
+
+---
+
+#### `account_logout`
+
+Disconnect an account without removing it from the registry or `accounts.json`. Clears the Graph client, credential, authenticator, and the cached token from the account's keychain partition, and sets `Authenticated = false`. The account remains visible in `account_list` and `status` as disconnected and can be reconnected via `account_login`. Returns an error if the account is already disconnected (see CR-0056).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `label` | string | Yes | The label of the account to disconnect |
+
+---
+
+#### `account_refresh`
+
+Force a token refresh for a connected account. Calls `GetToken` with `ForceRefresh=true` on the account's credential and returns the new token expiry time. Useful after a permission change in Entra ID or when token staleness is suspected. Returns an error if the account is disconnected (see CR-0056).
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `label` | string | Yes | The label of the authenticated account to refresh |
 
 ---
 
@@ -373,7 +418,7 @@ Return server health summary including version, timezone, account authentication
 |---|---|---|
 | `version` | string | Server version (e.g., `1.0.0` or `dev`) |
 | `timezone` | string | IANA timezone name configured for calendar operations |
-| `accounts` | array | Each entry has `label` (string) and `authenticated` (bool) |
+| `accounts` | array | Each entry has `label` (string), `upn` (string), `authenticated` (bool), and `auth_method` (string) -- always includes disconnected accounts (see CR-0056) |
 | `server_uptime_seconds` | number | Elapsed seconds since server started |
 | `config` | object | Effective runtime configuration grouped into 6 categories (see below) |
 

@@ -56,7 +56,7 @@ func NewGetEventTool() mcp.Tool {
 			mcp.Description("IANA timezone name for returned event times (e.g., America/New_York)."),
 		),
 		mcp.WithString("account",
-			mcp.Description("Account label to use. If omitted, the default account is used. Use account_list to see available accounts."),
+			mcp.Description(AccountParamDescription),
 		),
 		mcp.WithString("output",
 			mcp.Description("Output mode: 'text' (default) shows body preview in plain text, 'summary' returns compact JSON with bodyPreview field, 'raw' returns full Graph API fields including full body with HTML content."),
@@ -72,6 +72,9 @@ func NewGetEventTool() mcp.Tool {
 // Parameters:
 //   - retryCfg: retry configuration for transient Graph API errors.
 //   - timeout: the maximum duration for the Graph API call.
+//   - defaultTimezone: the IANA timezone name from server config used as the
+//     default when the caller omits the timezone parameter, matching
+//     calendar_list_events / calendar_search_events behavior.
 //   - provenancePropertyID: the full provenance property ID string, built once at
 //     startup. When non-empty, $expand is added to request the provenance extended
 //     property, and the serialized event includes "createdByMcp" when tagged.
@@ -87,7 +90,7 @@ func NewGetEventTool() mcp.Tool {
 //   - Serializes the event including body, attendees, recurrence, and metadata.
 //   - Returns Graph API errors via mcp.NewToolResultError with FormatGraphError.
 //   - Logs entry at debug level, completion at info level, errors at error level.
-func NewHandleGetEvent(retryCfg graph.RetryConfig, timeout time.Duration, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func NewHandleGetEvent(retryCfg graph.RetryConfig, timeout time.Duration, defaultTimezone, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := slog.With("tool", "calendar_get_event")
 		start := time.Now()
@@ -112,8 +115,14 @@ func NewHandleGetEvent(retryCfg graph.RetryConfig, timeout time.Duration, proven
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		// Extract optional parameter.
+		// Extract optional parameter; when the caller omits timezone, fall
+		// back to the server-configured default so the text output shows
+		// event times in the operator's local timezone rather than UTC. This
+		// mirrors calendar_list_events / calendar_search_events behavior.
 		timezone := request.GetString("timezone", "")
+		if timezone == "" {
+			timezone = defaultTimezone
+		}
 		if timezone != "" {
 			if err := validate.ValidateTimezone(timezone, "timezone"); err != nil {
 				return mcp.NewToolResultError(err.Error()), nil

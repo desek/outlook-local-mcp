@@ -112,6 +112,14 @@ type AccountInfo struct {
 	// Email is the authenticated user's email address fetched from /me.
 	// Empty when EnsureEmail has not yet run successfully for this account.
 	Email string
+
+	// Advisory is an optional human-readable note produced during account
+	// resolution — for example, when the resolver auto-selects the sole
+	// authenticated account while disconnected siblings also exist. Downstream
+	// response formatters surface this string so the LLM and the user see the
+	// broader account landscape rather than silently using one account.
+	// Empty when no advisory applies.
+	Advisory string
 }
 
 // accountInfoKeyType is the unexported context key type for AccountInfo storage.

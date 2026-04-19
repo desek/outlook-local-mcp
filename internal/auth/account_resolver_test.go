@@ -315,7 +315,8 @@ func TestAccountResolver_ElicitationNotSupported(t *testing.T) {
 }
 
 // TestAccountResolver_ZeroAccounts verifies that the middleware returns an
-// error when no accounts are registered.
+// error directing the user to account_add when no accounts are registered
+// at all (CR-0056 FR-46 / AC-14).
 func TestAccountResolver_ZeroAccounts(t *testing.T) {
 	reg := NewAccountRegistry()
 	state := newTestResolverState(reg, noElicit(t))
@@ -329,8 +330,11 @@ func TestAccountResolver_ZeroAccounts(t *testing.T) {
 		t.Fatal("expected tool error for zero accounts")
 	}
 	text := extractResultText(result)
-	if !contains(text, "no authenticated accounts") {
-		t.Errorf("expected 'no authenticated accounts' in error, got: %s", text)
+	if !contains(text, "no accounts registered") {
+		t.Errorf("expected 'no accounts registered' in error, got: %s", text)
+	}
+	if !contains(text, "account_add") {
+		t.Errorf("expected 'account_add' hint in error, got: %s", text)
 	}
 }
 
@@ -664,6 +668,270 @@ func TestResolveAccount_ElicitationClient_NoFallback(t *testing.T) {
 	// Verify "work" was selected, not "default" (which would indicate fallback).
 	if resolvedClient != workEntry.Client {
 		t.Error("resolved client does not match expected 'work' account; fallback may have triggered incorrectly")
+	}
+}
+
+// TestResolveAccount_ByUPN verifies that the resolver falls back to UPN
+// lookup when the `account` parameter does not match any label
+// (CR-0056 FR-6/FR-8 / AC-3).
+func TestResolveAccount_ByUPN(t *testing.T) {
+	reg := NewAccountRegistry()
+	_ = reg.Add(&AccountEntry{
+		Label:         "work",
+		Email:         "Alice@Contoso.com",
+		Client:        &msgraphsdk.GraphServiceClient{},
+		Authenticated: true,
+	})
+
+	state := newTestResolverState(reg, noElicit(t))
+	handler := state.middleware(passthrough)
+
+	result, err := handler(context.Background(), makeRequest(map[string]any{
+		"account": "alice@contoso.com", // case-insensitive UPN match
+	}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", extractResultText(result))
+	}
+}
+
+// TestResolveAccount_DisconnectedExplicit verifies that explicitly selecting
+// a disconnected account yields an actionable error directing the user to
+// account_login (CR-0056 FR-38 / AC-9).
+func TestResolveAccount_DisconnectedExplicit(t *testing.T) {
+	reg := NewAccountRegistry()
+	_ = reg.Add(&AccountEntry{
+		Label:         "work",
+		Email:         "bob@b.com",
+		Authenticated: false,
+	})
+
+	state := newTestResolverState(reg, noElicit(t))
+	handler := state.middleware(passthrough)
+
+	result, err := handler(context.Background(), makeRequest(map[string]any{"account": "work"}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected tool error for disconnected account")
+	}
+	text := extractResultText(result)
+	if !contains(text, "disconnected") {
+		t.Errorf("expected 'disconnected' in error, got: %s", text)
+	}
+	if !contains(text, "account_login") {
+		t.Errorf("expected 'account_login' hint in error, got: %s", text)
+	}
+}
+
+// TestResolveAccount_AllDisconnected verifies that when zero authenticated
+// accounts exist but one or more disconnected accounts are registered, the
+// resolver returns an error listing them by UPN and suggesting both
+// account_login and account_add (CR-0056 FR-37 / AC-12).
+func TestResolveAccount_AllDisconnected(t *testing.T) {
+	reg := NewAccountRegistry()
+	_ = reg.Add(&AccountEntry{Label: "work", Email: "bob@b.com", Authenticated: false})
+	_ = reg.Add(&AccountEntry{Label: "home", Email: "eve@e.com", Authenticated: false})
+
+	state := newTestResolverState(reg, noElicit(t))
+	handler := state.middleware(passthrough)
+
+	result, err := handler(context.Background(), makeRequest(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected tool error")
+	}
+	text := extractResultText(result)
+	for _, want := range []string{"bob@b.com", "eve@e.com", "account_login", "account_add"} {
+		if !contains(text, want) {
+			t.Errorf("expected %q in error, got: %s", want, text)
+		}
+	}
+}
+
+// TestResolveAccount_ZeroAccounts_NoLoginHint verifies that when the registry
+// is empty, the error directs the user to account_add and does NOT mention
+// account_login (CR-0056 FR-46 / AC-14).
+func TestResolveAccount_ZeroAccounts_NoLoginHint(t *testing.T) {
+	reg := NewAccountRegistry()
+	state := newTestResolverState(reg, noElicit(t))
+	handler := state.middleware(passthrough)
+
+	result, err := handler(context.Background(), makeRequest(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected tool error")
+	}
+	text := extractResultText(result)
+	if !contains(text, "account_add") {
+		t.Errorf("expected 'account_add' hint, got: %s", text)
+	}
+	if contains(text, "account_login") {
+		t.Errorf("did not expect 'account_login' hint for zero-account state, got: %s", text)
+	}
+}
+
+// TestElicitation_ShowsUPN verifies that elicitation enum values include the
+// UPN in "label (upn)" form and that disconnected accounts are surfaced with
+// an explicit state indicator (CR-0056 FR-34/FR-35 / AC-8).
+func TestElicitation_ShowsUPN(t *testing.T) {
+	reg := NewAccountRegistry()
+	_ = reg.Add(&AccountEntry{
+		Label:         "default",
+		Email:         "alice@a.com",
+		Client:        &msgraphsdk.GraphServiceClient{},
+		Authenticated: true,
+	})
+	_ = reg.Add(&AccountEntry{
+		Label:         "work",
+		Email:         "bob@b.com",
+		Client:        &msgraphsdk.GraphServiceClient{},
+		Authenticated: true,
+	})
+	_ = reg.Add(&AccountEntry{
+		Label:         "home",
+		Email:         "eve@e.com",
+		Authenticated: false,
+	})
+
+	var captured []string
+	elicit := func(_ context.Context, req mcp.ElicitationRequest) (*mcp.ElicitationResult, error) {
+		schema := req.Params.RequestedSchema.(map[string]any)
+		props := schema["properties"].(map[string]any)
+		accountProp := props["account"].(map[string]any)
+		captured = accountProp["enum"].([]string)
+		return &mcp.ElicitationResult{
+			ElicitationResponse: mcp.ElicitationResponse{
+				Action:  mcp.ElicitationResponseActionAccept,
+				Content: map[string]any{"account": "default (alice@a.com)"},
+			},
+		}, nil
+	}
+
+	state := newTestResolverState(reg, elicit)
+	handler := state.middleware(passthrough)
+
+	result, err := handler(context.Background(), makeRequest(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", extractResultText(result))
+	}
+
+	if len(captured) != 3 {
+		t.Fatalf("expected 3 enum entries (all accounts), got %d: %v", len(captured), captured)
+	}
+	wantContains := map[string]string{
+		"default (alice@a.com)":           "",
+		"work (bob@b.com)":                "",
+		"home (eve@e.com) — disconnected": "",
+	}
+	got := make(map[string]bool, len(captured))
+	for _, v := range captured {
+		got[v] = true
+	}
+	for want := range wantContains {
+		if !got[want] {
+			t.Errorf("expected enum to contain %q, got: %v", want, captured)
+		}
+	}
+}
+
+// TestAutoSelect_AdvisoryForDisconnectedSiblings verifies that auto-selecting
+// the sole authenticated account attaches a human-readable advisory naming
+// any disconnected sibling accounts by UPN (CR-0056 FR-52 / AC-17).
+func TestAutoSelect_AdvisoryForDisconnectedSiblings(t *testing.T) {
+	reg := NewAccountRegistry()
+	_ = reg.Add(&AccountEntry{
+		Label:         "work",
+		Email:         "alice@contoso.com",
+		Client:        &msgraphsdk.GraphServiceClient{},
+		Authenticated: true,
+	})
+	_ = reg.Add(&AccountEntry{
+		Label:         "personal",
+		Email:         "bob@outlook.com",
+		Authenticated: false,
+	})
+
+	var capturedAdvisory string
+	state := newTestResolverState(reg, noElicit(t))
+	handler := state.middleware(func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		info, _ := AccountInfoFromContext(ctx)
+		capturedAdvisory = info.Advisory
+		return mcp.NewToolResultText("ok"), nil
+	})
+
+	result, err := handler(context.Background(), makeRequest(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", extractResultText(result))
+	}
+	if capturedAdvisory == "" {
+		t.Fatal("expected non-empty advisory")
+	}
+	for _, want := range []string{"personal", "bob@outlook.com", "account_login"} {
+		if !contains(capturedAdvisory, want) {
+			t.Errorf("expected advisory to contain %q, got: %s", want, capturedAdvisory)
+		}
+	}
+}
+
+// TestElicitAccountSelection_FormatNewEnum verifies that the updated
+// elicitation format is parsed correctly on accept and maps the enum string
+// back to the underlying label.
+func TestElicitAccountSelection_FormatNewEnum(t *testing.T) {
+	reg := NewAccountRegistry()
+	_ = reg.Add(&AccountEntry{
+		Label:         "work",
+		Email:         "alice@a.com",
+		Client:        &msgraphsdk.GraphServiceClient{},
+		Authenticated: true,
+	})
+	_ = reg.Add(&AccountEntry{
+		Label:         "personal",
+		Email:         "bob@b.com",
+		Client:        &msgraphsdk.GraphServiceClient{},
+		Authenticated: true,
+	})
+	workEntry, _ := reg.Get("work")
+
+	elicit := func(_ context.Context, _ mcp.ElicitationRequest) (*mcp.ElicitationResult, error) {
+		return &mcp.ElicitationResult{
+			ElicitationResponse: mcp.ElicitationResponse{
+				Action:  mcp.ElicitationResponseActionAccept,
+				Content: map[string]any{"account": "work (alice@a.com)"},
+			},
+		}, nil
+	}
+
+	var resolvedClient *msgraphsdk.GraphServiceClient
+	state := newTestResolverState(reg, elicit)
+	handler := state.middleware(func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		c, _ := GraphClientFromContext(ctx)
+		resolvedClient = c
+		return mcp.NewToolResultText("ok"), nil
+	})
+
+	result, err := handler(context.Background(), makeRequest(nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %v", extractResultText(result))
+	}
+	if resolvedClient != workEntry.Client {
+		t.Error("resolved client does not match 'work'")
 	}
 }
 

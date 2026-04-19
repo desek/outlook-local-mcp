@@ -465,8 +465,8 @@ func TestFormatMailFoldersText_Empty(t *testing.T) {
 	}
 }
 
-// TestFormatAccountsText verifies that accounts are formatted as a numbered
-// list with label and authentication state.
+// TestFormatAccountsText verifies that accounts with no UPN or auth_method
+// fall back to the label-and-state rendering and the total count is correct.
 func TestFormatAccountsText(t *testing.T) {
 	accounts := []map[string]any{
 		{"label": "work", "authenticated": true},
@@ -476,13 +476,32 @@ func TestFormatAccountsText(t *testing.T) {
 	result := FormatAccountsText(accounts)
 
 	if !strings.Contains(result, "1. work (authenticated)") {
-		t.Error("expected '1. work (authenticated)' in output")
+		t.Errorf("expected '1. work (authenticated)' in output, got:\n%s", result)
 	}
-	if !strings.Contains(result, "2. personal (not authenticated)") {
-		t.Error("expected '2. personal (not authenticated)' in output")
+	if !strings.Contains(result, "2. personal (disconnected)") {
+		t.Errorf("expected '2. personal (disconnected)' in output, got:\n%s", result)
 	}
 	if !strings.Contains(result, "2 account(s) total.") {
 		t.Error("expected '2 account(s) total.' in output")
+	}
+}
+
+// TestFormatAccountsText_WithUPNAndMethod verifies the CR-0056 format
+// "N. label — upn (state, auth_method)" for both authenticated and
+// disconnected accounts.
+func TestFormatAccountsText_WithUPNAndMethod(t *testing.T) {
+	accounts := []map[string]any{
+		{"label": "default", "authenticated": true, "email": "alice@contoso.com", "auth_method": "browser"},
+		{"label": "work", "authenticated": false, "email": "bob@contoso.com", "auth_method": "device_code"},
+	}
+
+	result := FormatAccountsText(accounts)
+
+	if !strings.Contains(result, "1. default — alice@contoso.com (authenticated, browser)") {
+		t.Errorf("expected CR-0056 format line for default, got:\n%s", result)
+	}
+	if !strings.Contains(result, "2. work — bob@contoso.com (disconnected, device_code)") {
+		t.Errorf("expected CR-0056 format line for work, got:\n%s", result)
 	}
 }
 
@@ -534,8 +553,8 @@ func TestFormatStatusText(t *testing.T) {
 	if !strings.Contains(result, "work: authenticated") {
 		t.Error("expected work account with authenticated state")
 	}
-	if !strings.Contains(result, "personal: not authenticated") {
-		t.Error("expected personal account with not authenticated state")
+	if !strings.Contains(result, "personal: disconnected") {
+		t.Error("expected personal account with disconnected state")
 	}
 	if !strings.Contains(result, "Features: read-only=off, mail=on, provenance=mcp_created") {
 		t.Error("expected features line")
@@ -543,7 +562,9 @@ func TestFormatStatusText(t *testing.T) {
 }
 
 // TestFormatAccountsText_WithEmail verifies that accounts with an email field
-// display the email alongside the label.
+// display the UPN alongside the label per CR-0056. Accounts with an empty
+// email fall back to the label-only format, and disconnected accounts use the
+// "disconnected" state wording.
 func TestFormatAccountsText_WithEmail(t *testing.T) {
 	accounts := []map[string]any{
 		{"label": "work", "authenticated": true, "email": "work@example.com"},
@@ -552,15 +573,47 @@ func TestFormatAccountsText_WithEmail(t *testing.T) {
 
 	result := FormatAccountsText(accounts)
 
-	if !strings.Contains(result, "work@example.com") {
-		t.Error("expected email address in output for authenticated account")
+	if !strings.Contains(result, "1. work — work@example.com (authenticated)") {
+		t.Errorf("expected formatted account line with email, got:\n%s", result)
 	}
-	if !strings.Contains(result, "1. work (authenticated) — work@example.com") {
-		t.Error("expected formatted account line with email")
+	// Personal has no email — should still render label and disconnected state.
+	if !strings.Contains(result, "2. personal (disconnected)") {
+		t.Errorf("expected disconnected account line without email, got:\n%s", result)
 	}
-	// Personal has no email — should still render label and state.
-	if !strings.Contains(result, "2. personal (not authenticated)") {
-		t.Error("expected account line without email for empty email")
+}
+
+// TestFormatStatusText_WithUPN verifies the status text output renders each
+// account's persisted UPN and auth_method when available (CR-0056 FR-31).
+func TestFormatStatusText_WithUPN(t *testing.T) {
+	status := statusResponse{
+		Version:             "1.2.0",
+		Timezone:            "UTC",
+		ServerUptimeSeconds: 60,
+		Accounts: []statusAccount{
+			{Label: "default", Authenticated: true, UPN: "alice@contoso.com", AuthMethod: "browser"},
+			{Label: "work", Authenticated: false, UPN: "bob@contoso.com", AuthMethod: "device_code"},
+		},
+	}
+
+	result := FormatStatusText(status)
+
+	if !strings.Contains(result, "default: authenticated — alice@contoso.com (browser)") {
+		t.Errorf("expected default line with UPN and auth_method, got:\n%s", result)
+	}
+	if !strings.Contains(result, "work: disconnected — bob@contoso.com (device_code)") {
+		t.Errorf("expected work line with UPN and auth_method, got:\n%s", result)
+	}
+}
+
+// TestFormatAccountLine_IncludesDisconnectedAdvisory verifies that a non-empty
+// advisory is appended on a new line, surfacing the wider account landscape
+// (CR-0056 FR-52).
+func TestFormatAccountLine_IncludesDisconnectedAdvisory(t *testing.T) {
+	advisory := "Note: 'work' is disconnected; run account_login to reconnect."
+	result := FormatAccountLine("default", "alice@contoso.com", advisory)
+	want := "Account: default (alice@contoso.com)\n" + advisory
+	if result != want {
+		t.Errorf("FormatAccountLine = %q, want %q", result, want)
 	}
 }
 

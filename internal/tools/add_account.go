@@ -45,7 +45,8 @@ func NewAddAccountTool() mcp.Tool {
 			"Add and authenticate a new Microsoft account. "+
 				"Call this tool directly when the user wants to connect an account — do not ask them to configure it manually. "+
 				"Performs the full authentication flow inline and presents the result to the user. "+
-				"The label parameter is a short identifier for the account (e.g., the email address or a nickname). "+
+				"After authentication completes, the User Principal Name (UPN) is resolved from Microsoft Graph /me and persisted to accounts.json so subsequent restarts surface the account's identity without an extra API call. "+
+				"The label parameter is a short identifier for the account (e.g., a nickname); the UPN is the canonical identity that tools and surfaces display alongside the label. "+
 				"Leave auth_method blank unless the user explicitly requests a specific method; the server will use its configured default.",
 		),
 		mcp.WithString("label",
@@ -250,7 +251,10 @@ func (s *addAccountState) handleAddAccount(registry *auth.AccountRegistry, cfg c
 			}); err != nil {
 				logger.Warn("failed to persist account config", "label", label, "error", err.Error())
 			}
-			result := map[string]any{"added": true, "label": label, "message": fmt.Sprintf("Account %q added and authenticated successfully.", label)}
+			// Resolve UPN from /me and backfill accounts.json so entry.Email is
+			// populated immediately (CR-0056 FR-2/FR-3).
+			auth.EnsureEmailAndPersistUPN(ctx, entry, cfg.AccountsPath)
+			result := map[string]any{"added": true, "label": label, "upn": entry.Email, "message": fmt.Sprintf("Account %q added and authenticated successfully.", label)}
 			data, err := json.Marshal(result)
 			if err != nil {
 				return mcp.NewToolResultError("failed to serialize response"), nil
@@ -331,9 +335,14 @@ func (s *addAccountState) handleAddAccount(registry *auth.AccountRegistry, cfg c
 			logger.Warn("failed to persist account config", "label", label, "error", err.Error())
 		}
 
+		// Resolve UPN from /me and backfill accounts.json so entry.Email is
+		// populated immediately (CR-0056 FR-2/FR-3).
+		auth.EnsureEmailAndPersistUPN(ctx, entry, cfg.AccountsPath)
+
 		result := map[string]any{
 			"added":   true,
 			"label":   label,
+			"upn":     entry.Email,
 			"message": fmt.Sprintf("Account %q added and authenticated successfully.", label),
 		}
 

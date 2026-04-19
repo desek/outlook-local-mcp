@@ -104,10 +104,116 @@ func (s *accountResolverState) middleware(next mcpserver.ToolHandlerFunc) mcpser
 			AuthRecordPath: entry.AuthRecordPath,
 			AuthMethod:     inferAuthMethod(entry),
 		})
-		ctx = WithAccountInfo(ctx, AccountInfo{Label: entry.Label, Email: entry.Email})
+		ctx = WithAccountInfo(ctx, AccountInfo{
+			Label:    entry.Label,
+			Email:    entry.Email,
+			Advisory: s.disconnectedAdvisory(entry, request),
+		})
 
 		return next(ctx, request)
 	}
+}
+
+// disconnectedAdvisory returns a human-readable note when the resolver
+// auto-selected the sole authenticated account while disconnected accounts
+// also exist in the registry. The advisory names the disconnected accounts
+// by UPN so the LLM can raise them to the user instead of silently
+// operating on the single connected mailbox (CR-0056 FR-52 / AC-17).
+//
+// An empty string is returned when no advisory is warranted: the user
+// passed an explicit account parameter, elicitation occurred, or there are
+// no disconnected accounts to surface.
+//
+// Parameters:
+//   - entry: the resolved account entry.
+//   - request: the originating tool call (used to detect an explicit account
+//     parameter, in which case no advisory is attached).
+//
+// Returns the advisory text or an empty string.
+func (s *accountResolverState) disconnectedAdvisory(entry *AccountEntry, request mcp.CallToolRequest) string {
+	// Only auto-select path warrants an advisory. If the caller passed an
+	// explicit `account` parameter, the choice was intentional.
+	if raw, ok := request.GetArguments()["account"]; ok {
+		if str, isStr := raw.(string); isStr && str != "" {
+			return ""
+		}
+	}
+
+	authenticated := s.registry.ListAuthenticated()
+	if len(authenticated) != 1 || authenticated[0] != entry {
+		return ""
+	}
+
+	disconnected := s.disconnectedAccounts()
+	if len(disconnected) == 0 {
+		return ""
+	}
+
+	return formatDisconnectedAdvisory(disconnected)
+}
+
+// disconnectedAccounts returns the registry entries whose Authenticated flag
+// is false, sorted by label. Callers use this list to surface disconnected
+// accounts in elicitation enums and error messages.
+func (s *accountResolverState) disconnectedAccounts() []*AccountEntry {
+	out := make([]*AccountEntry, 0)
+	for _, e := range s.registry.List() {
+		if !e.Authenticated {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// formatDisconnectedAdvisory builds the human-readable advisory naming each
+// disconnected account by label and UPN. The output is intentionally terse so
+// downstream formatters can embed it on a single line.
+func formatDisconnectedAdvisory(disconnected []*AccountEntry) string {
+	parts := make([]string, 0, len(disconnected))
+	for _, e := range disconnected {
+		parts = append(parts, formatAccountIdentity(e))
+	}
+	return fmt.Sprintf(
+		"Other disconnected accounts exist: %s. Use account_login to reconnect if one was intended.",
+		strings.Join(parts, ", "),
+	)
+}
+
+// formatAccountIdentity renders an account as "label (upn)" when the UPN is
+// known, or just the label otherwise. Used by elicitation enum values,
+// advisory messages, and disconnected-account error listings.
+func formatAccountIdentity(entry *AccountEntry) string {
+	if entry.Email == "" {
+		return entry.Label
+	}
+	return fmt.Sprintf("%s (%s)", entry.Label, entry.Email)
+}
+
+// formatElicitationChoice renders an elicitation enum value. Disconnected
+// accounts are suffixed with " — disconnected" so the user sees each
+// account's state in the picker (CR-0056 FR-35 / AC-8).
+func formatElicitationChoice(entry *AccountEntry) string {
+	base := formatAccountIdentity(entry)
+	if !entry.Authenticated {
+		return base + " — disconnected"
+	}
+	return base
+}
+
+// parseElicitationChoice extracts the label from an elicitation enum value
+// produced by formatElicitationChoice. The accepted shapes are:
+//
+//	"label"
+//	"label (upn)"
+//	"label (upn) — disconnected"
+//	"label — disconnected"
+//
+// The label is always the leading token up to the first space.
+func parseElicitationChoice(value string) string {
+	if idx := strings.Index(value, " "); idx >= 0 {
+		return value[:idx]
+	}
+	return value
 }
 
 // resolveAccount determines which account entry to use for the current
@@ -129,9 +235,16 @@ func (s *accountResolverState) resolveAccount(ctx context.Context, request mcp.C
 		if !isStr || label == "" {
 			return nil, fmt.Errorf("invalid account parameter: must be a non-empty string")
 		}
+		// Label first, then UPN fallback (CR-0056 FR-6/FR-8).
 		entry, found := s.registry.Get(label)
 		if !found {
+			entry, found = s.registry.GetByUPN(label)
+		}
+		if !found {
 			return nil, fmt.Errorf("account %q not found", label)
+		}
+		if !entry.Authenticated {
+			return nil, disconnectedExplicitError(entry)
 		}
 		return entry, nil
 	}
@@ -140,7 +253,12 @@ func (s *accountResolverState) resolveAccount(ctx context.Context, request mcp.C
 	authenticated := s.registry.ListAuthenticated()
 
 	if len(authenticated) == 0 {
-		return nil, fmt.Errorf("no authenticated accounts. Use account_add to authenticate")
+		disconnected := s.disconnectedAccounts()
+		if len(disconnected) == 0 {
+			// Zero accounts total — only account_add applies (FR-46).
+			return nil, fmt.Errorf("no accounts registered. Use account_add to authenticate")
+		}
+		return nil, zeroAuthenticatedWithDisconnectedError(disconnected)
 	}
 
 	if len(authenticated) == 1 {
@@ -149,6 +267,33 @@ func (s *accountResolverState) resolveAccount(ctx context.Context, request mcp.C
 
 	// Multiple authenticated accounts: elicit selection from the user.
 	return s.elicitAccountSelection(ctx)
+}
+
+// disconnectedExplicitError builds the actionable error returned when a
+// caller explicitly targets a disconnected account via the `account`
+// parameter (CR-0056 FR-38 / AC-9).
+func disconnectedExplicitError(entry *AccountEntry) error {
+	return fmt.Errorf(
+		"account %q (%s) is disconnected. Use account_login with label %q to re-authenticate",
+		entry.Label, entry.Email, entry.Label,
+	)
+}
+
+// zeroAuthenticatedWithDisconnectedError builds the error returned when no
+// authenticated accounts exist but one or more disconnected accounts are
+// registered (CR-0056 FR-37 / AC-12). The message enumerates every
+// disconnected account by UPN and suggests both `account_login` and
+// `account_add` as recovery paths.
+func zeroAuthenticatedWithDisconnectedError(disconnected []*AccountEntry) error {
+	parts := make([]string, 0, len(disconnected))
+	for _, e := range disconnected {
+		parts = append(parts, formatAccountIdentity(e))
+	}
+	return fmt.Errorf(
+		"no authenticated accounts. %d disconnected account(s): %s. "+
+			"Use account_login to re-authenticate, or account_add to add a new account",
+		len(disconnected), strings.Join(parts, ", "),
+	)
 }
 
 // elicitAccountSelection uses the MCP Elicitation API to prompt the user
@@ -163,7 +308,14 @@ func (s *accountResolverState) resolveAccount(ctx context.Context, request mcp.C
 //
 // Returns the selected account entry, or an error if selection fails.
 func (s *accountResolverState) elicitAccountSelection(ctx context.Context) (*AccountEntry, error) {
-	labels := s.registry.Labels()
+	// Build enum values for ALL registered accounts — authenticated and
+	// disconnected — so the user can see the full landscape in the picker
+	// (CR-0056 FR-34/FR-35 / AC-8).
+	all := s.registry.List()
+	choices := make([]string, 0, len(all))
+	for _, e := range all {
+		choices = append(choices, formatElicitationChoice(e))
+	}
 
 	elicitationRequest := mcp.ElicitationRequest{
 		Params: mcp.ElicitationParams{
@@ -174,7 +326,7 @@ func (s *accountResolverState) elicitAccountSelection(ctx context.Context) (*Acc
 					"account": map[string]any{
 						"type":        "string",
 						"description": "Select an account",
-						"enum":        labels,
+						"enum":        choices,
 					},
 				},
 				"required": []string{"account"},
@@ -192,7 +344,10 @@ func (s *accountResolverState) elicitAccountSelection(ctx context.Context) (*Acc
 				"multiple accounts registered (%s) but elicitation is not available and no "+
 					"\"default\" account exists. Specify the account explicitly using the "+
 					"'account' parameter",
-				strings.Join(labels, ", "))
+				strings.Join(s.registry.Labels(), ", "))
+		}
+		if !entry.Authenticated {
+			return nil, disconnectedExplicitError(entry)
 		}
 		return entry, nil
 	}
@@ -203,13 +358,18 @@ func (s *accountResolverState) elicitAccountSelection(ctx context.Context) (*Acc
 		if !ok {
 			return nil, fmt.Errorf("unexpected elicitation response content type")
 		}
-		selectedLabel, ok := content["account"].(string)
-		if !ok || selectedLabel == "" {
+		selectedValue, ok := content["account"].(string)
+		if !ok || selectedValue == "" {
 			return nil, fmt.Errorf("no account selected in elicitation response")
 		}
+		// The enum value is "label (upn)[ — disconnected]"; strip to label.
+		selectedLabel := parseElicitationChoice(selectedValue)
 		entry, found := s.registry.Get(selectedLabel)
 		if !found {
 			return nil, fmt.Errorf("selected account %q not found", selectedLabel)
+		}
+		if !entry.Authenticated {
+			return nil, disconnectedExplicitError(entry)
 		}
 		return entry, nil
 
