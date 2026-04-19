@@ -1,14 +1,15 @@
 ---
 id: "CR-0058"
-status: "proposed"
+status: "completed"
 date: 2026-04-09
+completed-date: 2026-04-19
 requestor: desek
 stakeholders:
   - desek
 priority: "high"
 target-version: "0.4.0"
-source-branch: main
-source-commit: 390d994
+source-branch: dev/cr-0058
+source-commit: 72ba24b
 ---
 
 # Mail Intelligence: Reading, Drafts, Search, and Metadata Management
@@ -710,24 +711,24 @@ Then the build succeeds, all linter checks pass, and all tests pass
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] Go doc comments on all new tool constructors and handlers
-- [ ] CRUD test document updated with mail management test steps
+- [x] Go doc comments on all new tool constructors and handlers
+- [x] CRUD test document updated with mail management test steps
 
 ### Code Review
 
