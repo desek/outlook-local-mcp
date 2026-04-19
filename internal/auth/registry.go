@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
@@ -161,6 +162,63 @@ func (r *AccountRegistry) Get(label string) (*AccountEntry, bool) {
 
 	entry, exists := r.accounts[label]
 	return entry, exists
+}
+
+// GetByUPN retrieves an account entry by its User Principal Name (UPN),
+// matched against the entry's Email field using case-insensitive comparison.
+// This supports CR-0056 dual lookup where a tool's `account` parameter may
+// carry either a label or a UPN.
+//
+// Parameters:
+//   - upn: the user principal name to look up (e.g., "alice@contoso.com").
+//
+// Returns the matching entry and true on success, or nil and false when no
+// entry has a matching Email. An empty upn argument never matches.
+func (r *AccountRegistry) GetByUPN(upn string) (*AccountEntry, bool) {
+	if upn == "" {
+		return nil, false
+	}
+
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, entry := range r.accounts {
+		if strings.EqualFold(entry.Email, upn) {
+			return entry, true
+		}
+	}
+	return nil, false
+}
+
+// Update applies the provided function to the account entry identified by
+// label while holding the registry's write lock. The function may mutate any
+// field on the entry (for example to flip Authenticated, swap the Client, or
+// refresh the Email). Update ensures state transitions cannot race against
+// concurrent registry reads.
+//
+// Parameters:
+//   - label: label of the entry to modify.
+//   - fn: callback invoked with the live entry pointer; must not be nil.
+//
+// Returns an error if the label is not found or fn is nil.
+//
+// Side effects: invokes fn while holding the registry's write lock; any
+// mutation fn performs becomes visible to subsequent registry readers.
+func (r *AccountRegistry) Update(label string, fn func(*AccountEntry)) error {
+	if fn == nil {
+		return fmt.Errorf("update function must not be nil")
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	entry, exists := r.accounts[label]
+	if !exists {
+		return fmt.Errorf("account %q not found", label)
+	}
+
+	fn(entry)
+	return nil
 }
 
 // List returns all registered account entries sorted alphabetically by label.

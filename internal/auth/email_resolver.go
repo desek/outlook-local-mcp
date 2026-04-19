@@ -48,3 +48,48 @@ func EnsureEmail(ctx context.Context, entry *AccountEntry) {
 		entry.Email = *upn
 	}
 }
+
+// EnsureEmailAndPersistUPN behaves like EnsureEmail but additionally backfills
+// the resolved value to the persistent accounts file when the corresponding
+// entry's UPN is empty. This is the CR-0056 migration path: accounts that
+// existed before the UPN field was introduced have their UPN persisted the
+// first time the email is resolved, so subsequent restarts can populate
+// AccountEntry.Email without a Graph /me call.
+//
+// Parameters:
+//   - ctx: context for the Graph API call.
+//   - entry: the account entry to populate.
+//   - accountsPath: filesystem path to accounts.json; when empty, no
+//     persistence is attempted (behaves exactly like EnsureEmail).
+//
+// Side effects: may issue one GET /me call on first invocation per entry,
+// and one atomic rewrite of accounts.json when the persisted UPN is empty.
+// Persistence failures are logged and otherwise ignored so tool flows remain
+// resilient to a read-only or misconfigured accounts file.
+func EnsureEmailAndPersistUPN(ctx context.Context, entry *AccountEntry, accountsPath string) {
+	EnsureEmail(ctx, entry)
+
+	if accountsPath == "" || entry.Email == "" {
+		return
+	}
+
+	accounts, err := LoadAccounts(accountsPath)
+	if err != nil {
+		slog.WarnContext(ctx, "failed to load accounts for UPN backfill",
+			"label", entry.Label, "error", err)
+		return
+	}
+
+	for _, a := range accounts {
+		if a.Label == entry.Label {
+			if a.UPN != "" {
+				return
+			}
+			if err := UpdateAccountUPN(accountsPath, entry.Label, entry.Email); err != nil {
+				slog.WarnContext(ctx, "failed to persist UPN backfill",
+					"label", entry.Label, "error", err)
+			}
+			return
+		}
+	}
+}

@@ -31,6 +31,14 @@ type AccountConfig struct {
 	// AuthMethod is the authentication method used for this account
 	// (e.g., "auth_code", "browser", "device_code").
 	AuthMethod string `json:"auth_method"`
+
+	// UPN is the User Principal Name (e.g., "alice@contoso.com") resolved
+	// from the Microsoft Graph /me endpoint after authentication. It serves
+	// as a stable, human-recognizable account identity that is persisted
+	// across restarts so the registry can populate AccountEntry.Email
+	// without a Graph API call at startup. Empty for accounts created
+	// before CR-0056 or before EnsureEmail has run; backfilled lazily.
+	UPN string `json:"upn"`
 }
 
 // AccountsFile is the top-level structure of the persistent accounts JSON file.
@@ -167,4 +175,44 @@ func RemoveAccountConfig(path string, label string) error {
 	}
 
 	return SaveAccounts(path, filtered)
+}
+
+// UpdateAccountUPN sets the UPN field for the account identified by label in
+// the persistent accounts file. The file is loaded, the matching entry's UPN
+// is replaced, and the file is saved atomically. If the label is not found,
+// no error is returned and the file is left unchanged (callers can choose to
+// treat this as a silent no-op migration path).
+//
+// Parameters:
+//   - path: absolute filesystem path to the accounts JSON file.
+//   - label: label of the account whose UPN should be updated.
+//   - upn: the User Principal Name to persist.
+//
+// Returns an error if the file cannot be loaded or saved. Returns nil if the
+// label is not found.
+//
+// Side effects: rewrites the accounts file at path when the label matches.
+func UpdateAccountUPN(path string, label string, upn string) error {
+	accounts, err := LoadAccounts(path)
+	if err != nil {
+		return err
+	}
+
+	changed := false
+	for i := range accounts {
+		if accounts[i].Label == label {
+			if accounts[i].UPN == upn {
+				return nil
+			}
+			accounts[i].UPN = upn
+			changed = true
+			break
+		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	return SaveAccounts(path, accounts)
 }

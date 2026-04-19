@@ -300,6 +300,65 @@ func TestListAuthenticated_FiltersCorrectly(t *testing.T) {
 	}
 }
 
+// TestGetByUPN_Found verifies that GetByUPN returns the account entry whose
+// Email matches the queried UPN, using case-insensitive comparison per CR-0056.
+func TestGetByUPN_Found(t *testing.T) {
+	r := NewAccountRegistry()
+	entry := &AccountEntry{Label: "work", Email: "Alice@Contoso.com"}
+	if err := r.Add(entry); err != nil {
+		t.Fatalf("Add: %v", err)
+	}
+
+	got, ok := r.GetByUPN("alice@contoso.com")
+	if !ok {
+		t.Fatal("GetByUPN returned ok=false for matching UPN")
+	}
+	if got.Label != "work" {
+		t.Errorf("got Label = %q, want %q", got.Label, "work")
+	}
+}
+
+// TestGetByUPN_NotFound verifies that GetByUPN returns ok=false when no
+// registered account has a matching Email.
+func TestGetByUPN_NotFound(t *testing.T) {
+	r := NewAccountRegistry()
+	_ = r.Add(&AccountEntry{Label: "work", Email: "alice@contoso.com"})
+
+	if _, ok := r.GetByUPN("nobody@example.com"); ok {
+		t.Fatal("GetByUPN returned ok=true for non-matching UPN")
+	}
+}
+
+// TestUpdate_ModifiesEntry verifies that Update applies the callback to the
+// live registry entry and the mutation is visible to subsequent readers.
+func TestUpdate_ModifiesEntry(t *testing.T) {
+	r := NewAccountRegistry()
+	_ = r.Add(&AccountEntry{Label: "work", Authenticated: true})
+
+	err := r.Update("work", func(e *AccountEntry) {
+		e.Authenticated = false
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	got, _ := r.Get("work")
+	if got.Authenticated {
+		t.Error("expected Authenticated=false after Update")
+	}
+}
+
+// TestUpdate_NotFound verifies that Update returns an error when the label
+// is not present in the registry.
+func TestUpdate_NotFound(t *testing.T) {
+	r := NewAccountRegistry()
+
+	err := r.Update("ghost", func(e *AccountEntry) {})
+	if err == nil {
+		t.Fatal("expected error when updating non-existent account")
+	}
+}
+
 func TestAdd_ValidLabelEdgeCases(t *testing.T) {
 	r := NewAccountRegistry()
 
