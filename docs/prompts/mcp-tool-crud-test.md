@@ -448,6 +448,48 @@ Read the **log file path** recorded in Step 0. Inspect the log entries emitted d
 - **Verify:** No unexpected `ERROR` or `WARN` entries appear (the Step 15, 23, and 25 errors are expected; Step 20 attendee-side errors in multi-account mode from Step 25 are also expected).
 - **Fail:** Report any missing log entries or unexpected errors.
 
+### Step 27 -- Force refresh authenticated account token
+
+Call `mcp__outlookCalendar__account_refresh` with:
+
+| Parameter | Value                                        |
+|-----------|----------------------------------------------|
+| `label`   | The default account label from Step 1        |
+
+- **Pass:** Response is plain text confirming the refresh and including a new token expiry timestamp.
+- **Verify:** The response references the account's label and/or UPN.
+- **Fail:** If the call errors or the expiry time is absent from the response.
+
+### Step 28 -- Log out of account
+
+> **Note:** This test requires at least one non-default account in addition to the default account, or `account_login` in Step 29 must be used to restore access before further tests. If only one account is registered, mark Steps 28 and 29 **SKIP** to avoid leaving the test environment unauthenticated.
+
+Pick a **non-default authenticated account** from Step 1's list (the **attendee account label** in multi-account mode). Call `mcp__outlookCalendar__account_logout` with:
+
+| Parameter | Value                                     |
+|-----------|-------------------------------------------|
+| `label`   | Non-default authenticated account label   |
+
+- **Pass:** Response is plain text confirming the logout.
+- **Verify:** A subsequent `mcp__outlookCalendar__account_list` call shows the account as `disconnected` while still listing the entry (not removed).
+- **Verify:** Calling any calendar tool with `account: <logged-out label>` returns an actionable error mentioning `disconnected` and `account_login`.
+- **Fail:** If the account is removed, still shown as authenticated, or if the disconnected-account error is missing.
+
+### Step 29 -- Log back in to account
+
+Call `mcp__outlookCalendar__account_login` with:
+
+| Parameter | Value                               |
+|-----------|-------------------------------------|
+| `label`   | The label from Step 28              |
+
+Complete the authentication flow interactively when prompted (browser, device code, or auth code, per the account's persisted auth method).
+
+- **Pass:** Response is plain text confirming re-authentication, including the account's UPN.
+- **Verify:** A subsequent `account_list` call shows the account back as `authenticated`.
+- **Verify:** Calling `account_login` again on the same (now connected) account returns an error stating the account is already connected.
+- **Fail:** If the account does not return to the authenticated state or the already-connected guard does not trigger.
+
 ## Reporting
 
 After all steps, print a summary table:
@@ -489,6 +531,9 @@ After all steps, print a summary table:
 | 24   | Cancel Teams meeting (text)       | PASS/FAIL      |
 | 25   | Verify cancellation               | PASS/FAIL      |
 | 26   | Verify server logs                | PASS/FAIL      |
+| 27   | Force refresh token (text)        | PASS/FAIL      |
+| 28   | Log out non-default account       | PASS/FAIL/SKIP |
+| 29   | Log back in non-default account   | PASS/FAIL/SKIP |
 ```
 
 Then print the **environment** section using all values recorded in Steps 0b and 1:

@@ -137,6 +137,18 @@
       "description": "Remove a registered account. The default account cannot be removed."
     },
     {
+      "name": "account_login",
+      "description": "Re-authenticate an existing disconnected account using its persisted auth method, client ID, and tenant ID."
+    },
+    {
+      "name": "account_logout",
+      "description": "Disconnect an account without removing it from the registry. Clears the cached token and Graph client; the account configuration is preserved."
+    },
+    {
+      "name": "account_refresh",
+      "description": "Force a token refresh for an authenticated account. Returns the new token expiry time on success."
+    },
+    {
       "name": "status",
       "description": "Get server health summary: version, detected timezone, per-account authentication state, and uptime. No parameters required."
     },

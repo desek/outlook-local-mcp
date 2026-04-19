@@ -668,8 +668,8 @@ func TestRegisterTools_MailEnabled(t *testing.T) {
 		}
 	}
 
-	// Verify total count: 18 base + 4 mail = 22.
-	const expectedTotal = 22
+	// Verify total count: 21 base + 4 mail = 25.
+	const expectedTotal = 25
 	if got := len(registered); got != expectedTotal {
 		t.Errorf("expected %d tools with mail enabled, got %d", expectedTotal, got)
 	}
