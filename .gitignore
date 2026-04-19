@@ -43,4 +43,4 @@ extension/bin/
 .local/
 
 # Local test reports
-TEST-REPORT.md
+TEST-REPORT*.md

@@ -492,48 +492,48 @@ Complete the authentication flow interactively when prompted (browser, device co
 
 ## Reporting
 
-After all steps, print a summary table:
+After all steps, print a summary table. Every row **MUST** include a short `Comment` (under ~120 characters) explaining the result — for PASS rows, a brief confirmation of what was verified; for FAIL rows, the failure cause (tool name, error, mismatch); for SKIP rows, the reason (e.g., "single-account mode"). Do not leave the `Comment` column blank.
 
 ```
-| Step | Action                            | Result         |
-|------|-----------------------------------|----------------|
-| 0a   | Verify connectivity (summary)     | PASS/FAIL      |
-| 0b   | Record config                     | PASS/FAIL      |
-| 0c   | Verify text default for status    | PASS/FAIL      |
-| 1    | List accounts (text)              | PASS/FAIL      |
-| 2    | List calendars (text)             | PASS/FAIL      |
-| 3    | Baseline list (text)              | PASS/FAIL      |
-| 4    | Create event (text confirmation)  | PASS/FAIL      |
-| 5    | Provenance search (text)          | PASS/FAIL      |
-| 6    | Search next_week (text)           | PASS/FAIL      |
-| 7    | Search this_week (negative)       | PASS/FAIL      |
-| 8    | Get created event (text)          | PASS/FAIL      |
-| 9    | Update event (text confirmation)  | PASS/FAIL      |
-| 10a  | Get updated event (text)          | PASS/FAIL      |
-| 10b  | Body escalation (raw HTML body)   | PASS/FAIL      |
-| 11   | Get free/busy (text)              | PASS/FAIL      |
-| 12   | Reschedule event (text confirm)   | PASS/FAIL      |
-| 13   | Get rescheduled event (text)      | PASS/FAIL      |
-| 14   | Delete event (text confirmation)  | PASS/FAIL      |
-| 15   | Get deleted (404)                 | PASS/FAIL      |
-| 16   | Provenance search (deleted)       | PASS/FAIL      |
-| 17   | List after delete (text)          | PASS/FAIL      |
-| 18   | Create Teams meeting (text)       | PASS/FAIL      |
-| 19   | Verify Teams meeting details      | PASS/FAIL      |
-| 20   | Verify invitation (attendee)      | PASS/FAIL/SKIP |
-| 21   | Respond from attendee (text)      | PASS/FAIL/SKIP |
-| 22   | Verify attendee response          | PASS/FAIL/SKIP |
-| 22a  | Update meeting (meeting tool)     | PASS/FAIL/SKIP |
-| 22b  | Verify meeting update             | PASS/FAIL/SKIP |
-| 22c  | Reschedule meeting (meeting tool) | PASS/FAIL/SKIP |
-| 22d  | Verify meeting reschedule         | PASS/FAIL/SKIP |
-| 23   | Respond to own meeting (err)      | PASS/FAIL      |
-| 24   | Cancel Teams meeting (text)       | PASS/FAIL      |
-| 25   | Verify cancellation               | PASS/FAIL      |
-| 26   | Verify server logs                | PASS/FAIL      |
-| 27   | Force refresh token (text)        | PASS/FAIL      |
-| 28   | Log out non-default account       | PASS/FAIL/SKIP |
-| 29   | Log back in non-default account   | PASS/FAIL/SKIP |
+| Step | Action                            | Result         | Comment                                                  |
+|------|-----------------------------------|----------------|----------------------------------------------------------|
+| 0a   | Verify connectivity (summary)     | PASS/FAIL      | e.g., "default account authenticated; DEBUG logging on"  |
+| 0b   | Record config                     | PASS/FAIL      | e.g., "log_file present; timezone=Europe/Stockholm"      |
+| 0c   | Verify text default for status    | PASS/FAIL      | e.g., "plain text, no config leak"                       |
+| 1    | List accounts (text)              | PASS/FAIL      | e.g., "1 authenticated, 1 disconnected"                  |
+| 2    | List calendars (text)             | PASS/FAIL      | e.g., "default + Birthdays"                              |
+| 3    | Baseline list (text)              | PASS/FAIL      | e.g., "baseline count = 0"                               |
+| 4    | Create event (text confirmation)  | PASS/FAIL      | e.g., "event created at 14:00 Amsterdam"                 |
+| 5    | Provenance search (text)          | PASS/FAIL      | e.g., "created_by_mcp filter returned the event"         |
+| 6    | Search next_week (text)           | PASS/FAIL      | e.g., "next_week shorthand resolved correctly"           |
+| 7    | Search this_week (negative)       | PASS/FAIL      | e.g., "this_week correctly excluded the event"           |
+| 8    | Get created event (text)          | PASS/FAIL      | e.g., "all fields match"                                 |
+| 9    | Update event (text confirmation)  | PASS/FAIL      | e.g., "subject/location/end/show_as updated"             |
+| 10a  | Get updated event (text)          | PASS/FAIL      | e.g., "bodyPreview plain text, start unchanged"          |
+| 10b  | Body escalation (raw HTML body)   | PASS/FAIL      | e.g., "raw mode returns full HTML body"                  |
+| 11   | Get free/busy (text)              | PASS/FAIL      | e.g., "busy block 14:00-15:00"                           |
+| 12   | Reschedule event (text confirm)   | PASS/FAIL      | e.g., "rescheduled to 17:00"                             |
+| 13   | Get rescheduled event (text)      | PASS/FAIL      | e.g., "duration preserved"                               |
+| 14   | Delete event (text confirmation)  | PASS/FAIL      | e.g., "delete confirmation includes event ID"            |
+| 15   | Get deleted (404)                 | PASS/FAIL      | e.g., "ErrorItemNotFound as expected"                    |
+| 16   | Provenance search (deleted)       | PASS/FAIL      | e.g., "event absent after deletion"                      |
+| 17   | List after delete (text)          | PASS/FAIL      | e.g., "count back to baseline"                           |
+| 18   | Create Teams meeting (text)       | PASS/FAIL      | e.g., "online meeting created"                           |
+| 19   | Verify Teams meeting details      | PASS/FAIL      | e.g., "isOnlineMeeting=true, joinUrl present"            |
+| 20   | Verify invitation (attendee)      | PASS/FAIL/SKIP | e.g., "single-account mode" or "invitation visible"      |
+| 21   | Respond from attendee (text)      | PASS/FAIL/SKIP | e.g., "single-account mode" or "tentative response sent" |
+| 22   | Verify attendee response          | PASS/FAIL/SKIP | e.g., "single-account mode" or "status=tentative"        |
+| 22a  | Update meeting (meeting tool)     | PASS/FAIL/SKIP | e.g., "single-account mode" or "meeting updated"         |
+| 22b  | Verify meeting update             | PASS/FAIL/SKIP | e.g., "single-account mode" or "fields updated"          |
+| 22c  | Reschedule meeting (meeting tool) | PASS/FAIL/SKIP | e.g., "single-account mode" or "rescheduled 17:30"       |
+| 22d  | Verify meeting reschedule         | PASS/FAIL/SKIP | e.g., "single-account mode" or "duration preserved"      |
+| 23   | Respond to own meeting (err)      | PASS/FAIL      | e.g., "organizer self-response rejected"                 |
+| 24   | Cancel Teams meeting (text)       | PASS/FAIL      | e.g., "cancellation confirmation with event ID"          |
+| 25   | Verify cancellation               | PASS/FAIL      | e.g., "ErrorItemNotFound as expected"                    |
+| 26   | Verify server logs                | PASS/FAIL      | e.g., "all expected levels/IDs present"                  |
+| 27   | Force refresh token (text)        | PASS/FAIL      | e.g., "label + expiry in plain text"                     |
+| 28   | Log out non-default account       | PASS/FAIL/SKIP | e.g., "only default authenticated" or "logged out"       |
+| 29   | Log back in non-default account   | PASS/FAIL/SKIP | e.g., "only default authenticated" or "re-authenticated" |
 ```
 
 Then print the **environment** section using all values recorded in Steps 0b and 1:
