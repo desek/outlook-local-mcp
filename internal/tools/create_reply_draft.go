@@ -11,6 +11,7 @@ package tools
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
@@ -19,6 +20,15 @@ import (
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 	"github.com/microsoftgraph/msgraph-sdk-go/users"
 )
+
+// invalidReferenceReplyMessage is returned when Graph rejects createReply with
+// ErrorInvalidReferenceItem — typically because message_id refers to a draft
+// or another item type that cannot be replied to. The default Graph message
+// ("The reference item does not support the requested operation") is opaque;
+// this replacement gives the caller an actionable next step.
+const invalidReferenceReplyMessage = "Cannot create a reply to this message. " +
+	"The message_id may refer to a draft or an item that does not support replies. " +
+	"Use mail_update_draft to edit a draft, or supply the ID of a sent or received message."
 
 // NewCreateReplyDraftTool creates the MCP tool definition for
 // mail_create_reply_draft. It requires a message_id identifying the source
@@ -36,7 +46,10 @@ func NewCreateReplyDraftTool() mcp.Tool {
 		mcp.WithDescription(
 			"Create a reply draft to an existing message, preserving threading "+
 				"headers. The draft is NOT sent automatically: it appears in the "+
-				"user's Outlook Drafts folder for review, edit, and manual send.",
+				"user's Outlook Drafts folder for review, edit, and manual send. "+
+				"message_id must reference a sent or received message; replying "+
+				"to a draft is not supported by Graph and will error — use "+
+				"mail_update_draft to edit a draft instead.",
 		),
 		mcp.WithString("message_id", mcp.Required(),
 			mcp.Description("The unique identifier of the source message to reply to."),
@@ -126,6 +139,9 @@ func NewHandleCreateReplyDraft(retryCfg graph.RetryConfig, timeout time.Duration
 				return mcp.NewToolResultError(graph.TimeoutErrorMessage(int(timeout.Seconds()))), nil
 			}
 			logger.ErrorContext(ctx, "create reply draft failed", "error", graph.FormatGraphError(err))
+			if strings.Contains(graph.FormatGraphError(err), "ErrorInvalidReferenceItem") {
+				return mcp.NewToolResultError(invalidReferenceReplyMessage), nil
+			}
 			return mcp.NewToolResultError(graph.RedactGraphError(err)), nil
 		}
 
