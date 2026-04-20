@@ -85,22 +85,12 @@ func NewGetMessageTool() mcp.Tool {
 // Parameters:
 //   - retryCfg: retry configuration for transient Graph API errors.
 //   - timeout: the maximum duration for the Graph API call.
+//   - provenancePropertyID: the full provenance property ID string, built once
+//     at startup. When non-empty, $expand is added to request the provenance
+//     extended property and each output mode includes a "provenance" boolean.
 //
 // Returns a tool handler function compatible with the MCP server's AddTool method.
-//
-// The handler:
-//   - Retrieves the Graph client from context via GraphClient.
-//   - Extracts and validates the required message_id parameter.
-//   - Validates the optional output mode parameter.
-//   - Wraps the Graph API call with RetryGraphCall for transient error handling.
-//   - Applies a comprehensive $select covering all message fields (raw) or
-//     summary fields (summary) depending on output mode.
-//   - Serializes the message using SerializeMessage (raw) or
-//     SerializeSummaryMessage (summary) from the graph package.
-//   - Returns Graph API errors via mcp.NewToolResultError with RedactGraphError.
-//   - Returns timeout errors via mcp.NewToolResultError with TimeoutErrorMessage.
-//   - Logs entry at debug level, completion at info level, errors at error level.
-func NewHandleGetMessage(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func NewHandleGetMessage(retryCfg graph.RetryConfig, timeout time.Duration, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := slog.With("tool", "mail_get_message")
 		start := time.Now()
@@ -136,10 +126,16 @@ func NewHandleGetMessage(retryCfg graph.RetryConfig, timeout time.Duration) func
 			selectFields = getMessageFullSelectFields
 		}
 
-		// Build request configuration.
+		// Build request configuration. Add $expand for the provenance
+		// extended property when a provenance tag is configured.
+		var expandFields []string
+		if provenancePropertyID != "" {
+			expandFields = []string{graph.ProvenanceExpandFilter(provenancePropertyID)}
+		}
 		cfg := &users.ItemMessagesMessageItemRequestBuilderGetRequestConfiguration{
 			QueryParameters: &users.ItemMessagesMessageItemRequestBuilderGetQueryParameters{
 				Select: selectFields,
+				Expand: expandFields,
 			},
 		}
 
@@ -180,6 +176,13 @@ func NewHandleGetMessage(retryCfg graph.RetryConfig, timeout time.Duration) func
 			result = graph.SerializeMessage(msg)
 		} else {
 			result = graph.SerializeSummaryMessage(msg)
+		}
+
+		// Provenance: include a boolean indicating whether the message carries
+		// the configured provenance extended property. Only emitted when
+		// provenance tagging is configured on the server.
+		if provenancePropertyID != "" {
+			result["provenance"] = graph.HasMessageProvenanceTag(msg, provenancePropertyID)
 		}
 
 		// Return text output when requested.

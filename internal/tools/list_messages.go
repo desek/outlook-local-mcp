@@ -88,6 +88,26 @@ func NewListMessagesTool() mcp.Tool {
 		mcp.WithString("conversation_id",
 			mcp.Description("Conversation ID to retrieve all messages in a thread. Use a conversationId from a previous message result."),
 		),
+		mcp.WithBoolean("is_read",
+			mcp.Description("Filter by read/unread state. true returns only read messages, false returns only unread messages. Omit to include both."),
+		),
+		mcp.WithBoolean("is_draft",
+			mcp.Description("Filter by draft state. true returns only drafts, false returns only sent/received messages. Omit to include both."),
+		),
+		mcp.WithBoolean("has_attachments",
+			mcp.Description("Filter by attachment presence. true returns only messages with attachments, false returns only messages without. Omit to include both."),
+		),
+		mcp.WithString("importance",
+			mcp.Description("Filter by message importance."),
+			mcp.Enum("low", "normal", "high"),
+		),
+		mcp.WithString("flag_status",
+			mcp.Description("Filter by follow-up flag status."),
+			mcp.Enum("notFlagged", "flagged", "complete"),
+		),
+		mcp.WithBoolean("provenance",
+			mcp.Description("Filter to messages created by this MCP server (requires provenance tagging to be configured on the server)."),
+		),
 		mcp.WithNumber("max_results",
 			mcp.Description("Maximum number of messages to return (default 25, max 100)."),
 			mcp.Min(1),
@@ -130,7 +150,7 @@ func NewListMessagesTool() mcp.Tool {
 //   - Returns Graph API errors via mcp.NewToolResultError with RedactGraphError.
 //   - Returns timeout errors via mcp.NewToolResultError with TimeoutErrorMessage.
 //   - Logs entry at debug level, completion at info level, errors at error level.
-func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := slog.With("tool", "mail_list_messages")
 		start := time.Now()
@@ -182,6 +202,48 @@ func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration) fu
 			}
 		}
 
+		importance := request.GetString("importance", "")
+		if importance != "" {
+			switch importance {
+			case "low", "normal", "high":
+			default:
+				return mcp.NewToolResultError("importance must be one of: low, normal, high"), nil
+			}
+		}
+
+		flagStatus := request.GetString("flag_status", "")
+		if flagStatus != "" {
+			switch flagStatus {
+			case "notFlagged", "flagged", "complete":
+			default:
+				return mcp.NewToolResultError("flag_status must be one of: notFlagged, flagged, complete"), nil
+			}
+		}
+
+		filterOpts := messageFilterOptions{
+			startDatetime:  startDatetime,
+			endDatetime:    endDatetime,
+			fromEmail:      fromEmail,
+			conversationID: conversationID,
+			importance:     importance,
+			flagStatus:     flagStatus,
+		}
+		if v, ok := getBoolArg(request, "is_read"); ok {
+			filterOpts.isRead = &v
+		}
+		if v, ok := getBoolArg(request, "is_draft"); ok {
+			filterOpts.isDraft = &v
+		}
+		if v, ok := getBoolArg(request, "has_attachments"); ok {
+			filterOpts.hasAttachments = &v
+		}
+		if v, ok := getBoolArg(request, "provenance"); ok && v {
+			if provenancePropertyID == "" {
+				return mcp.NewToolResultError("provenance filter requested but provenance tagging is not configured on the server"), nil
+			}
+			filterOpts.provenancePropertyID = provenancePropertyID
+		}
+
 		timezone := request.GetString("timezone", "")
 		if timezone != "" {
 			if err := validate.ValidateTimezone(timezone, "timezone"); err != nil {
@@ -199,7 +261,7 @@ func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration) fu
 		}
 
 		// Build OData $filter from provided parameters.
-		filter := buildMessageFilter(startDatetime, endDatetime, fromEmail, conversationID)
+		filter := buildMessageFilter(filterOpts)
 
 		logger.Debug("tool called",
 			"folder_id", folderID,
@@ -217,7 +279,14 @@ func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration) fu
 		}
 
 		top := int32(maxResults)
-		orderby := []string{"receivedDateTime desc"}
+		// Graph rejects $orderby=receivedDateTime combined with filters on
+		// flag/flagStatus, conversationId, or hasAttachments as InefficientFilter.
+		// Drop $orderby in those cases; Graph's default ordering on /messages is
+		// already receivedDateTime descending.
+		var orderby []string
+		if !filterRequiresNoOrderby(filterOpts) {
+			orderby = []string{"receivedDateTime desc"}
+		}
 
 		timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -357,34 +426,85 @@ func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration) fu
 	}
 }
 
+// messageFilterOptions groups OData $filter input parameters for list_messages.
+// Pointer fields represent tri-state booleans: nil means "no filter", while a
+// set pointer emits `eq true` or `eq false`. String fields are empty to skip.
+type messageFilterOptions struct {
+	startDatetime        string
+	endDatetime          string
+	fromEmail            string
+	conversationID       string
+	importance           string
+	flagStatus           string
+	isRead               *bool
+	isDraft              *bool
+	hasAttachments       *bool
+	provenancePropertyID string
+}
+
 // buildMessageFilter constructs an OData $filter string from the provided
-// filter parameters. Multiple conditions are ANDed together. Returns an empty
-// string when no filter parameters are provided.
-//
-// Parameters:
-//   - startDatetime: ISO 8601 datetime for receivedDateTime >= filter. Empty to skip.
-//   - endDatetime: ISO 8601 datetime for receivedDateTime <= filter. Empty to skip.
-//   - fromEmail: sender email address for from/emailAddress/address eq filter. Empty to skip.
-//   - conversationID: conversation ID for conversationId eq filter. Empty to skip.
-//
-// Returns the constructed OData $filter string, or "" if no parameters are set.
+// filter options. Multiple conditions are ANDed together. Returns an empty
+// string when no filter parameters are set.
 //
 // Side effects: none.
-func buildMessageFilter(startDatetime, endDatetime, fromEmail, conversationID string) string {
+func buildMessageFilter(o messageFilterOptions) string {
 	var parts []string
 
-	if startDatetime != "" {
-		parts = append(parts, fmt.Sprintf("receivedDateTime ge %s", startDatetime))
+	if o.startDatetime != "" {
+		parts = append(parts, fmt.Sprintf("receivedDateTime ge %s", o.startDatetime))
 	}
-	if endDatetime != "" {
-		parts = append(parts, fmt.Sprintf("receivedDateTime le %s", endDatetime))
+	if o.endDatetime != "" {
+		parts = append(parts, fmt.Sprintf("receivedDateTime le %s", o.endDatetime))
 	}
-	if fromEmail != "" {
-		parts = append(parts, fmt.Sprintf("from/emailAddress/address eq '%s'", fromEmail))
+	if o.fromEmail != "" {
+		parts = append(parts, fmt.Sprintf("from/emailAddress/address eq '%s'", o.fromEmail))
 	}
-	if conversationID != "" {
-		parts = append(parts, fmt.Sprintf("conversationId eq '%s'", conversationID))
+	if o.conversationID != "" {
+		parts = append(parts, fmt.Sprintf("conversationId eq '%s'", o.conversationID))
+	}
+	if o.isRead != nil {
+		parts = append(parts, fmt.Sprintf("isRead eq %t", *o.isRead))
+	}
+	if o.isDraft != nil {
+		parts = append(parts, fmt.Sprintf("isDraft eq %t", *o.isDraft))
+	}
+	if o.hasAttachments != nil {
+		parts = append(parts, fmt.Sprintf("hasAttachments eq %t", *o.hasAttachments))
+	}
+	if o.importance != "" {
+		parts = append(parts, fmt.Sprintf("importance eq '%s'", o.importance))
+	}
+	if o.flagStatus != "" {
+		parts = append(parts, fmt.Sprintf("flag/flagStatus eq '%s'", o.flagStatus))
+	}
+	if o.provenancePropertyID != "" {
+		parts = append(parts, fmt.Sprintf(
+			"singleValueExtendedProperties/any(ep: ep/id eq '%s' and ep/value eq 'true')",
+			o.provenancePropertyID,
+		))
 	}
 
 	return strings.Join(parts, " and ")
+}
+
+// filterRequiresNoOrderby reports whether the filter includes properties that
+// Graph cannot combine with $orderby=receivedDateTime without returning
+// InefficientFilter. Verified empirically against flag/flagStatus,
+// conversationId, and hasAttachments.
+func filterRequiresNoOrderby(o messageFilterOptions) bool {
+	return o.flagStatus != "" || o.conversationID != "" || o.hasAttachments != nil
+}
+
+// getBoolArg retrieves a boolean MCP tool argument by name, returning
+// (value, true) if present and boolean-typed, or (false, false) otherwise.
+// This allows tri-state handling for optional boolean filters where the
+// absence of the argument must be distinguished from an explicit false.
+func getBoolArg(request mcp.CallToolRequest, name string) (bool, bool) {
+	args := request.GetArguments()
+	raw, ok := args[name]
+	if !ok {
+		return false, false
+	}
+	b, ok := raw.(bool)
+	return b, ok
 }

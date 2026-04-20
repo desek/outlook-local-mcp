@@ -1,21 +1,22 @@
 ---
 id: "CR-0058"
-status: "proposed"
+status: "completed"
 date: 2026-04-09
+completed-date: 2026-04-19
 requestor: desek
 stakeholders:
   - desek
 priority: "high"
 target-version: "0.4.0"
-source-branch: main
-source-commit: 390d994
+source-branch: dev/cr-0058
+source-commit: 72ba24b
 ---
 
 # Mail Intelligence: Reading, Drafts, Search, and Metadata Management
 
 ## Change Summary
 
-Extend the mail subsystem from passive reading to intelligent mail assistance across four pillars: (1) deep email reading with conversation threading and attachment access for historical context, (2) draft creation and lifecycle management as a compose-without-send workflow where the user retains full control of the send action, (3) enhanced multi-approach search combining OData filtering and KQL full-text search, and (4) metadata management — categories with colors, flags, importance, and machine-readable provenance tagging — enabling the model to signal which emails it has processed, drafted responses for, or flagged for attention. A dual-layer tracking system uses categories for user-visible signals in Outlook's UI and MAPI extended properties for programmatic identification of MCP-created content. The model never sends email; it reads, prepares, organizes, and flags.
+Extend the mail subsystem from passive reading to intelligent mail assistance across three pillars: (1) deep email reading with conversation threading and attachment access for historical context, (2) draft creation and lifecycle management as a compose-without-send workflow where the user retains full control of the send action, and (3) enhanced multi-approach search combining OData filtering and KQL full-text search. Mail provenance tagging uses MAPI extended properties for programmatic identification of MCP-created drafts. The model never sends email; it reads, prepares, and organizes.
 
 ## Motivation and Background
 
@@ -26,34 +27,23 @@ The original CR-0058 proposed full lifecycle management including send/reply/for
 ### Use Case: Model-Assisted Email Triage
 
 1. Model reads an email thread via `mail_get_conversation` — understands full context.
-2. Model marks the original message with a "Model Read" category via `mail_update_message` — visible in Outlook as a colored label.
-3. Model drafts a reply via `mail_create_reply_draft` — appears in Drafts with correct threading.
-4. Model marks the original with "Draft Prepared" category — user sees at a glance which emails have responses ready.
-5. Model flags urgent emails via `mail_update_message` with `importance=high` or `flag=flagged`.
-6. User opens Outlook, sees color-coded categories, reviews drafts, edits if needed, and sends.
+2. Model drafts a reply via `mail_create_reply_draft` — appears in Drafts with correct threading.
+3. User opens Outlook, reviews drafts, edits if needed, and sends.
 
 This workflow makes the model a powerful email assistant without granting it the ability to send on the user's behalf.
 
-### Dual-Layer Tracking: Categories + Provenance
+### Draft Provenance
 
-The system uses two complementary tracking mechanisms:
-
-| Layer | Mechanism | Audience | Visibility | Purpose |
-|-------|-----------|----------|------------|---------|
-| **User-visible** | Categories (colored labels) | Human | All Outlook clients (desktop, web, mobile) | At-a-glance triage: "Model Read", "Draft Prepared", "Urgent" |
-| **Machine-readable** | MAPI extended properties | Model/API | Hidden — only visible via Graph API `$expand` | Programmatic identification: "was this draft created by the MCP server?" |
-
-Categories alone are insufficient for reliable programmatic tracking — users can manually remove or reassign them. Provenance extended properties are immutable once set and survive category changes, providing a tamper-resistant audit trail. Conversely, provenance alone is insufficient for user workflows — extended properties are invisible in Outlook's UI. Together, they form a complete tracking system: categories for human triage, provenance for machine identification.
+MAPI extended properties provide machine-readable identification of MCP-created drafts. The provenance property is set on each draft created by the server, allowing the model to reliably identify its own drafts across sessions independent of any user-visible changes.
 
 The provenance implementation reuses the existing calendar provenance pattern (`internal/graph/provenance.go`) — same GUID namespace, same property format, same `$expand` detection pattern.
 
 ## Change Drivers
 
-* **CR-0043 deferred items**: Addresses attachment download, search enhancement, message flag/category modification, and partially addresses draft management.
+* **CR-0043 deferred items**: Addresses attachment download, search enhancement, and partially addresses draft management.
 * **Safety-first design**: The model should never send email. Drafts preserve human oversight for irreversible external actions.
-* **Organizational signal**: Categories and flags create a shared visual language between the model and the user within Outlook's native UI.
 * **Context depth**: Conversation threading and attachment download give the model complete historical context for accurate responses.
-* **Provenance trail**: Machine-readable extended properties let the model reliably identify its own drafts and processed messages across sessions, independent of user-visible category changes.
+* **Provenance trail**: Machine-readable extended properties let the model reliably identify its own drafts across sessions.
 
 ## Current State
 
@@ -95,16 +85,15 @@ flowchart LR
 
 | Scope | Enables | When |
 |-------|---------|------|
-| `Mail.ReadWrite` | Create drafts, modify message metadata (isRead, flag, categories, importance), delete drafts | When manage features are enabled |
-| `MailboxSettings.ReadWrite` | List, create, delete master categories | When manage features are enabled |
+| `Mail.ReadWrite` | Create, update, and delete draft messages | When manage features are enabled |
 
 The scope set is tiered:
 - **`MailEnabled=true` (current)**: `Mail.Read` — no change for read-only users.
-- **`MailManageEnabled=true` (new)**: `Mail.ReadWrite` + `MailboxSettings.ReadWrite` — enables draft management and metadata operations. Implies `MailEnabled`.
+- **`MailManageEnabled=true` (new)**: `Mail.ReadWrite` — enables draft management. Implies `MailEnabled`.
 
 **`Mail.Send` is explicitly NOT requested.** The model cannot send email under any configuration. Users send drafts themselves from Outlook.
 
-### New Tools (11)
+### New Tools (7)
 
 #### Pillar 1: Reading for Context (2 tools)
 
@@ -123,15 +112,6 @@ The scope set is tiered:
 | `mail_update_draft` | Update draft content/recipients | `PATCH /me/messages/{id}` | `Mail.ReadWrite` |
 | `mail_delete_draft` | Delete a draft message | `DELETE /me/messages/{id}` | `Mail.ReadWrite` |
 
-#### Pillar 4: Metadata Management (4 tools)
-
-| Tool | Operation | Graph API | Scope |
-|------|-----------|-----------|-------|
-| `mail_update_message` | Modify metadata: isRead, flag, categories, importance | `PATCH /me/messages/{id}` | `Mail.ReadWrite` |
-| `mail_list_categories` | List master category definitions | `GET /me/outlook/masterCategories` | `MailboxSettings.ReadWrite` |
-| `mail_create_category` | Create category with name and color | `POST /me/outlook/masterCategories` | `MailboxSettings.ReadWrite` |
-| `mail_delete_category` | Delete a category definition | `DELETE /me/outlook/masterCategories/{id}` | `MailboxSettings.ReadWrite` |
-
 #### Pillar 3: Enhanced Search (no new tools — parameter enhancements)
 
 `mail_list_messages` gains five additional OData `$filter` parameters:
@@ -145,37 +125,6 @@ The scope set is tiered:
 | `flag_status` | enum | `flag/flagStatus eq 'flagged'/'complete'/'notFlagged'` |
 
 These parameters compose with the existing `start_datetime`, `end_datetime`, `from`, and `conversation_id` filters using `and`.
-
-### Metadata Terminology Mapping
-
-Outlook's Graph API uses specific terminology that maps to common email concepts:
-
-| User Concept | Outlook Concept | Graph API Property | Notes |
-|--------------|-----------------|-------------------|-------|
-| Labels | Categories | `categories` (string array) | User-defined, up to 250 |
-| Colors | Category presets | `color` on outlookCategory | 25 preset colors (preset0–preset24) |
-| Pin/Unpin | Flag | `flag.flagStatus` | `flagged`/`notFlagged`/`complete` with optional due dates |
-| Importance | Importance | `importance` | `low`/`normal`/`high` |
-
-**Note:** The Graph API does not support native message pinning. The `flag` feature (follow-up flag with optional start/due dates) serves as the functional equivalent, providing visual prominence in Outlook clients. Alternatively, a dedicated category (e.g., "Pinned" with a distinctive color) can serve as a pin marker.
-
-### Category Color Presets
-
-| Preset | Color | Preset | Color |
-|--------|-------|--------|-------|
-| `preset0` | Red | `preset13` | DarkGray |
-| `preset1` | Orange | `preset14` | Black |
-| `preset2` | Brown | `preset15` | DarkRed |
-| `preset3` | Yellow | `preset16` | DarkOrange |
-| `preset4` | Green | `preset17` | DarkBrown |
-| `preset5` | Teal | `preset18` | DarkYellow |
-| `preset6` | Olive | `preset19` | DarkGreen |
-| `preset7` | Blue | `preset20` | DarkTeal |
-| `preset8` | Purple | `preset21` | DarkOlive |
-| `preset9` | Cranberry | `preset22` | DarkBlue |
-| `preset10` | Steel | `preset23` | DarkPurple |
-| `preset11` | DarkSteel | `preset24` | DarkCranberry |
-| `preset12` | Gray | `none` | No color |
 
 ### Proposed State Diagram
 
@@ -196,28 +145,18 @@ flowchart TB
         UD[mail_update_draft]
         DD[mail_delete_draft]
     end
-    subgraph Meta["Pillar 4: Metadata (Mail.ReadWrite)"]
-        UM[mail_update_message]
-        LC[mail_list_categories]
-        CC[mail_create_category]
-        DC[mail_delete_category]
-    end
 
     GM --> GC
     GM --> GA
     GM --> CRD
     GM --> CFD
-    GM --> UM
     CD --> UD
     CRD --> UD
     CFD --> UD
     UD --> DD
-    LC --> CC
-    LC --> DC
 
     style Read fill:#9f9,stroke:#333
     style Draft fill:#9cf,stroke:#333
-    style Meta fill:#fc9,stroke:#333
 ```
 
 ## Requirements
@@ -233,7 +172,7 @@ flowchart TB
 #### OAuth Scopes
 
 4. When `MailEnabled` is `true` and `MailManageEnabled` is `false`, the OAuth scope **MUST** be `Mail.Read` (current behavior, unchanged).
-5. When `MailManageEnabled` is `true`, the OAuth scopes **MUST** include `Mail.ReadWrite` and `MailboxSettings.ReadWrite` instead of `Mail.Read`.
+5. When `MailManageEnabled` is `true`, the OAuth scope **MUST** include `Mail.ReadWrite` instead of `Mail.Read`.
 
 #### Pillar 1: Reading for Context
 
@@ -315,50 +254,11 @@ flowchart TB
 
 52. `mail_search_messages` tool description **MUST** be updated to include comprehensive KQL syntax guidance: property keywords (`from:`, `to:`, `cc:`, `subject:`, `body:`, `participants:`, `hasAttachments:`, `received>=`), boolean operators (`AND`, `OR`), phrase matching (`"exact phrase"`), and limitations (no `isRead` or `flag` filtering — direct the model to use `mail_list_messages` for those).
 
-#### Pillar 4: Metadata Management
-
-##### mail_update_message
-
-53. The system **MUST** provide a `mail_update_message` tool that modifies message metadata properties.
-54. `mail_update_message` **MUST** accept a required `message_id` and optional parameters: `is_read` (bool), `flag_status` (enum: notFlagged/flagged/complete), `flag_start_date` (ISO 8601, optional, requires `flag_status=flagged`), `flag_due_date` (ISO 8601, optional, requires `flag_status=flagged`), `categories` (comma-separated category names), and `importance` (low/normal/high).
-55. `mail_update_message` **MUST** use PATCH semantics: only explicitly provided fields are set on the request body.
-56. When `flag_due_date` is provided, `flag_start_date` **MUST** also be provided (Graph API requirement). If `flag_due_date` is set without `flag_start_date`, **MUST** return a validation error.
-57. `mail_update_message` **MUST** call `PATCH /me/messages/{id}`.
-58. `mail_update_message` **MUST** return a text confirmation listing which properties were updated.
-59. `mail_update_message` **MUST** include MCP annotations: ReadOnly=false, Destructive=false, Idempotent=true, OpenWorld=true.
-
-##### mail_list_categories
-
-60. The system **MUST** provide a `mail_list_categories` tool that lists the user's master category definitions.
-61. `mail_list_categories` **MUST** call `GET /me/outlook/masterCategories`.
-62. `mail_list_categories` **MUST** return each category's `id`, `displayName`, and `color` preset name.
-63. `mail_list_categories` **MUST** support the three-tier output model (text/summary/raw).
-64. `mail_list_categories` **MUST** include MCP annotations: ReadOnly=true, Destructive=false, Idempotent=true, OpenWorld=true.
-
-##### mail_create_category
-
-65. The system **MUST** provide a `mail_create_category` tool.
-66. `mail_create_category` **MUST** accept a required `display_name` parameter and an optional `color` parameter (one of the 25 preset names: preset0–preset24, or "none").
-67. `mail_create_category` **MUST** call `POST /me/outlook/masterCategories`.
-68. `mail_create_category` **MUST** return the new category ID, display name, and color.
-69. `mail_create_category` description **MUST** note that category `displayName` is immutable after creation — to rename, delete and recreate.
-70. `mail_create_category` **MUST** include MCP annotations: ReadOnly=false, Destructive=false, Idempotent=false, OpenWorld=true.
-
-##### mail_delete_category
-
-71. The system **MUST** provide a `mail_delete_category` tool.
-72. `mail_delete_category` **MUST** accept a required `category_id` parameter.
-73. `mail_delete_category` **MUST** call `DELETE /me/outlook/masterCategories/{id}`.
-74. `mail_delete_category` description **MUST** warn that deleting a category removes it from all messages that reference it.
-75. `mail_delete_category` **MUST** include MCP annotations: ReadOnly=false, Destructive=true, Idempotent=true, OpenWorld=true.
-
 #### Tool Descriptions
 
 76. `mail_get_conversation` description **MUST** explain that it retrieves a full email thread in chronological order and is useful for understanding historical context before drafting a response.
 77. `mail_get_attachment` description **MUST** note the maximum attachment size limit.
 78. All draft tools descriptions **MUST** state that drafts appear in the user's Outlook Drafts folder and are not sent automatically.
-79. `mail_update_message` description **MUST** include guidance on using categories as organizational labels (e.g., "Model Read", "Draft Prepared") and flags as pin equivalents.
-80. `mail_list_categories` description **MUST** recommend listing existing categories before creating new ones to avoid duplicates.
 
 #### Mail Provenance Tagging
 
@@ -394,7 +294,7 @@ flowchart TB
 4. The extension manifest (`extension/manifest.json`) **MUST** be updated with all new tools.
 5. The CRUD test document (`docs/prompts/mcp-tool-crud-test.md`) **MUST** be updated to exercise all new tools.
 6. The tool count in `server.go` **MUST** be updated.
-7. Draft and metadata tools **MUST** use `wrapWrite` (includes ReadOnlyGuard) for registration. Read-only tools (conversation, attachment) **MUST** use `wrap`.
+7. Draft tools **MUST** use `wrapWrite` (includes ReadOnlyGuard) for registration. Read-only tools (conversation, attachment) **MUST** use `wrap`.
 8. All new handlers **MUST** use `RetryGraphCall` for transient errors and `WithTimeout` for request timeouts.
 9. All new read tools **MUST** follow the three-tier output model (text/summary/raw). Write tools return text confirmations.
 10. PII in message bodies and recipient lists **MUST** be sanitized in log output by the existing `SanitizingHandler`.
@@ -404,7 +304,7 @@ flowchart TB
 | Component | Change |
 |-----------|--------|
 | `internal/config/config.go` | Add `MailManageEnabled` field; `MailManageEnabled` implies `MailEnabled` |
-| `internal/auth/auth.go` | Update `Scopes()` for `Mail.ReadWrite` + `MailboxSettings.ReadWrite` when manage enabled |
+| `internal/auth/auth.go` | Update `Scopes()` for `Mail.ReadWrite` when manage enabled |
 | `internal/tools/get_conversation.go` | **New**: `mail_get_conversation` tool + handler |
 | `internal/tools/get_attachment.go` | **New**: `mail_get_attachment` tool + handler |
 | `internal/tools/create_draft.go` | **New**: `mail_create_draft` tool + handler |
@@ -412,20 +312,15 @@ flowchart TB
 | `internal/tools/create_forward_draft.go` | **New**: `mail_create_forward_draft` tool + handler |
 | `internal/tools/update_draft.go` | **New**: `mail_update_draft` tool + handler |
 | `internal/tools/delete_draft.go` | **New**: `mail_delete_draft` tool + handler |
-| `internal/tools/update_message.go` | **New**: `mail_update_message` tool + handler |
-| `internal/tools/list_categories.go` | **New**: `mail_list_categories` tool + handler |
-| `internal/tools/create_category.go` | **New**: `mail_create_category` tool + handler |
-| `internal/tools/delete_category.go` | **New**: `mail_delete_category` tool + handler |
 | `internal/tools/list_messages.go` | Add `is_read`, `is_draft`, `has_attachments`, `importance`, `flag_status`, `provenance` filter params |
 | `internal/tools/get_message.go` | Add provenance `$expand` and `provenance` field in response |
 | `internal/tools/search_messages.go` | Enhanced KQL guidance in tool description |
-| `internal/graph/mail_serialize.go` | Add attachment content serialization; add category serialization |
+| `internal/graph/mail_serialize.go` | Add attachment content serialization |
 | `internal/graph/provenance.go` | Add `HasMessageProvenanceTag` for mail messages |
-| `internal/graph/category_serialize.go` | **New**: category serialization helpers |
-| `internal/tools/text_format.go` | Add formatters: conversation thread, attachment detail, categories list |
-| `internal/validate/validate.go` | Add `ValidateRecipients`, `ValidateContentType`, `ValidateCategoryColor` |
+| `internal/tools/text_format.go` | Add formatters: conversation thread, attachment detail |
+| `internal/validate/validate.go` | Add `ValidateRecipients`, `ValidateContentType` |
 | `internal/server/server.go` | Register new tools; update tool count |
-| `extension/manifest.json` | Add 11 new tool entries; update description |
+| `extension/manifest.json` | Add 7 new tool entries; update description |
 | `docs/prompts/mcp-tool-crud-test.md` | Add mail management test steps |
 | `internal/tools/tool_annotations_test.go` | Add annotation tests for all new tools |
 
@@ -434,10 +329,9 @@ flowchart TB
 ### In Scope
 
 * Configuration field for mail manage enablement.
-* OAuth scope escalation from `Mail.Read` to `Mail.ReadWrite` + `MailboxSettings.ReadWrite`.
+* OAuth scope escalation from `Mail.Read` to `Mail.ReadWrite`.
 * 2 new read tools (conversation, attachment) available with `MailEnabled`.
 * 5 new draft management tools available with `MailManageEnabled`.
-* 4 new metadata management tools (update message, category CRUD) available with `MailManageEnabled`.
 * 6 new filter parameters on `mail_list_messages` (including provenance).
 * Enhanced KQL guidance on `mail_search_messages`.
 * Mail provenance tagging on MCP-created drafts via MAPI extended properties, reusing the calendar provenance GUID namespace.
@@ -448,11 +342,11 @@ flowchart TB
 ### Out of Scope ("Here, But Not Further")
 
 * **Send operations** — `mail_send_message`, `mail_reply_message`, `mail_forward_message`, `mail_send_draft`. By design, the model prepares drafts; the user sends from Outlook. The `Mail.Send` scope is never requested.
+* **Metadata management** — `mail_update_message`, `mail_list_categories`, `mail_create_category`, `mail_delete_category`. Deferred to a future CR.
 * **Folder CRUD** — creating, renaming, deleting mail folders (`/me/mailFolders`). Deferred.
 * **Message move** — moving messages between folders (`/me/messages/{id}/move`). Deferred.
 * **Delta sync** — incremental message retrieval (`/me/mailFolders/{id}/messages/delta`). Deferred.
 * **Shared/delegated mailbox access** — the `shared_mailbox` parameter and `Mail.ReadWrite.Shared` scope. Deferred.
-* **Provenance on non-draft messages** — manually setting provenance on messages the model reads (as opposed to creates). The `mail_update_message` tool modifies visible metadata; provenance is reserved for MCP-created content (drafts). For "model has read this" signaling, use categories.
 * **Attachment upload** — attaching files to drafts. The Graph API supports this but requires multipart upload handling. Deferred.
 * **Rich text (HTML) editor experience** — the `body` parameter accepts plain text or HTML strings. No WYSIWYG editing.
 * **Mail rules / inbox automation** — server-side rules (`/me/mailFolders/inbox/messageRules`). Deferred.
@@ -463,21 +357,12 @@ flowchart TB
 
 * **Full send/reply/forward operations (original CR-0058).** Rejected: email sending is irreversible with high blast radius. The draft-centric approach preserves productivity while keeping human oversight for the send action. This can be revisited as a future opt-in tier if there is demand.
 
-* **Categories OR provenance (pick one).** Rejected: each serves a different audience. Categories are user-visible in Outlook but can be manually removed — unreliable for programmatic identification. Extended properties are immutable and machine-readable but invisible in Outlook — useless for human triage. The dual-layer approach gives both audiences what they need.
-
-* **Single `mail_manage_message` tool for all metadata operations.** Rejected: overloaded tool with unrelated parameters (read status vs flag vs categories vs importance) creates ambiguity for the model. A single `mail_update_message` with optional fields is appropriate since all use PATCH on the same endpoint.
-
-* **Separate `mail_flag_message`, `mail_categorize_message`, `mail_mark_read` tools.** Rejected: excessive tool proliferation. All four metadata operations use `PATCH /me/messages/{id}` — a single `mail_update_message` with optional fields is cleaner and more consistent with Graph API semantics.
-
-* **Category color as a separate `mail_update_category` tool.** Not needed: the Graph API does not support updating category `displayName` (immutable). The only mutable field is `color`, but since categories are lightweight to recreate, delete-and-recreate is sufficient.
-
 ## Impact Assessment
 
 ### User Impact
 
 Users who enable mail management (`OUTLOOK_MCP_MAIL_MANAGE_ENABLED=true`) gain:
 - **Draft workflow**: The model reads email threads, drafts responses that appear in Outlook's Drafts folder. Users review, edit if needed, and send manually.
-- **Email triage**: The model categorizes emails with colored labels (e.g., "Urgent", "Model Read", "Draft Prepared"), flags important messages, and marks processed messages as read.
 - **Full context**: Conversation threading retrieves complete email history. Attachment download lets the model read attached documents.
 - **Enhanced filtering**: Find unread emails, flagged items, drafts, or messages by importance without full-text search.
 
@@ -485,20 +370,19 @@ Users who only want read access keep `MailEnabled=true` with no scope change. Th
 
 ### Technical Impact
 
-* **OAuth scope change**: Users enabling mail manage will need to re-consent for `Mail.ReadWrite` + `MailboxSettings.ReadWrite`. This is a one-time re-authentication.
-* **Tool count increase**: 11 new tools. Base: 18. With mail read: +6 = 24 (adding conversation + attachment). With mail manage: +9 = 33. With auth_code: +1 = 34.
+* **OAuth scope change**: Users enabling mail manage will need to re-consent for `Mail.ReadWrite`. This is a one-time re-authentication.
+* **Tool count increase**: 7 new tools. Base: 18. With mail read: +2 = 20 (conversation + attachment). With mail manage: +5 = 25. With auth_code: +1 = 26.
 * **No new dependencies**: All Graph API endpoints are available through `msgraph-sdk-go`.
-* **File count**: 11 new tool handler files + 1 serialization file, following single-purpose convention.
+* **File count**: 7 new tool handler files, following single-purpose convention.
 
 ### Security Impact
 
 * **No `Mail.Send` scope** — the model cannot send email under any configuration. This is the primary security differentiator from the original CR-0058.
-* **`Mail.ReadWrite`** allows creating drafts and modifying message metadata. Mitigated by:
+* **`Mail.ReadWrite`** allows creating and modifying drafts. Mitigated by:
   - Opt-in configuration (`MailManageEnabled` defaults to false).
   - ReadOnlyGuard blocks write tools when `read_only=true`.
   - Audit logging of all write operations.
   - Drafts are visible in Outlook and can be reviewed/deleted by the user.
-* **`MailboxSettings.ReadWrite`** allows modifying mailbox settings beyond categories. Mitigated by: the tool surface only exposes category CRUD; other mailbox settings endpoints are not implemented. This is the minimum scope required by the Graph API for category management.
 * **`mail_delete_draft`** permanently deletes a draft. Mitigated by: the tool validates `isDraft=true` before deleting, preventing deletion of non-draft messages.
 * **Attachment download** exposes file content. The configurable size limit (default 10 MB) prevents memory exhaustion. Content is base64-encoded in the response, not written to disk.
 
@@ -515,9 +399,9 @@ The draft-centric workflow makes the MCP server a practical email assistant: the
 - In `LoadConfig`, when `MailManageEnabled` is true, force `MailEnabled = true`.
 
 **`internal/auth/auth.go`:**
-- Add `mailReadWriteScope = "Mail.ReadWrite"`, `mailboxSettingsScope = "MailboxSettings.ReadWrite"`.
+- Add `mailReadWriteScope = "Mail.ReadWrite"`.
 - Update `Scopes()`:
-  - If `MailManageEnabled`: append `mailReadWriteScope` + `mailboxSettingsScope` (not `mailScope`).
+  - If `MailManageEnabled`: append `mailReadWriteScope` (not `mailScope`).
   - Else if `MailEnabled`: append `mailScope` (current behavior).
 
 ### Phase 2: Reading Enhancements
@@ -575,28 +459,7 @@ The draft-centric workflow makes the MCP server a practical email assistant: the
 - `NewDeleteDraftTool()` + `HandleDeleteDraft(retryCfg, timeout)`.
 - Validates target is a draft before DELETE.
 
-### Phase 5: Metadata Management
-
-**`internal/tools/update_message.go`:**
-- `NewUpdateMessageTool()` + `HandleUpdateMessage(retryCfg, timeout)`.
-- PATCH with optional `isRead`, `flag` (status + optional dates), `categories`, `importance`.
-- Validates flag date dependencies.
-
-**`internal/tools/list_categories.go`:**
-- `NewListCategoriesTool()` + `HandleListCategories(retryCfg, timeout)`.
-- Calls `GET /me/outlook/masterCategories`.
-- Three-tier output: text (numbered list), summary (JSON array), raw.
-
-**`internal/tools/create_category.go`:**
-- `NewCreateCategoryTool()` + `HandleCreateCategory(retryCfg, timeout)`.
-- Validates color preset.
-- Calls `POST /me/outlook/masterCategories`.
-
-**`internal/tools/delete_category.go`:**
-- `NewDeleteCategoryTool()` + `HandleDeleteCategory(retryCfg, timeout)`.
-- Calls `DELETE /me/outlook/masterCategories/{id}`.
-
-### Phase 6: Provenance Integration
+### Phase 5: Provenance Integration
 
 **`internal/graph/provenance.go`:**
 - Add `HasMessageProvenanceTag(msg models.Messageable, propertyID string) bool` — parallel to existing `HasProvenanceTag` for events.
@@ -614,34 +477,28 @@ The draft-centric workflow makes the MCP server a practical email assistant: the
 - Add `provenance` boolean filter parameter.
 - When `provenance=true`, add `singleValueExtendedProperties/any(ep: ep/id eq '{id}' and ep/value eq 'true')` to `$filter`.
 
-### Phase 7: Serialization and Formatting
-
-**`internal/graph/category_serialize.go`** (new):
-- `SerializeCategory(cat)`, `SerializeSummaryCategory(cat)`.
+### Phase 6: Serialization and Formatting
 
 **`internal/tools/text_format.go`:**
 - `FormatConversationText()` — chronological thread with message numbers and quoted excerpts.
 - `FormatAttachmentText()` — attachment metadata with size.
-- `FormatCategoriesText()` — numbered category list with color names.
 
-### Phase 8: Server Registration, Manifest, and Tests
+### Phase 7: Server Registration, Manifest, and Tests
 
 **`internal/server/server.go`:**
 - Register read tools (`mail_get_conversation`, `mail_get_attachment`) with `wrap` under `MailEnabled`.
-- Register manage tools (5 draft + 4 metadata) with `wrapWrite` under `MailManageEnabled`.
+- Register manage tools (5 draft) with `wrapWrite` under `MailManageEnabled`.
 - Update tool count.
 
 **`extension/manifest.json`:**
-- Add all 11 new tool entries.
+- Add all 7 new tool entries.
 
 **Tests:**
-- Annotation tests for all 11 new tools.
+- Annotation tests for all 7 new tools.
 - Handler unit tests with mock Graph client for each new tool.
 - Scope tests for new configuration combinations.
 - Filter composition tests for enhanced `mail_list_messages`.
 - Draft validation tests (isDraft check).
-- Category color validation tests.
-- Flag date dependency validation tests.
 
 **`docs/prompts/mcp-tool-crud-test.md`:**
 - Add mail management lifecycle test steps.
@@ -665,21 +522,16 @@ flowchart LR
         D3 --> D4["update_draft"]
         D4 --> D5["delete_draft"]
     end
-    subgraph P5["Phase 5: Metadata"]
-        E1["update_message"] --> E2["list_categories"]
-        E2 --> E3["create_category"]
-        E3 --> E4["delete_category"]
-    end
-    subgraph P6["Phase 6: Provenance"]
+    subgraph P5["Phase 5: Provenance"]
         F1["HasMessageProvenanceTag\nprovenance on drafts\nprovenance detection"]
     end
-    subgraph P7["Phase 7: Format"]
+    subgraph P6["Phase 6: Format"]
         G1["Serializers\nFormatters"]
     end
-    subgraph P8["Phase 8: Ship"]
+    subgraph P7["Phase 7: Ship"]
         H1["server.go\nmanifest\ntests"]
     end
-    P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8
+    P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7
 ```
 
 ## Test Strategy
@@ -688,7 +540,7 @@ flowchart LR
 
 | Test File | Test Name | Description |
 |-----------|-----------|-------------|
-| `auth_test.go` | `TestScopes_MailManage` | `MailManageEnabled` returns `Mail.ReadWrite` + `MailboxSettings.ReadWrite` |
+| `auth_test.go` | `TestScopes_MailManage` | `MailManageEnabled` returns `Mail.ReadWrite` |
 | `auth_test.go` | `TestScopes_MailManageImpliesRead` | `MailManageEnabled` forces `MailEnabled` |
 | `auth_test.go` | `TestScopes_NoMailSend` | No configuration produces `Mail.Send` scope |
 | `config_test.go` | `TestMailManageImpliesMailEnabled` | `MailManageEnabled=true` + `MailEnabled=false` → `MailEnabled=true` |
@@ -706,16 +558,6 @@ flowchart LR
 | `update_draft_test.go` | `TestUpdateDraft_NotDraft` | Error when target is not a draft |
 | `delete_draft_test.go` | `TestDeleteDraft_Success` | Draft deleted |
 | `delete_draft_test.go` | `TestDeleteDraft_NotDraft` | Error when target is not a draft |
-| `update_message_test.go` | `TestUpdateMessage_MarkRead` | isRead set to true |
-| `update_message_test.go` | `TestUpdateMessage_Flag` | Flag set to "flagged" |
-| `update_message_test.go` | `TestUpdateMessage_FlagWithDates` | Flag with start and due dates |
-| `update_message_test.go` | `TestUpdateMessage_FlagDueDateWithoutStart` | Validation error |
-| `update_message_test.go` | `TestUpdateMessage_Categories` | Categories set on message |
-| `update_message_test.go` | `TestUpdateMessage_Importance` | Importance changed |
-| `list_categories_test.go` | `TestListCategories_Success` | Categories returned with colors |
-| `create_category_test.go` | `TestCreateCategory_Success` | Category created with color |
-| `create_category_test.go` | `TestCreateCategory_InvalidColor` | Validation error on bad preset |
-| `delete_category_test.go` | `TestDeleteCategory_Success` | Category deleted |
 | `list_messages_test.go` | `TestListMessages_IsReadFilter` | isRead filter applied |
 | `list_messages_test.go` | `TestListMessages_IsDraftFilter` | isDraft filter applied |
 | `list_messages_test.go` | `TestListMessages_CombinedFilters` | Multiple filters composed with 'and' |
@@ -728,7 +570,7 @@ flowchart LR
 | `create_forward_draft_test.go` | `TestCreateForwardDraft_WithProvenance` | Provenance set via follow-up PATCH |
 | `get_message_test.go` | `TestGetMessage_ProvenanceDetection` | Provenance field included when tag configured |
 | `get_conversation_test.go` | `TestGetConversation_ProvenancePerMessage` | Provenance field per message in thread |
-| `tool_annotations_test.go` | 11 tests | Annotation sets for all new tools |
+| `tool_annotations_test.go` | 7 tests | Annotation sets for all new tools |
 
 ### Tests to Modify
 
@@ -800,42 +642,19 @@ Then only unread, flagged messages are returned
   And existing filters (date range, sender) still compose correctly
 ```
 
-### AC-7: Message metadata update
-
-```gherkin
-Given a message in the inbox
-When mail_update_message is called with categories=["Model Read","Urgent"] and is_read=true
-Then the message is marked as read and both categories are applied
-  And the categories appear as colored labels in Outlook
-```
-
-### AC-8: Category lifecycle
-
-```gherkin
-Given MailManageEnabled is true
-When mail_create_category is called with display_name="Model Read" and color="preset4"
-Then a green category named "Model Read" is created
-
-When mail_list_categories is called
-Then "Model Read" appears in the list with color "preset4"
-
-When mail_delete_category is called with the category_id
-Then the category is removed from the master list
-```
-
-### AC-9: Scope escalation matches configuration
+### AC-7: Scope escalation matches configuration
 
 ```gherkin
 Given MailEnabled=true and MailManageEnabled=false
 Then OAuth scopes include Mail.Read only
 
 Given MailManageEnabled=true
-Then OAuth scopes include Mail.ReadWrite and MailboxSettings.ReadWrite
+Then OAuth scopes include Mail.ReadWrite
   And OAuth scopes do NOT include Mail.Send
   And OAuth scopes do NOT include Mail.Read (superseded by Mail.ReadWrite)
 ```
 
-### AC-10: Mail provenance on drafts
+### AC-8: Mail provenance on drafts
 
 ```gherkin
 Given ProvenanceTag is configured and MailManageEnabled is true
@@ -847,7 +666,7 @@ When mail_create_reply_draft is called
 Then the reply draft has the provenance extended property set via follow-up PATCH
 ```
 
-### AC-11: Provenance detection on read
+### AC-9: Provenance detection on read
 
 ```gherkin
 Given a message with the provenance extended property set
@@ -859,7 +678,7 @@ When mail_get_conversation is called with ProvenanceTag configured
 Then each message in the thread includes a provenance field (true or false)
 ```
 
-### AC-12: Provenance filtering
+### AC-10: Provenance filtering
 
 ```gherkin
 Given an inbox with MCP-created drafts and regular messages
@@ -871,7 +690,7 @@ When mail_list_messages is called with provenance=true
 Then an error is returned explaining provenance tagging is not configured
 ```
 
-### AC-13: No send capability
+### AC-11: No send capability
 
 ```gherkin
 Given any server configuration (MailEnabled, MailManageEnabled, ReadOnly)
@@ -880,7 +699,7 @@ Then no tool exists that calls POST /me/sendMail, /me/messages/{id}/send,
   And the Mail.Send OAuth scope is never requested
 ```
 
-### AC-14: All quality checks pass
+### AC-12: All quality checks pass
 
 ```gherkin
 Given all code changes are applied
@@ -892,24 +711,24 @@ Then the build succeeds, all linter checks pass, and all tests pass
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] Go doc comments on all new tool constructors and handlers
-- [ ] CRUD test document updated with mail management test steps
+- [x] Go doc comments on all new tool constructors and handlers
+- [x] CRUD test document updated with mail management test steps
 
 ### Code Review
 
@@ -933,47 +752,35 @@ make ci
 
 **Likelihood:** high (by design)
 **Impact:** medium
-**Mitigation:** Three-layer defense: (1) Opt-in config `MailManageEnabled` defaults to false, (2) ReadOnlyGuard blocks write tools in read-only mode, (3) Audit logging records all modifications. The scope does not include `Mail.Send`, so the blast radius is limited to metadata and draft changes — all visible and reversible in Outlook.
+**Mitigation:** Three-layer defense: (1) Opt-in config `MailManageEnabled` defaults to false, (2) ReadOnlyGuard blocks write tools in read-only mode, (3) Audit logging records all modifications. The scope does not include `Mail.Send`, so the blast radius is limited to draft changes — all visible and reversible in Outlook.
 
-### Risk 2: MailboxSettings.ReadWrite scope is broader than needed
-
-**Likelihood:** low (scope is stable)
-**Impact:** low
-**Mitigation:** The `MailboxSettings.ReadWrite` scope is the minimum required by the Graph API for master category management. The tool surface only exposes category CRUD — no other mailbox settings endpoints are implemented. The scope is well-documented in the consent prompt, and users can inspect what it allows before granting.
-
-### Risk 3: Re-consent required when upgrading from Mail.Read to Mail.ReadWrite
+### Risk 2: Re-consent required when upgrading from Mail.Read to Mail.ReadWrite
 
 **Likelihood:** high
 **Impact:** low
 **Mitigation:** Users enabling `MailManageEnabled` will be prompted to re-authenticate with the new scopes. The auth middleware handles this transparently on the next tool call. The `account_login` tool (CR-0056) provides explicit control.
 
-### Risk 4: Draft validation race condition
+### Risk 3: Draft validation race condition
 
 **Likelihood:** low
 **Impact:** low
 **Mitigation:** `mail_update_draft` and `mail_delete_draft` validate `isDraft=true` by fetching the message before operating. A race condition where the draft is sent between the check and the operation is theoretically possible but practically negligible — the Graph API will return an appropriate error if the state changed.
 
-### Risk 5: Large attachment download causes memory pressure
+### Risk 4: Large attachment download causes memory pressure
 
 **Likelihood:** medium
 **Impact:** medium
 **Mitigation:** Configurable maximum attachment size (default 10 MB) prevents unbounded memory allocation. A 10 MB file results in ~13 MB of base64 text, within acceptable limits for a single tool response.
 
-### Risk 6: Category display name immutability surprises users
-
-**Likelihood:** medium
-**Impact:** low
-**Mitigation:** The `mail_create_category` tool description explicitly states that display names are immutable after creation. To "rename" a category, delete and recreate it. This is a Graph API limitation, not a design choice.
-
 ## Dependencies
 
 * No new Go module dependencies. The `msgraph-sdk-go` already provides all required models and API clients.
-* Requires Microsoft Graph API permissions: `Mail.ReadWrite` and `MailboxSettings.ReadWrite` (delegated).
+* Requires Microsoft Graph API permissions: `Mail.ReadWrite` (delegated).
 * Users must have Exchange Online licensing (included in Microsoft 365).
 
 ## Estimated Effort
 
-20–28 person-hours, distributed as:
+16–22 person-hours, distributed as:
 
 | Phase | Effort |
 |-------|--------|
@@ -981,14 +788,29 @@ make ci
 | Phase 2: Reading (conversation, attachment) | 3–4 hours |
 | Phase 3: Search filter enhancements | 1–2 hours |
 | Phase 4: Draft management (5 tools) | 4–6 hours |
-| Phase 5: Metadata management (4 tools) | 3–4 hours |
-| Phase 6: Provenance integration | 2–3 hours |
-| Phase 7: Serialization + formatting | 2–3 hours |
-| Phase 8: Registration + manifest + tests | 4–5 hours |
+| Phase 5: Provenance integration | 2–3 hours |
+| Phase 6: Serialization + formatting | 2–3 hours |
+| Phase 7: Registration + manifest + tests | 3–4 hours |
 
 ## Decision Outcome
 
-Chosen approach: "Draft-centric workflow with dual-layer tracking", because it provides the model with full email assistance capability (read, compose, organize) while maintaining human oversight for the highest-risk action (sending). A dual-layer tracking system combines user-visible categories (colored labels in Outlook) with machine-readable provenance tags (MAPI extended properties) — categories for human triage, provenance for programmatic identification. The `Mail.Send` scope is never requested, eliminating the risk of automated email dispatch. This design can be extended with an opt-in send tier in a future CR if there is demand.
+Chosen approach: "Draft-centric workflow with provenance tracking", because it provides the model with core email assistance capability (read, compose) while maintaining human oversight for the highest-risk action (sending). Machine-readable provenance tags (MAPI extended properties) allow the model to identify its own drafts programmatically. The `Mail.Send` scope is never requested, eliminating the risk of automated email dispatch. Metadata management (categories, flags, read status) is deferred to a future CR.
+
+## Review Summary
+
+**Findings:** 4
+
+**Fixes applied:**
+- Removed the orphaned "Phase 5: Metadata Management" prose block (which described `mail_update_message`, `mail_list_categories`, `mail_create_category`, `mail_delete_category`) — these tools are explicitly Out of Scope per Scope Boundaries and were deferred by checkpoint `dd68e38`.
+- Renumbered subsequent Implementation Approach prose phases: "Phase 6: Provenance Integration" → Phase 5; "Phase 7: Serialization and Formatting" → Phase 6; "Phase 8: Server Registration, Manifest, and Tests" → Phase 7. The Implementation Flow mermaid diagram and the Estimated Effort table already used this 7-phase numbering and required no changes.
+- Verified Affected Components table: no `update_message.go`, `list_categories.go`, `create_category.go`, or `delete_category.go` entries present — already aligned with the deferred scope.
+- Verified Functional Requirements use MUST/MUST NOT throughout (no normative "should"/"may"). Every FR has at least one AC (AC-1 through AC-12 cover all requirement clusters); every AC maps to at least one Test Strategy entry.
+
+**Notes (accepted as-is):**
+- Non-functional requirement numbering restarts at 1 after FR 92 — this is a conventional NFR-vs-FR separation; accepted.
+- Functional Requirement numbering jumps (52 → 76 → 81) leaving gaps. Retained per instruction: gaps reflect prior scope removals and do not introduce ambiguity because each requirement is self-identifying and uniquely referenced.
+
+**Unresolved items requiring human input:** none.
 
 ## Related Items
 

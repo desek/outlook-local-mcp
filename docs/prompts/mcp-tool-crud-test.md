@@ -490,6 +490,101 @@ Complete the authentication flow interactively when prompted (browser, device co
 - **Verify:** Calling `account_login` again on the same (now connected) account returns an error stating the account is already connected.
 - **Fail:** If the account does not return to the authenticated state or the already-connected guard does not trigger.
 
+### Step 30 -- Mail list filter matrix (skip if mail disabled)
+
+If `config.features.mail_enabled` from Step 0b is `false`, **skip** Steps 30 through 36 and record them as SKIP.
+
+Call `mcp__outlookCalendar__mail_list_messages` four times with the following filter combinations and record whether each call returns plain text, a sensible total count, and the expected filtering behavior:
+
+| Call | Parameters                              | Expected                                                         |
+|------|-----------------------------------------|------------------------------------------------------------------|
+| 30a  | `folder: "Inbox", is_read: false`       | Only unread messages are listed; count matches folder unread     |
+| 30b  | `folder: "Inbox", flag_status: "flagged"` | Only flagged messages are listed                                |
+| 30c  | `folder: "Inbox", provenance: "created_by_mcp"` | Only MCP-tagged messages (may be empty if none created yet)  |
+| 30d  | `folder: "Inbox"` (no filters, baseline) | Baseline message count recorded for comparison                  |
+
+- **Verify:** All calls return plain text. The filtered counts are less than or equal to the baseline.
+- **Fail:** If any call returns an error or ignores the filter.
+
+### Step 31 -- Create draft (skip if mail management disabled)
+
+If `config.features.mail_manage_enabled` from Step 0b is `false`, **skip** Steps 31 through 35 and record them as SKIP.
+
+Call `mcp__outlookCalendar__mail_create_draft` with:
+
+| Parameter   | Value                                                   |
+|-------------|---------------------------------------------------------|
+| `to`        | The default account's own UPN (self-send for test)     |
+| `subject`   | `"CRUD test draft"`                                     |
+| `body`      | `"Created by MCP CRUD lifecycle test."`                |
+| `importance`| `"normal"`                                              |
+
+- **Verify:** Response is a plain text confirmation including the draft's message ID.
+- **Record:** The draft's message ID as **draft ID**.
+- **Fail:** If the tool errors or the message ID is not returned.
+
+### Step 32 -- Update draft
+
+Call `mcp__outlookCalendar__mail_update_draft` with:
+
+| Parameter  | Value                     |
+|------------|---------------------------|
+| `id`       | The **draft ID**          |
+| `subject`  | `"CRUD test draft (updated)"` |
+
+- **Verify:** Response is plain text confirming the update.
+- **Verify:** A subsequent `mail_get_message` call for **draft ID** shows the updated subject.
+- **Fail:** If the update is not reflected.
+
+### Step 33 -- Create reply draft
+
+Call `mcp__outlookCalendar__mail_create_reply_draft` with:
+
+| Parameter  | Value                                         |
+|------------|-----------------------------------------------|
+| `id`       | The **draft ID** (reply to the draft itself) |
+| `comment`  | `"Replying to my own draft."`                |
+
+If the server rejects replying to a draft, instead pick the most recent message from `mail_list_messages` on `Inbox` and reply to it. Record the reply draft ID as **reply draft ID**.
+
+- **Verify:** Response is plain text confirming the reply draft creation with a new message ID.
+- **Fail:** If no reply draft is created.
+
+### Step 34 -- Delete reply draft and original draft
+
+Call `mcp__outlookCalendar__mail_delete_draft` twice:
+
+1. `id: <reply draft ID>` (if created)
+2. `id: <draft ID>`
+
+- **Verify:** Both calls return plain text delete confirmations.
+- **Verify:** A subsequent `mail_get_message` for each ID returns an error (message no longer exists).
+- **Fail:** If any draft remains retrievable.
+
+### Step 35 -- Get conversation
+
+Call `mcp__outlookCalendar__mail_list_messages` with `folder: "Inbox", top: 1` and record the first message's `conversationId` as **conversation ID**. If Inbox is empty, skip Step 35.
+
+Call `mcp__outlookCalendar__mail_get_conversation` with `id: <conversation ID>`.
+
+- **Verify:** Response is plain text listing one or more messages in chronological order.
+- **Fail:** If the call errors for a valid conversation ID.
+
+### Step 36 -- Get attachment
+
+Using `mail_list_messages` with `folder: "Inbox", has_attachments: true, top: 1` pick a message that has attachments. If none found, skip Step 36.
+
+Call `mcp__outlookCalendar__mail_get_message` on the chosen message with `output: "summary"` to enumerate its attachment IDs. Then call `mcp__outlookCalendar__mail_get_attachment` with:
+
+| Parameter       | Value                                       |
+|-----------------|---------------------------------------------|
+| `message_id`    | The chosen message ID                       |
+| `attachment_id` | The first attachment's ID                   |
+
+- **Verify:** Response is plain text with attachment metadata (name, size, content type).
+- **Verify:** If the attachment is within the configured size limit, content is returned (base64); otherwise an explanatory message is returned.
+- **Fail:** If the attachment cannot be retrieved for a valid ID.
+
 ## Reporting
 
 After all steps, print a summary table. Every row **MUST** include a short `Comment` (under ~120 characters) explaining the result — for PASS rows, a brief confirmation of what was verified; for FAIL rows, the failure cause (tool name, error, mismatch); for SKIP rows, the reason (e.g., "single-account mode"). Do not leave the `Comment` column blank.
@@ -534,6 +629,13 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 27   | Force refresh token (text)        | PASS/FAIL      | e.g., "label + expiry in plain text"                     |
 | 28   | Log out non-default account       | PASS/FAIL/SKIP | e.g., "only default authenticated" or "logged out"       |
 | 29   | Log back in non-default account   | PASS/FAIL/SKIP | e.g., "only default authenticated" or "re-authenticated" |
+| 30   | Mail list filter matrix           | PASS/FAIL/SKIP | e.g., "is_read/flag_status/provenance filters honored"   |
+| 31   | Create mail draft                 | PASS/FAIL/SKIP | e.g., "draft id returned"                                |
+| 32   | Update mail draft                 | PASS/FAIL/SKIP | e.g., "subject updated"                                  |
+| 33   | Create reply draft                | PASS/FAIL/SKIP | e.g., "reply draft created"                              |
+| 34   | Delete drafts                     | PASS/FAIL/SKIP | e.g., "both drafts deleted, 404 on re-fetch"             |
+| 35   | Get conversation                  | PASS/FAIL/SKIP | e.g., "thread returned in chronological order"           |
+| 36   | Get attachment                    | PASS/FAIL/SKIP | e.g., "metadata + base64 under size limit"               |
 ```
 
 Then print the **environment** section using all values recorded in Steps 0b and 1:

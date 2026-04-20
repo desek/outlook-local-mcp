@@ -556,7 +556,7 @@ func TestFormatStatusText(t *testing.T) {
 	if !strings.Contains(result, "personal: disconnected") {
 		t.Error("expected personal account with disconnected state")
 	}
-	if !strings.Contains(result, "Features: read-only=off, mail=on, provenance=mcp_created") {
+	if !strings.Contains(result, "Features: read-only=off, mail=on, mail-manage=off, provenance=mcp_created") {
 		t.Error("expected features line")
 	}
 }

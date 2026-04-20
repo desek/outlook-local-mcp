@@ -8,7 +8,11 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
 	"testing"
+	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/graph"
@@ -53,7 +57,7 @@ func TestGetMessageTool_HasParameters(t *testing.T) {
 // TestNewHandleGetMessage_ReturnsHandler validates that NewHandleGetMessage
 // returns a non-nil handler function.
 func TestNewHandleGetMessage_ReturnsHandler(t *testing.T) {
-	handler := NewHandleGetMessage(graph.RetryConfig{}, 0)
+	handler := NewHandleGetMessage(graph.RetryConfig{}, 0, "")
 	if handler == nil {
 		t.Fatal("expected non-nil handler function")
 	}
@@ -66,7 +70,7 @@ func TestGetMessageToolCanBeAddedToServer(t *testing.T) {
 		server.WithToolCapabilities(false),
 		server.WithRecovery(),
 	)
-	s.AddTool(NewGetMessageTool(), NewHandleGetMessage(graph.RetryConfig{}, 0))
+	s.AddTool(NewGetMessageTool(), NewHandleGetMessage(graph.RetryConfig{}, 0, ""))
 }
 
 // TestGetMessage_Success validates that the handler proceeds past the client
@@ -75,7 +79,7 @@ func TestGetMessageToolCanBeAddedToServer(t *testing.T) {
 // response), but should not return "no account selected" or the missing
 // message_id error.
 func TestGetMessage_Success(t *testing.T) {
-	handler := NewHandleGetMessage(graph.RetryConfig{}, 0)
+	handler := NewHandleGetMessage(graph.RetryConfig{}, 0, "")
 	request := mcp.CallToolRequest{}
 	request.Params.Arguments = map[string]any{
 		"message_id": "AAMkAGI2TGULAAA=",
@@ -103,7 +107,7 @@ func TestGetMessage_Success(t *testing.T) {
 // TestGetMessage_NoMessageId validates that the handler returns a tool error
 // when the required message_id parameter is empty or missing.
 func TestGetMessage_NoMessageId(t *testing.T) {
-	handler := NewHandleGetMessage(graph.RetryConfig{}, 0)
+	handler := NewHandleGetMessage(graph.RetryConfig{}, 0, "")
 
 	client, srv := newTestGraphClient(t, nil)
 	defer srv.Close()
@@ -141,7 +145,7 @@ func TestGetMessage_NoMessageId(t *testing.T) {
 // no Graph client is present in the context (simulating a scenario where the
 // account is not configured or the message cannot be found).
 func TestGetMessage_NotFound(t *testing.T) {
-	handler := NewHandleGetMessage(graph.RetryConfig{}, 0)
+	handler := NewHandleGetMessage(graph.RetryConfig{}, 0, "")
 	request := mcp.CallToolRequest{}
 	request.Params.Arguments = map[string]any{
 		"message_id": "AAMkAGI2TGULAAA=",
@@ -158,5 +162,68 @@ func TestGetMessage_NotFound(t *testing.T) {
 	text := result.Content[0].(mcp.TextContent).Text
 	if text != "no account selected" {
 		t.Errorf("error text = %q, want %q", text, "no account selected")
+	}
+}
+
+// TestGetMessage_ProvenanceDetection validates that when provenance tagging is
+// configured and the Graph API returns a message with a matching
+// singleValueExtendedProperties entry, the serialized response includes
+// "provenance": true. When the property is absent the field is false.
+func TestGetMessage_ProvenanceDetection(t *testing.T) {
+	propID := graph.BuildProvenancePropertyID("com.github.desek.outlook-local-mcp.created")
+
+	tests := []struct {
+		name     string
+		body     string
+		expected bool
+	}{
+		{
+			name:     "tagged",
+			body:     fmt.Sprintf(`{"id":"msg-1","subject":"Tagged","singleValueExtendedProperties":[{"id":"%s","value":"true"}]}`, propID),
+			expected: true,
+		},
+		{
+			name:     "untagged",
+			body:     `{"id":"msg-2","subject":"Plain"}`,
+			expected: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			client, srv := newTestGraphClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				//nolint:errcheck // test helper
+				fmt.Fprint(w, tc.body)
+			}))
+			defer srv.Close()
+
+			handler := NewHandleGetMessage(graph.RetryConfig{}, 30*time.Second, propID)
+			req := mcp.CallToolRequest{}
+			req.Params.Arguments = map[string]any{
+				"message_id": "AAMkAGI2TGULAAA=",
+				"output":     "summary",
+			}
+			ctx := auth.WithGraphClient(context.Background(), client)
+			result, err := handler(ctx, req)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if result.IsError {
+				t.Fatalf("unexpected tool error: %s", result.Content[0].(mcp.TextContent).Text)
+			}
+
+			var out map[string]any
+			if err := json.Unmarshal([]byte(result.Content[0].(mcp.TextContent).Text), &out); err != nil {
+				t.Fatalf("failed to parse response: %v", err)
+			}
+			got, ok := out["provenance"]
+			if !ok {
+				t.Fatal("provenance key missing from response")
+			}
+			if got != tc.expected {
+				t.Errorf("provenance = %v, want %v", got, tc.expected)
+			}
+		})
 	}
 }

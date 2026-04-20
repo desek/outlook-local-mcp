@@ -63,18 +63,33 @@ var searchMessagesFullSelectFields = []string{
 // Returns the configured mcp.Tool ready for registration with server.AddTool.
 func NewSearchMessagesTool() mcp.Tool {
 	return mcp.NewTool("mail_search_messages",
-		mcp.WithDescription(`Full-text search across email messages using Microsoft Graph KQL syntax. Returns messages ranked by relevance.
+		mcp.WithDescription(`Full-text search across email messages using Microsoft Graph KQL (Keyword Query Language) syntax. Returns messages ranked by relevance, not chronologically.
 
-KQL syntax reference:
-- subject:"exact phrase" -- match subject
-- from:user@domain.com -- match sender
-- to:user@domain.com -- match recipient
-- participants:user@domain.com -- match any sender or recipient
-- received>=2026-03-01 -- date range filter
-- hasAttachments:true -- filter by attachments
-- Combine with AND/OR: subject:"Sprint" AND from:alice@contoso.com
+Property keywords:
+- from:alice@contoso.com            -- match sender address
+- to:bob@contoso.com                -- match direct recipient
+- cc:carol@contoso.com              -- match CC recipient
+- subject:"Design Review"           -- match subject (quote multi-word phrases)
+- body:"release notes"              -- match message body content
+- participants:alice@contoso.com    -- match any sender, to, or cc recipient
+- hasAttachments:true               -- filter by attachment presence
+- received>=2026-03-01              -- date comparisons (>=, <=, =, >, <)
 
-Note: $search cannot be combined with $filter or $orderby. Results are ranked by relevance, not chronologically. For chronological listing with structured filters, use mail_list_messages instead.`),
+Boolean operators (case-sensitive, uppercase):
+- AND combines terms: subject:"Sprint" AND from:alice@contoso.com
+- OR alternates terms: from:alice@contoso.com OR from:bob@contoso.com
+- Group with parentheses: (from:alice OR from:bob) AND hasAttachments:true
+
+Phrase matching:
+- Wrap exact phrases in double quotes: subject:"Q1 planning"
+- Unquoted terms are matched as individual words.
+
+Bare terms without a property keyword perform a full-text search across subject, body, and recipients (e.g., "quarterly report" matches anywhere).
+
+Limitations:
+- $search cannot be combined with $filter or $orderby; results are ranked by relevance.
+- KQL does NOT support filtering by isRead, isDraft, flag status, or importance. For those filters, use mail_list_messages instead.
+- For chronological ordering or structured OData filtering, use mail_list_messages.`),
 		mcp.WithTitleAnnotation("Search Email Messages"),
 		mcp.WithReadOnlyHintAnnotation(true),
 		mcp.WithDestructiveHintAnnotation(false),

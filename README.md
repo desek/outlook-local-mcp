@@ -39,7 +39,7 @@ On first tool call, sign in with a device code. No Entra ID app registration or 
 
 ## Features
 
-- **Up to 26 MCP tools** -- 14 calendar tools (list, get, search, free/busy, create event, create meeting, update event, update meeting, delete, cancel meeting, respond, reschedule event, reschedule meeting), 4 mail tools (list folders, list messages, search messages, get message; opt-in via `OUTLOOK_MCP_MAIL_ENABLED`), 6 account management tools (add, list, remove, login, logout, refresh; see CR-0056), 1 diagnostic tool (`status`), plus `complete_auth` (registered when using `auth_code` method). Without mail: 22 tools (21 without `complete_auth`). Event tools handle personal calendar entries; meeting tools handle events with attendees and include confirmation guidance (see CR-0054)
+- **Up to 33 MCP tools** -- 14 calendar tools (list, get, search, free/busy, create event, create meeting, update event, update meeting, delete, cancel meeting, respond, reschedule event, reschedule meeting), up to 11 mail tools (see CR-0043, CR-0058): 4 read-only tools (`mail_list_folders`, `mail_list_messages`, `mail_search_messages`, `mail_get_message`) plus `mail_get_conversation` and `mail_get_attachment` when `OUTLOOK_MCP_MAIL_ENABLED=true`, plus 5 draft-management tools (`mail_create_draft`, `mail_create_reply_draft`, `mail_create_forward_draft`, `mail_update_draft`, `mail_delete_draft`) when `OUTLOOK_MCP_MAIL_MANAGE_ENABLED=true`, 6 account management tools (add, list, remove, login, logout, refresh; see CR-0056), 1 diagnostic tool (`status`), plus `complete_auth` (registered when using `auth_code` method). Without mail: 22 tools (21 without `complete_auth`). Event tools handle personal calendar entries; meeting tools handle events with attendees and include confirmation guidance (see CR-0054)
 - **Multi-account support** -- manage multiple Microsoft accounts simultaneously with per-account token isolation and explicit lifecycle control (login/logout/refresh); accounts persist across server restarts via `accounts.json`, keyed by user-chosen label with the User Principal Name (UPN) persisted as canonical identity (see CR-0025, CR-0032, CR-0056)
 - **Lazy authentication** -- authenticates on first tool call, not at startup; device code flow (default) displays a URL and code for simple sign-in (see CR-0034). Smart auth method defaulting infers the best method based on client ID (see CR-0034)
 - **Persistent token cache** -- OS-native secure storage (macOS Keychain, Linux libsecret, Windows DPAPI) for desktop release builds (CGo-enabled); AES-256-GCM encrypted file cache (`~/.outlook-local-mcp/token_cache.bin`) as fallback or for container builds. Configurable via `OUTLOOK_MCP_TOKEN_STORAGE` (`auto`, `keychain`, `file`). See CR-0037, CR-0038
@@ -50,7 +50,8 @@ On first tool call, sign in with a device code. No Entra ID app registration or 
 - **Event provenance tagging** -- every event created by the MCP server is tagged with a hidden extended property, enabling reliable identification and filtering of MCP-created events via `created_by_mcp` on `calendar_search_events`. Invisible in Outlook UI. Configurable via `OUTLOOK_MCP_PROVENANCE_TAG`; set to empty to disable (see CR-0040)
 - **Event quality guardrails** -- meeting tool descriptions guide the LLM to provide body and location when creating or updating meetings with attendees; a response `_advisory` field prompts follow-up when these are missing (see CR-0039, CR-0054)
 - **User confirmation for attendee actions** -- dedicated meeting tools (`calendar_create_meeting`, `calendar_update_meeting`, `calendar_reschedule_meeting`, `calendar_cancel_meeting`) include unconditional confirmation guidance: the LLM must present a draft summary and wait for explicit user confirmation before proceeding. An additional warning is shown when external attendees (different email domain) are involved. When the `AskUserQuestion` tool is available, the LLM is instructed to use it for a structured confirmation experience. Event tools (without attendees) require no confirmation and redirect to meeting tools when attendees are needed (see CR-0053, CR-0054)
-- **Mail read access** -- opt-in read-only email access via `OUTLOOK_MCP_MAIL_ENABLED=true`. Four mail tools (`mail_list_folders`, `mail_list_messages`, `mail_search_messages`, `mail_get_message`) enable finding emails related to calendar events using KQL full-text search, OData filtering by conversation ID/sender/date, and full message retrieval. Adds `Mail.Read` OAuth scope only when enabled. Default: disabled (see CR-0043)
+- **Mail read access** -- opt-in read-only email access via `OUTLOOK_MCP_MAIL_ENABLED=true`. Six mail read tools (`mail_list_folders`, `mail_list_messages`, `mail_search_messages`, `mail_get_message`, `mail_get_conversation`, `mail_get_attachment`) enable finding emails related to calendar events using KQL full-text search, OData filtering (now including `is_read`, `is_draft`, `has_attachments`, `importance`, `flag_status`, and `provenance`), conversation-thread retrieval, and attachment download (default limit 10 MB). Adds `Mail.Read` OAuth scope only when enabled. Default: disabled (see CR-0043, CR-0058)
+- **Mail draft management** -- opt-in draft-centric workflow via `OUTLOOK_MCP_MAIL_MANAGE_ENABLED=true` (implies `MAIL_ENABLED`). Five draft tools (`mail_create_draft`, `mail_create_reply_draft`, `mail_create_forward_draft`, `mail_update_draft`, `mail_delete_draft`) let the model compose replies, forwards, and new drafts that appear in the user's Outlook Drafts folder for review and manual send. The model never sends email: `Mail.Send` is never requested. Adds `Mail.ReadWrite` OAuth scope (supersedes `Mail.Read`). MCP-created drafts are tagged with the provenance extended property when `OUTLOOK_MCP_PROVENANCE_TAG` is configured, enabling reliable identification across sessions. Default: disabled (see CR-0058)
 - **MCP tool annotations** -- all tools include complete MCP annotations (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) for Anthropic Software Directory compliance. Clients can auto-approve read-only tools, prompt for confirmation on destructive operations, and display human-readable titles (see CR-0052)
 - **Response filtering** -- text mode (default) returns token-efficient plain text for LLM consumption; summary mode returns compact JSON; raw mode preserves full Graph API data (see CR-0033, CR-0042, CR-0051)
 - **Well-known client IDs** -- configure `OUTLOOK_MCP_CLIENT_ID` by friendly name (e.g., `outlook-desktop`, `teams-web`) instead of raw UUID (see CR-0033)
@@ -183,7 +184,15 @@ Device code auth (the default) works in headless environments. No additional con
 
 ### Scopes
 
-The server requests `Calendars.ReadWrite` by default. When mail access is enabled (`OUTLOOK_MCP_MAIL_ENABLED=true`), `Mail.Read` is additionally requested. The Azure identity library automatically includes `offline_access` for refresh tokens. Enabling mail for the first time triggers an incremental consent prompt for the `Mail.Read` scope (see CR-0043).
+The server requests `Calendars.ReadWrite` by default. Mail scopes are tiered and opt-in:
+
+| Configuration | Mail OAuth scope |
+|---|---|
+| `MAIL_ENABLED=false` (default) | *(none)* |
+| `MAIL_ENABLED=true`, `MAIL_MANAGE_ENABLED=false` | `Mail.Read` |
+| `MAIL_MANAGE_ENABLED=true` (implies `MAIL_ENABLED`) | `Mail.ReadWrite` |
+
+`Mail.Send` is **never** requested under any configuration — the model prepares drafts but cannot send email. Users send drafts themselves from Outlook. The Azure identity library automatically includes `offline_access` for refresh tokens. Enabling mail read for the first time triggers an incremental consent prompt for `Mail.Read`; upgrading to mail manage triggers re-consent for `Mail.ReadWrite` (see CR-0043, CR-0058).
 
 ### Middleware chain
 
@@ -218,7 +227,7 @@ Tool descriptions for `account_login`, `account_logout`, `account_refresh`, and 
 
 ### Account selection
 
-All 14 calendar tools and 4 mail tools (when enabled) accept an optional `account` parameter (label or UPN) to target a specific account:
+All 14 calendar tools and up to 11 mail tools (6 read when `MAIL_ENABLED`; +5 draft tools when `MAIL_MANAGE_ENABLED`) accept an optional `account` parameter (label or UPN) to target a specific account:
 
 - **Explicit selection:** Pass `account: "work"` or `account: "alice@contoso.com"` -- the resolver tries label lookup first, then UPN fallback (see CR-0056).
 - **Explicit selection of a disconnected account:** Returns an actionable error directing the user to `account_login` to re-authenticate.
@@ -270,7 +279,9 @@ All configuration is via environment variables prefixed with `OUTLOOK_MCP_`.
 | `AUDIT_LOG_ENABLED` | `true` | Enable audit logging |
 | `AUDIT_LOG_PATH` | *(empty = stderr)* | Audit log file path |
 | `READ_ONLY` | `false` | Disable write/delete tools |
-| `MAIL_ENABLED` | `false` | Enable read-only mail access. Adds `Mail.Read` OAuth scope and registers 4 mail tools (`mail_list_folders`, `mail_list_messages`, `mail_search_messages`, `mail_get_message`). See CR-0043 |
+| `MAIL_ENABLED` | `false` | Enable read-only mail access. Adds `Mail.Read` OAuth scope and registers 6 mail read tools (`mail_list_folders`, `mail_list_messages`, `mail_search_messages`, `mail_get_message`, `mail_get_conversation`, `mail_get_attachment`). See CR-0043, CR-0058 |
+| `MAIL_MANAGE_ENABLED` | `false` | Enable mail draft management. Implies `MAIL_ENABLED=true`. Adds `Mail.ReadWrite` OAuth scope (supersedes `Mail.Read`) and registers 5 draft tools (`mail_create_draft`, `mail_create_reply_draft`, `mail_create_forward_draft`, `mail_update_draft`, `mail_delete_draft`). `Mail.Send` is never requested. See CR-0058 |
+| `MAX_ATTACHMENT_SIZE_BYTES` | `10485760` (10 MB) | Maximum attachment size (in bytes) that `mail_get_attachment` will download. Oversized attachments return an error to avoid memory pressure. See CR-0058 |
 | `OTEL_ENABLED` | `false` | Enable OpenTelemetry metrics and tracing |
 | `OTEL_ENDPOINT` | *(empty = localhost:4317)* | OTLP gRPC endpoint |
 | `PROVENANCE_TAG` | `com.github.desek.outlook-local-mcp.created` | Name for the provenance extended property stamped on MCP-created events. Set to empty string to disable provenance tagging entirely. See CR-0040 |
@@ -516,7 +527,7 @@ Get free/busy availability for a time range. Returns busy periods where `showAs`
 
 ### Mail Tools (opt-in)
 
-These tools are only registered when `OUTLOOK_MCP_MAIL_ENABLED=true`. All mail tools are read-only and support the `account` parameter for multi-account scenarios. See CR-0043.
+Read tools (`mail_list_folders`, `mail_list_messages`, `mail_search_messages`, `mail_get_message`, `mail_get_conversation`, `mail_get_attachment`) are registered when `OUTLOOK_MCP_MAIL_ENABLED=true`. Draft management tools (`mail_create_draft`, `mail_create_reply_draft`, `mail_create_forward_draft`, `mail_update_draft`, `mail_delete_draft`) additionally require `OUTLOOK_MCP_MAIL_MANAGE_ENABLED=true` (which implies `MAIL_ENABLED`). All mail tools support the `account` parameter for multi-account scenarios. The server never sends email: the `Mail.Send` scope is not requested under any configuration and no tool invokes `/sendMail`, `/send`, `/reply`, or `/forward`. Drafts appear in the user's Outlook Drafts folder for review and manual send. See CR-0043, CR-0058.
 
 #### `mail_list_folders`
 
@@ -541,10 +552,18 @@ List messages in a specific mail folder or across all folders, with OData `$filt
 | `end_datetime` | string | No | Filter messages received on or before this ISO 8601 datetime |
 | `from` | string | No | Filter by sender email address |
 | `conversation_id` | string | No | Filter by conversation ID to retrieve a full email thread |
+| `is_read` | boolean | No | Filter by read state (`isRead eq true/false`). See CR-0058 |
+| `is_draft` | boolean | No | Filter by draft state (`isDraft eq true/false`). See CR-0058 |
+| `has_attachments` | boolean | No | Filter by attachment presence. See CR-0058 |
+| `importance` | string | No | Filter by importance: `low`, `normal`, `high`. See CR-0058 |
+| `flag_status` | string | No | Filter by flag state: `notFlagged`, `flagged`, `complete`. See CR-0058 |
+| `provenance` | boolean | No | When `true`, return only messages with the MCP provenance extended property. Errors if `OUTLOOK_MCP_PROVENANCE_TAG` is empty. See CR-0058 |
 | `max_results` | number | No | Maximum messages to return (default 25, max 100) |
 | `timezone` | string | No | IANA timezone for returned times |
 | `account` | string | No | Account label for multi-account scenarios |
 | `output` | string | No | Response format: `text` (default), `summary` for compact JSON, or `raw` for full message fields. See [Response Filtering](#response-filtering) |
+
+All filters compose with `and`.
 
 ---
 
@@ -573,6 +592,111 @@ Retrieve details of a single message by ID. Default output includes `bodyPreview
 | `message_id` | string | Yes | The unique identifier of the message |
 | `account` | string | No | Account label for multi-account scenarios |
 | `output` | string | No | Response format: `text` (default), `summary` for compact JSON, or `raw` for full message fields. See [Response Filtering](#response-filtering) |
+
+When `OUTLOOK_MCP_PROVENANCE_TAG` is configured, the response includes a `provenance` boolean indicating whether the message was created by this MCP server (see CR-0058).
+
+---
+
+#### `mail_get_conversation`
+
+Retrieve all messages in a conversation thread in chronological order (oldest first). Useful for reading full email history before drafting a response. Accepts either `message_id` (the server fetches the message to resolve its `conversationId`) or `conversation_id` directly. When provenance tagging is configured, each message includes a `provenance` boolean. See CR-0058.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `message_id` | string | Conditional | Required unless `conversation_id` is provided. Server resolves `conversationId` from this message |
+| `conversation_id` | string | Conditional | Skip the message fetch and query directly |
+| `max_results` | number | No | Maximum messages to return (default 50) |
+| `account` | string | No | Account label for multi-account scenarios |
+| `output` | string | No | Response format: `text` (default), `summary` for compact JSON, or `raw` for full message fields |
+
+---
+
+#### `mail_get_attachment`
+
+Download the content of a single attachment. Returns metadata (name, content type, size) and base64-encoded bytes. Enforces a configurable maximum size (`OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES`, default 10 MB); oversized attachments return an error. See CR-0058.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `message_id` | string | Yes | The unique identifier of the message |
+| `attachment_id` | string | Yes | The unique identifier of the attachment |
+| `account` | string | No | Account label for multi-account scenarios |
+| `output` | string | No | Response format: `text` (default), `summary` for compact JSON, or `raw` for full response |
+
+---
+
+### Mail Draft Tools (opt-in: `MAIL_MANAGE_ENABLED=true`)
+
+The server composes drafts; it never sends. Every draft created by these tools appears in the user's Outlook Drafts folder for review, editing, and manual send. When `OUTLOOK_MCP_PROVENANCE_TAG` is configured, `mail_create_draft`, `mail_create_reply_draft`, and `mail_create_forward_draft` stamp the draft with the provenance extended property (using the same GUID namespace as calendar events, see CR-0040). Reply and forward drafts are stamped via a follow-up PATCH because `createReply` / `createForward` do not accept extended properties in the request body. See CR-0058.
+
+#### `mail_create_draft`
+
+Create a new draft message in the Drafts folder. Not sent automatically.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `to_recipients` | string | No | Comma-separated email addresses |
+| `cc_recipients` | string | No | Comma-separated email addresses |
+| `bcc_recipients` | string | No | Comma-separated email addresses |
+| `subject` | string | No | Message subject |
+| `body` | string | No | Message body |
+| `content_type` | string | No | `text` (default) or `html` |
+| `importance` | string | No | `low`, `normal`, `high` |
+| `account` | string | No | Account label for multi-account scenarios |
+
+---
+
+#### `mail_create_reply_draft`
+
+Create a reply draft with correct threading headers (In-Reply-To / References). Not sent automatically.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `message_id` | string | Yes | The message to reply to |
+| `reply_all` | boolean | No | If true, reply to all recipients. Default `false` |
+| `comment` | string | No | Reply body text prepended to the quoted original |
+| `account` | string | No | Account label for multi-account scenarios |
+
+---
+
+#### `mail_create_forward_draft`
+
+Create a forward draft. Not sent automatically.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `message_id` | string | Yes | The message to forward |
+| `to_recipients` | string | No | Comma-separated email addresses |
+| `comment` | string | No | Forward body text |
+| `account` | string | No | Account label for multi-account scenarios |
+
+---
+
+#### `mail_update_draft`
+
+Update an existing draft message (PATCH semantics: only provided fields are changed). Returns an error if the target message is not a draft.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `message_id` | string | Yes | The draft to update |
+| `to_recipients` | string | No | Comma-separated email addresses |
+| `cc_recipients` | string | No | Comma-separated email addresses |
+| `bcc_recipients` | string | No | Comma-separated email addresses |
+| `subject` | string | No | New subject |
+| `body` | string | No | New body |
+| `content_type` | string | No | `text` or `html` |
+| `importance` | string | No | `low`, `normal`, `high` |
+| `account` | string | No | Account label for multi-account scenarios |
+
+---
+
+#### `mail_delete_draft`
+
+Permanently delete a draft message. Returns an error if the target message is not a draft. Annotated as destructive.
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `message_id` | string | Yes | The draft to delete |
+| `account` | string | No | Account label for multi-account scenarios |
 
 ---
 
@@ -762,7 +886,7 @@ Move a meeting to a new time, preserving its original duration. Sends update not
 
 ## Read-Only Mode
 
-Set `OUTLOOK_MCP_READ_ONLY=true` to disable all write operations. In this mode, the write tools (`calendar_create_event`, `calendar_create_meeting`, `calendar_update_event`, `calendar_update_meeting`, `calendar_delete_event`, `calendar_cancel_meeting`, `calendar_respond_event`, `calendar_reschedule_event`, `calendar_reschedule_meeting`) return an error when invoked. Read and search tools remain fully functional.
+Set `OUTLOOK_MCP_READ_ONLY=true` to disable all write operations. In this mode, the write tools (`calendar_create_event`, `calendar_create_meeting`, `calendar_update_event`, `calendar_update_meeting`, `calendar_delete_event`, `calendar_cancel_meeting`, `calendar_respond_event`, `calendar_reschedule_event`, `calendar_reschedule_meeting`, `mail_create_draft`, `mail_create_reply_draft`, `mail_create_forward_draft`, `mail_update_draft`, `mail_delete_draft`) return an error when invoked. Read and search tools remain fully functional.
 
 ```bash
 OUTLOOK_MCP_READ_ONLY=true ./outlook-local-mcp

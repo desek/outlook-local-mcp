@@ -90,6 +90,49 @@ func TestHasProvenanceTag_OtherProperty(t *testing.T) {
 	}
 }
 
+// TestHasMessageProvenanceTag_Present validates that HasMessageProvenanceTag
+// returns true when the provenance property is present on the message.
+func TestHasMessageProvenanceTag_Present(t *testing.T) {
+	propID := "String {73830cef-ea4a-4459-b555-80a4619f667d} Name test.tag"
+
+	msg := models.NewMessage()
+	prop := models.NewSingleValueLegacyExtendedProperty()
+	prop.SetId(&propID)
+	val := "true"
+	prop.SetValue(&val)
+	msg.SetSingleValueExtendedProperties([]models.SingleValueLegacyExtendedPropertyable{prop})
+
+	if !HasMessageProvenanceTag(msg, propID) {
+		t.Error("HasMessageProvenanceTag() = false, want true")
+	}
+}
+
+// TestHasMessageProvenanceTag_Absent validates that HasMessageProvenanceTag
+// returns false when the message has no extended properties or a mismatched
+// property ID. It also verifies the nil-message early return.
+func TestHasMessageProvenanceTag_Absent(t *testing.T) {
+	propID := "String {73830cef-ea4a-4459-b555-80a4619f667d} Name test.tag"
+
+	if HasMessageProvenanceTag(nil, propID) {
+		t.Error("HasMessageProvenanceTag(nil) = true, want false")
+	}
+
+	msg := models.NewMessage()
+	if HasMessageProvenanceTag(msg, propID) {
+		t.Error("HasMessageProvenanceTag() = true, want false")
+	}
+
+	otherID := "String {00000000-0000-0000-0000-000000000000} Name other.tag"
+	prop := models.NewSingleValueLegacyExtendedProperty()
+	prop.SetId(&otherID)
+	val := "true"
+	prop.SetValue(&val)
+	msg.SetSingleValueExtendedProperties([]models.SingleValueLegacyExtendedPropertyable{prop})
+	if HasMessageProvenanceTag(msg, propID) {
+		t.Error("HasMessageProvenanceTag() with unrelated property = true, want false")
+	}
+}
+
 // TestProvenanceExpandFilter validates that ProvenanceExpandFilter returns the
 // correct OData $expand clause string.
 func TestProvenanceExpandFilter(t *testing.T) {

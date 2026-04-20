@@ -116,6 +116,27 @@ func TestSearchMessagesToolAnnotations(t *testing.T) {
 	})
 }
 
+// TestGetConversationToolAnnotations verifies all 5 annotations on mail_get_conversation (CR-0058).
+func TestGetConversationToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewGetConversationTool(), annotationExpectation{
+		title: "Get Email Conversation", readOnly: true, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
+// TestGetAttachmentToolAnnotations verifies all 5 annotations on mail_get_attachment (CR-0058).
+func TestGetAttachmentToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewGetAttachmentTool(), annotationExpectation{
+		title: "Get Email Attachment", readOnly: true, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
+// TestListAttachmentsToolAnnotations verifies all 5 annotations on mail_list_attachments.
+func TestListAttachmentsToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewListAttachmentsTool(), annotationExpectation{
+		title: "List Email Attachments", readOnly: true, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
 // TestGetMessageToolAnnotations verifies all 5 annotations on mail_get_message.
 func TestGetMessageToolAnnotations(t *testing.T) {
 	assertAnnotations(t, tools.NewGetMessageTool(), annotationExpectation{
@@ -239,6 +260,41 @@ func TestLogoutAccount_Annotations(t *testing.T) {
 func TestRefreshAccount_Annotations(t *testing.T) {
 	assertAnnotations(t, tools.NewRefreshAccountTool(), annotationExpectation{
 		title: "Refresh Account Token", readOnly: false, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
+// TestCreateDraftToolAnnotations verifies all 5 annotations on mail_create_draft (CR-0058).
+func TestCreateDraftToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewCreateDraftTool(), annotationExpectation{
+		title: "Create Email Draft", readOnly: false, destructive: false, idempotent: false, openWorld: true,
+	})
+}
+
+// TestCreateReplyDraftToolAnnotations verifies all 5 annotations on mail_create_reply_draft (CR-0058).
+func TestCreateReplyDraftToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewCreateReplyDraftTool(), annotationExpectation{
+		title: "Create Email Reply Draft", readOnly: false, destructive: false, idempotent: false, openWorld: true,
+	})
+}
+
+// TestCreateForwardDraftToolAnnotations verifies all 5 annotations on mail_create_forward_draft (CR-0058).
+func TestCreateForwardDraftToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewCreateForwardDraftTool(), annotationExpectation{
+		title: "Create Email Forward Draft", readOnly: false, destructive: false, idempotent: false, openWorld: true,
+	})
+}
+
+// TestUpdateDraftToolAnnotations verifies all 5 annotations on mail_update_draft (CR-0058).
+func TestUpdateDraftToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewUpdateDraftTool(), annotationExpectation{
+		title: "Update Email Draft", readOnly: false, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
+// TestDeleteDraftToolAnnotations verifies all 5 annotations on mail_delete_draft (CR-0058).
+func TestDeleteDraftToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewDeleteDraftTool(), annotationExpectation{
+		title: "Delete Email Draft", readOnly: false, destructive: true, idempotent: true, openWorld: true,
 	})
 }
 

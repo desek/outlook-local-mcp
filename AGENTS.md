@@ -25,7 +25,7 @@ outlook-mcp/
     validate/                  # Input validation helpers
     observability/             # OpenTelemetry metrics and tracing, WithObservability middleware
     server/                    # RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
-    tools/                     # 25 MCP tool handlers (14 calendar + 4 mail + 6 account + 1 system; +1 complete_auth when auth_code; see CR-0056)
+    tools/                     # 32 MCP tool handlers (14 calendar + 11 mail + 6 account + 1 system; +1 complete_auth when auth_code; mail breakdown: 4 read always + 2 extra read when MailEnabled + 5 draft management when MailManageEnabled; see CR-0056, CR-0058)
   docs/
     ...
 ```

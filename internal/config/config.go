@@ -135,6 +135,23 @@ type Config struct {
 	// (default: "false").
 	MailEnabled bool
 
+	// MailManageEnabled controls whether draft-centric mail management is active.
+	// When true, the Mail.ReadWrite OAuth scope is requested (instead of Mail.Read)
+	// so that the server can create, update, and delete drafts in addition to
+	// reading mail. Enabling this option also implicitly enables MailEnabled:
+	// LoadConfig forces MailEnabled to true whenever MailManageEnabled is true,
+	// since management capabilities are a superset of read-only mail access.
+	// Mail.Send is never requested; sending remains a user-only action. Configurable
+	// via OUTLOOK_MCP_MAIL_MANAGE_ENABLED (default: "false").
+	MailManageEnabled bool
+
+	// MaxAttachmentSizeBytes is the maximum size in bytes for attachment
+	// content returned by the mail_get_attachment tool. Attachments whose
+	// reported size exceeds this value cause the tool to return an error
+	// rather than load the content into memory. Configurable via
+	// OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES (default: 10485760, i.e. 10 MB).
+	MaxAttachmentSizeBytes int64
+
 	// ProvenanceTag is the name component of the single-value extended property
 	// used to tag MCP-created calendar events. The full property ID is built by
 	// combining a dedicated GUID with this tag name at startup. When set to an
@@ -277,6 +294,23 @@ func LoadConfig() Config {
 	cfg.TokenStorage = GetEnv("OUTLOOK_MCP_TOKEN_STORAGE", "auto")
 
 	cfg.MailEnabled = strings.EqualFold(GetEnv("OUTLOOK_MCP_MAIL_ENABLED", "false"), "true")
+	cfg.MailManageEnabled = strings.EqualFold(GetEnv("OUTLOOK_MCP_MAIL_MANAGE_ENABLED", "false"), "true")
+
+	// Mail management is a superset of read-only mail access. Enabling
+	// MailManageEnabled implicitly enables MailEnabled so that mail tool
+	// registration and scope selection remain consistent.
+	if cfg.MailManageEnabled {
+		cfg.MailEnabled = true
+	}
+
+	maxAttachStr := GetEnv("OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES", "10485760")
+	maxAttach, err := strconv.ParseInt(maxAttachStr, 10, 64)
+	if err != nil || maxAttach <= 0 {
+		slog.Warn("invalid OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES, using default",
+			"value", maxAttachStr, "default", 10485760)
+		maxAttach = 10485760
+	}
+	cfg.MaxAttachmentSizeBytes = maxAttach
 
 	// ProvenanceTag uses os.Getenv directly so that an explicit empty value
 	// disables tagging, while an unset variable uses the default tag name.
