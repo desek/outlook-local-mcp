@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0](https://github.com/desek/outlook-local-mcp/compare/v0.2.1...v0.3.0) (2026-04-20)
+
+
+### Features
+
+* **auth:** UPN-based account identity and lifecycle management (CR-0056) ([#16](https://github.com/desek/outlook-local-mcp/issues/16)) ([962540a](https://github.com/desek/outlook-local-mcp/commit/962540afb36601fd57345f6403927da6c8dfce32))
+* **mail:** complete mail management with reliability fixes (CR-0058) ([#19](https://github.com/desek/outlook-local-mcp/issues/19)) ([e17e86a](https://github.com/desek/outlook-local-mcp/commit/e17e86a8266680bc47bfeb6898a38403ca6aade8))
+
 ## [0.2.1](https://github.com/desek/outlook-local-mcp/compare/v0.2.0...v0.2.1) (2026-04-06)
 
 
