@@ -130,6 +130,13 @@ func TestGetAttachmentToolAnnotations(t *testing.T) {
 	})
 }
 
+// TestListAttachmentsToolAnnotations verifies all 5 annotations on mail_list_attachments.
+func TestListAttachmentsToolAnnotations(t *testing.T) {
+	assertAnnotations(t, tools.NewListAttachmentsTool(), annotationExpectation{
+		title: "List Email Attachments", readOnly: true, destructive: false, idempotent: true, openWorld: true,
+	})
+}
+
 // TestGetMessageToolAnnotations verifies all 5 annotations on mail_get_message.
 func TestGetMessageToolAnnotations(t *testing.T) {
 	assertAnnotations(t, tools.NewGetMessageTool(), annotationExpectation{

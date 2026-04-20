@@ -133,6 +133,10 @@
       "description": "Download a specific attachment from a message by message ID and attachment ID. Returns metadata and base64-encoded content subject to size limits."
     },
     {
+      "name": "mail_list_attachments",
+      "description": "List attachments (metadata only — id, name, contentType, size, isInline) for a message. Use the returned id with mail_get_attachment to download content."
+    },
+    {
       "name": "mail_create_draft",
       "description": "Create a new email draft in the Drafts folder. Supports to/cc/bcc recipients, subject, body (text or HTML), importance, and attachments. Requires Mail.ReadWrite."
     },

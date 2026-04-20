@@ -606,7 +606,7 @@ func (m *mockAuthCodeFlowCred) ExchangeCode(_ context.Context, _ string, _ []str
 
 // mailToolNames lists the six read-only mail tools gated by MailEnabled:
 // four from CR-0043 and the two conversation/attachment additions from CR-0058.
-var mailToolNames = []string{"mail_list_folders", "mail_list_messages", "mail_search_messages", "mail_get_message", "mail_get_conversation", "mail_get_attachment"}
+var mailToolNames = []string{"mail_list_folders", "mail_list_messages", "mail_search_messages", "mail_get_message", "mail_get_conversation", "mail_get_attachment", "mail_list_attachments"}
 
 // TestRegisterTools_MailDisabled verifies that when MailEnabled is false,
 // none of the four mail tools are registered on the server.
@@ -669,8 +669,8 @@ func TestRegisterTools_MailEnabled(t *testing.T) {
 		}
 	}
 
-	// Verify total count: 21 base + 6 mail (read-only) = 27.
-	const expectedTotal = 27
+	// Verify total count: 21 base + 7 mail (read-only) = 28.
+	const expectedTotal = 28
 	if got := len(registered); got != expectedTotal {
 		t.Errorf("expected %d tools with mail enabled, got %d", expectedTotal, got)
 	}

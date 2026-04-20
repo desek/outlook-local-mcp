@@ -202,6 +202,11 @@ type statusConfigFeatures struct {
 	// MailEnabled indicates whether read-only email access is active.
 	MailEnabled bool `json:"mail_enabled"`
 
+	// MailManageEnabled indicates whether draft management (Mail.ReadWrite) is
+	// active; draft/reply/forward/update/delete tools are registered only when
+	// this flag is set (see CR-0058).
+	MailManageEnabled bool `json:"mail_manage_enabled"`
+
 	// ProvenanceTag is the extended property name for MCP-created events.
 	ProvenanceTag string `json:"provenance_tag"`
 }
@@ -291,9 +296,10 @@ func HandleStatus(cfg config.Config, registry *auth.AccountRegistry, startTime t
 					ShutdownTimeoutSeconds: int(cfg.ShutdownTimeout.Seconds()),
 				},
 				Features: statusConfigFeatures{
-					ReadOnly:      cfg.ReadOnly,
-					MailEnabled:   cfg.MailEnabled,
-					ProvenanceTag: cfg.ProvenanceTag,
+					ReadOnly:          cfg.ReadOnly,
+					MailEnabled:       cfg.MailEnabled,
+					MailManageEnabled: cfg.MailManageEnabled,
+					ProvenanceTag:     cfg.ProvenanceTag,
 				},
 				Observability: statusConfigObservability{
 					OTELEnabled:     cfg.OTELEnabled,

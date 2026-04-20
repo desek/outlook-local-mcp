@@ -128,6 +128,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		// require Mail.Read (or Mail.ReadWrite when MailManageEnabled escalates).
 		s.AddTool(tools.NewGetConversationTool(), wrap("mail_get_conversation", "read", tools.NewHandleGetConversation(retryCfg, timeout, provenancePropertyID)))
 		s.AddTool(tools.NewGetAttachmentTool(), wrap("mail_get_attachment", "read", tools.NewHandleGetAttachment(retryCfg, timeout, cfg.MaxAttachmentSizeBytes)))
+		s.AddTool(tools.NewListAttachmentsTool(), wrap("mail_list_attachments", "read", tools.NewHandleListAttachments(retryCfg, timeout)))
 	}
 
 	// CR-0058: Mail management (draft-centric write) tools. Gated on the

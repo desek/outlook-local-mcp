@@ -536,6 +536,45 @@ func FormatAttachmentText(att map[string]any) string {
 	return b.String()
 }
 
+// FormatAttachmentsText formats a slice of attachment metadata maps into a
+// numbered plain-text listing showing id, name, content type, size, and inline
+// flag. Used by mail_list_attachments.
+//
+// Parameters:
+//   - atts: slice of attachment maps (from graph.SerializeSummaryAttachment or
+//     SerializeAttachment). Each is expected to contain "id", "name",
+//     "contentType", "size", and optionally "isInline".
+//
+// Returns a formatted plain-text string. Returns "No attachments." when the
+// slice is empty.
+//
+// Side effects: none.
+func FormatAttachmentsText(atts []map[string]any) string {
+	if len(atts) == 0 {
+		return "No attachments."
+	}
+	var b strings.Builder
+	for i, a := range atts {
+		name, _ := a["name"].(string)
+		if name == "" {
+			name = "(Unnamed)"
+		}
+		fmt.Fprintf(&b, "%d. %s\n", i+1, name)
+		if id, _ := a["id"].(string); id != "" {
+			fmt.Fprintf(&b, "   ID: %s\n", id)
+		}
+		if ct, _ := a["contentType"].(string); ct != "" {
+			fmt.Fprintf(&b, "   Content-Type: %s\n", ct)
+		}
+		fmt.Fprintf(&b, "   Size: %d bytes\n", toInt(a["size"]))
+		if inline, ok := a["isInline"].(bool); ok && inline {
+			b.WriteString("   Inline: true\n")
+		}
+	}
+	fmt.Fprintf(&b, "\n%d attachment(s).", len(atts))
+	return b.String()
+}
+
 // FormatMailFoldersText formats a slice of serialized mail folder maps into a
 // numbered plain-text listing with unread and total item counts.
 //
@@ -729,7 +768,11 @@ func FormatStatusText(status statusResponse) string {
 	if status.Config.Features.MailEnabled {
 		mail = "on"
 	}
-	fmt.Fprintf(&b, "\nFeatures: read-only=%s, mail=%s, provenance=%s", readOnly, mail, status.Config.Features.ProvenanceTag)
+	mailManage := "off"
+	if status.Config.Features.MailManageEnabled {
+		mailManage = "on"
+	}
+	fmt.Fprintf(&b, "\nFeatures: read-only=%s, mail=%s, mail-manage=%s, provenance=%s", readOnly, mail, mailManage, status.Config.Features.ProvenanceTag)
 
 	return b.String()
 }

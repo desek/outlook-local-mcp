@@ -279,7 +279,14 @@ func NewHandleListMessages(retryCfg graph.RetryConfig, timeout time.Duration, pr
 		}
 
 		top := int32(maxResults)
-		orderby := []string{"receivedDateTime desc"}
+		// Graph rejects $orderby=receivedDateTime combined with filters on
+		// flag/flagStatus, conversationId, or hasAttachments as InefficientFilter.
+		// Drop $orderby in those cases; Graph's default ordering on /messages is
+		// already receivedDateTime descending.
+		var orderby []string
+		if !filterRequiresNoOrderby(filterOpts) {
+			orderby = []string{"receivedDateTime desc"}
+		}
 
 		timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -478,6 +485,14 @@ func buildMessageFilter(o messageFilterOptions) string {
 	}
 
 	return strings.Join(parts, " and ")
+}
+
+// filterRequiresNoOrderby reports whether the filter includes properties that
+// Graph cannot combine with $orderby=receivedDateTime without returning
+// InefficientFilter. Verified empirically against flag/flagStatus,
+// conversationId, and hasAttachments.
+func filterRequiresNoOrderby(o messageFilterOptions) bool {
+	return o.flagStatus != "" || o.conversationID != "" || o.hasAttachments != nil
 }
 
 // getBoolArg retrieves a boolean MCP tool argument by name, returning

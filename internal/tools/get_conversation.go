@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sort"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
@@ -179,14 +180,14 @@ func NewHandleGetConversation(retryCfg graph.RetryConfig, timeout time.Duration,
 			selectFields = conversationFullSelectFields
 		}
 		filter := fmt.Sprintf("conversationId eq '%s'", conversationID)
-		orderby := []string{"receivedDateTime asc"}
 		top := int32(maxResults)
 
+		// Graph rejects $filter=conversationId combined with $orderby as
+		// InefficientFilter. Omit orderby; we sort chronologically in Go below.
 		qp := &users.ItemMessagesRequestBuilderGetQueryParameters{
-			Select:  selectFields,
-			Orderby: orderby,
-			Top:     &top,
-			Filter:  &filter,
+			Select: selectFields,
+			Top:    &top,
+			Filter: &filter,
 		}
 		if provenancePropertyID != "" {
 			qp.Expand = []string{graph.ProvenanceExpandFilter(provenancePropertyID)}
@@ -236,6 +237,13 @@ func NewHandleGetConversation(retryCfg graph.RetryConfig, timeout time.Duration,
 			logger.Error("pagination failed", "error", iterErr.Error())
 			return mcp.NewToolResultError(fmt.Sprintf("failed to iterate messages: %s", iterErr.Error())), nil
 		}
+
+		// Sort chronologically (ascending) since $orderby was omitted above.
+		sort.SliceStable(messages, func(i, j int) bool {
+			a, _ := messages[i]["receivedDateTime"].(string)
+			b, _ := messages[j]["receivedDateTime"].(string)
+			return a < b
+		})
 
 		thread := graph.SerializeConversationThread(conversationID, messages)
 

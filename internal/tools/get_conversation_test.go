@@ -129,9 +129,10 @@ func TestGetConversation_ByConversationID(t *testing.T) {
 	}
 }
 
-// TestGetConversation_ChronologicalOrder validates that the response preserves
-// the chronological order returned by the Graph API (oldest first) and that
-// the orderby clause is requested.
+// TestGetConversation_ChronologicalOrder validates that the response returns
+// messages in chronological order (oldest first) and that $orderby is omitted
+// from the Graph request — Graph rejects $orderby combined with a
+// conversationId filter as InefficientFilter, so ordering happens in Go.
 func TestGetConversation_ChronologicalOrder(t *testing.T) {
 	var urls []string
 	client, srv := newTestGraphClient(t, conversationStubHandler(&urls))
@@ -151,10 +152,11 @@ func TestGetConversation_ChronologicalOrder(t *testing.T) {
 	if result.IsError {
 		t.Fatalf("unexpected tool error: %s", result.Content[0].(mcp.TextContent).Text)
 	}
-	// Verify orderby parameter in the URL.
+	// Verify $orderby is NOT present — it is incompatible with the
+	// conversationId filter (Graph returns InefficientFilter).
 	joined := strings.Join(urls, "|")
-	if !strings.Contains(joined, "orderby=receivedDateTime") {
-		t.Errorf("expected orderby=receivedDateTime in request URLs, got %q", joined)
+	if strings.Contains(joined, "orderby=") || strings.Contains(joined, "%24orderby=") {
+		t.Errorf("expected no $orderby in request URLs, got %q", joined)
 	}
 
 	// Decode JSON response and confirm message order.
