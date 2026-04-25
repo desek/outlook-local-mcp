@@ -25,7 +25,7 @@ outlook-mcp/
     validate/                  # Input validation helpers
     observability/             # OpenTelemetry metrics and tracing, WithObservability middleware
     server/                    # RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
-    tools/                     # 4 aggregate domain tools dispatching verb sets: calendar (15 verbs), mail (5-13 verbs gated by MailEnabled/MailManageEnabled), account (7 verbs), system (2-3 verbs gated by auth_code); see CR-0056, CR-0058, CR-0060
+    tools/                     # 4 aggregate domain tools dispatching verb sets: calendar (15 verbs), mail (5-13 verbs gated by MailEnabled/MailManageEnabled), account (7 verbs), system (5-6 verbs gated by auth_code: status, complete_auth, help, list_docs, search_docs, get_docs); see CR-0056, CR-0058, CR-0060, CR-0061
   docs/
     ...
 ```
@@ -84,7 +84,7 @@ Aggregate tools and their domains:
 * `calendar` -- Calendar and event verbs
 * `mail` -- Mail message, folder, and draft verbs
 * `account` -- Account management verbs
-* `system` -- Server-level verbs (`status`, optional `complete_auth`, `help`)
+* `system` -- Server-level verbs (`status`, optional `complete_auth`, `help`, `list_docs`, `search_docs`, `get_docs`); see CR-0061
 
 Verb names **MUST** be self-explanatory English verbs or verb phrases without the domain prefix (for example `create_event`, not `calendar_create_event`). Every domain tool exposes an `operation="help"` verb that documents its registered verbs. The `{domain}.{operation}` identity is what surfaces in audit logs and OpenTelemetry attributes.
 
