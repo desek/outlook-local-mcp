@@ -120,7 +120,7 @@ func handleLoginAccount(s *addAccountState, registry *auth.AccountRegistry, cfg 
 		authRecordDir := filepath.Dir(cfg.AuthRecordPath)
 
 		cred, authenticator, authRecordPath, cacheName, err := s.setupCredential(
-			label, clientID, tenantID, authMethod, cfg.CacheName, authRecordDir,
+			label, clientID, tenantID, authMethod, cfg.CacheName, authRecordDir, cfg.TokenStorage,
 		)
 		if err != nil {
 			logger.Error("credential setup failed", "label", label, "error", err.Error())

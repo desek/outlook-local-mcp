@@ -45,7 +45,7 @@ func (m *restoreMockAuthenticator) Authenticate(_ context.Context, _ *policy.Tok
 //
 // Returns a *mockCredential, *mockAuthenticator, the derived auth record
 // path, the derived cache name, and nil error.
-func fakeCredentialFactory(label, _, _, _, cacheNameBase, authRecordDir string) (
+func fakeCredentialFactory(label, _, _, _, cacheNameBase, authRecordDir, _ string) (
 	azcore.TokenCredential, Authenticator, string, string, error,
 ) {
 	cacheName := cacheNameBase + "-" + label
@@ -90,7 +90,7 @@ func TestRestoreAccounts_Success(t *testing.T) {
 	// fakeCredentialFactory returns mock credentials. The mock GetToken always
 	// returns an error (no cached tokens), so both accounts are registered but
 	// not "restored" (no active token).
-	restored, total := RestoreAccounts(accountsPath, "test-cache", authRecordDir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"})
+	restored, total := RestoreAccounts(accountsPath, "test-cache", authRecordDir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"}, "")
 
 	if total != 2 {
 		t.Errorf("total = %d, want 2", total)
@@ -140,7 +140,7 @@ func TestRestoreAccounts_SilentAuthFailure(t *testing.T) {
 	registry := NewAccountRegistry()
 
 	// No cached tokens exist, so silent auth will fail.
-	restored, total := RestoreAccounts(accountsPath, "test-cache", authRecordDir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"})
+	restored, total := RestoreAccounts(accountsPath, "test-cache", authRecordDir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"}, "")
 
 	if total != 1 {
 		t.Errorf("total = %d, want 1", total)
@@ -176,7 +176,7 @@ func TestRestoreAccounts_FileNotExist(t *testing.T) {
 	accountsPath := filepath.Join(dir, "nonexistent", "accounts.json")
 
 	registry := NewAccountRegistry()
-	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"})
+	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"}, "")
 
 	if restored != 0 || total != 0 {
 		t.Errorf("restored=%d, total=%d; want 0, 0", restored, total)
@@ -197,7 +197,7 @@ func TestRestoreAccounts_EmptyFile(t *testing.T) {
 	}
 
 	registry := NewAccountRegistry()
-	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"})
+	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"}, "")
 
 	if restored != 0 || total != 0 {
 		t.Errorf("restored=%d, total=%d; want 0, 0", restored, total)
@@ -225,7 +225,7 @@ func TestRestoreAccounts_DuplicateLabel(t *testing.T) {
 		t.Fatalf("Add pre-existing: %v", err)
 	}
 
-	restored, total := RestoreAccounts(accountsPath, "test-cache", authRecordDir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"})
+	restored, total := RestoreAccounts(accountsPath, "test-cache", authRecordDir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"}, "")
 
 	if total != 1 {
 		t.Errorf("total = %d, want 1", total)
@@ -254,7 +254,7 @@ func TestRestoreAccounts_IdentityFieldsPreserved(t *testing.T) {
 	}
 
 	registry := NewAccountRegistry()
-	RestoreAccounts(accountsPath, "test-cache", authRecordDir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"})
+	RestoreAccounts(accountsPath, "test-cache", authRecordDir, registry, fakeCredentialFactory, fakeGraphClient(false), []string{"Calendars.ReadWrite"}, "")
 
 	entry, ok := registry.Get("contoso")
 	if !ok {
@@ -300,7 +300,7 @@ func TestRestoreOne_DeviceCode_SkipsGetToken(t *testing.T) {
 	registry := NewAccountRegistry()
 	var factoryCalls atomic.Int32
 
-	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, countingGraphClientFactory(&factoryCalls), []string{"Calendars.ReadWrite"})
+	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, countingGraphClientFactory(&factoryCalls), []string{"Calendars.ReadWrite"}, "")
 
 	if total != 1 {
 		t.Errorf("total = %d, want 1", total)
@@ -357,7 +357,7 @@ func TestRestoreOne_Browser_AttemptsGetToken(t *testing.T) {
 	registry := NewAccountRegistry()
 	var factoryCalls atomic.Int32
 
-	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, countingGraphClientFactory(&factoryCalls), []string{"Calendars.ReadWrite"})
+	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, countingGraphClientFactory(&factoryCalls), []string{"Calendars.ReadWrite"}, "")
 
 	if total != 1 {
 		t.Errorf("total = %d, want 1", total)
@@ -445,7 +445,7 @@ func TestRestoreAccounts_PopulatesEmailFromUPN(t *testing.T) {
 	registry := NewAccountRegistry()
 	var factoryCalls atomic.Int32
 
-	RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, countingGraphClientFactory(&factoryCalls), []string{"Calendars.ReadWrite"})
+	RestoreAccounts(accountsPath, "test-cache", dir, registry, fakeCredentialFactory, countingGraphClientFactory(&factoryCalls), []string{"Calendars.ReadWrite"}, "")
 
 	entry, ok := registry.Get("contoso")
 	if !ok {

@@ -127,7 +127,7 @@ func main() {
 	restored, total := auth.RestoreAccounts(
 		cfg.AccountsPath, cfg.CacheName, authRecordDir,
 		registry, auth.SetupCredentialForAccount, auth.NewDefaultGraphClientFactory(scopes),
-		scopes,
+		scopes, cfg.TokenStorage,
 	)
 	if total > 0 {
 		slog.Info("additional accounts loaded",

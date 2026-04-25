@@ -40,11 +40,14 @@ const silentAuthTimeout = 5 * time.Second
 //   - authMethod: the authentication method (browser, device_code, auth_code).
 //   - cacheNameBase: base name for the OS keychain partition.
 //   - authRecordDir: directory where per-account auth record files are stored.
+//   - tokenStorage: token storage backend ("auto", "keychain", or "file"),
+//     forwarded from the top-level server configuration so that per-account
+//     credentials honour the same storage preference as the default credential.
 //
 // Returns the token credential, authenticator, auth record path, cache name,
 // or an error if credential construction fails.
 type CredentialFactory func(
-	label, clientID, tenantID, authMethod, cacheNameBase, authRecordDir string,
+	label, clientID, tenantID, authMethod, cacheNameBase, authRecordDir, tokenStorage string,
 ) (azcore.TokenCredential, Authenticator, string, string, error)
 
 // GraphClientFactory creates a Graph API client from a token credential.
@@ -82,6 +85,10 @@ func NewDefaultGraphClientFactory(scopes []string) GraphClientFactory {
 // no error and zero restored accounts. Individual account failures are logged
 // but do not prevent other accounts from being restored.
 //
+// Restore is idempotent for labels already present in the registry (e.g. the
+// "default" account registered at startup). Such entries are silently skipped
+// at Debug level rather than producing a warning.
+//
 // Parameters:
 //   - accountsPath: filesystem path to the accounts JSON file.
 //   - cacheNameBase: base name for the OS keychain partition. Each account
@@ -91,6 +98,9 @@ func NewDefaultGraphClientFactory(scopes []string) GraphClientFactory {
 //   - credFactory: factory function to create credentials and authenticators.
 //   - clientFactory: factory function to create Graph clients from credentials.
 //   - scopes: OAuth scopes to use for silent token acquisition (from Scopes(cfg)).
+//   - tokenStorage: token storage backend forwarded from the top-level server
+//     configuration so that per-account credentials honour the same storage
+//     preference as the default credential ("auto", "keychain", or "file").
 //
 // Returns the number of successfully restored accounts (with active tokens)
 // and the total number of accounts loaded from the file.
@@ -102,6 +112,7 @@ func RestoreAccounts(
 	credFactory CredentialFactory,
 	clientFactory GraphClientFactory,
 	scopes []string,
+	tokenStorage string,
 ) (restored int, total int) {
 	accounts, err := LoadAccounts(accountsPath)
 	if err != nil {
@@ -117,7 +128,7 @@ func RestoreAccounts(
 	slog.Info("restoring accounts from accounts file", "path", accountsPath, "count", total)
 
 	for _, acct := range accounts {
-		if restoreOne(acct, cacheNameBase, authRecordDir, registry, credFactory, clientFactory, scopes) {
+		if restoreOne(acct, cacheNameBase, authRecordDir, registry, credFactory, clientFactory, scopes, tokenStorage) {
 			restored++
 		}
 	}
@@ -137,6 +148,12 @@ func RestoreAccounts(
 // and startup delays. These accounts are registered with Client=nil and
 // Authenticated=false, deferring re-authentication to the first tool call.
 //
+// If the account label is already present in the registry (for example, the
+// "default" account registered at startup), the function skips the entry and
+// returns false without emitting a warning — this keeps restore idempotent
+// when accounts.json contains labels that overlap with startup-registered
+// accounts.
+//
 // Parameters:
 //   - acct: the persisted account configuration.
 //   - cacheNameBase: base name for the OS keychain partition.
@@ -145,6 +162,9 @@ func RestoreAccounts(
 //   - credFactory: factory function to create credentials and authenticators.
 //   - clientFactory: factory function to create Graph clients.
 //   - scopes: OAuth scopes to use for silent token acquisition (from Scopes(cfg)).
+//   - tokenStorage: token storage backend forwarded from the top-level server
+//     configuration so that per-account credentials honour the same storage
+//     preference as the default credential.
 //
 // Returns true if the account was restored with an active token and Graph
 // client, false if the account was registered but needs re-authentication.
@@ -156,12 +176,20 @@ func restoreOne(
 	credFactory CredentialFactory,
 	clientFactory GraphClientFactory,
 	scopes []string,
+	tokenStorage string,
 ) bool {
 	logger := slog.With("account", acct.Label)
 
+	// Skip labels already present in the registry (e.g. the "default" account
+	// registered at startup). Treat as already-restored without a warning.
+	if _, exists := registry.Get(acct.Label); exists {
+		logger.Debug("account already registered, skipping restore")
+		return false
+	}
+
 	cred, authenticator, authRecordPath, cacheName, err := credFactory(
 		acct.Label, acct.ClientID, acct.TenantID, acct.AuthMethod,
-		cacheNameBase, authRecordDir,
+		cacheNameBase, authRecordDir, tokenStorage,
 	)
 	if err != nil {
 		logger.Warn("failed to create credential for account, skipping",

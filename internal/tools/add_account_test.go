@@ -43,7 +43,7 @@ func addAccountTestConfig(t *testing.T) config.Config {
 // fakeSetupCredential is a mock credential factory for add_account tests. It
 // returns nil credential and authenticator values, which is sufficient because
 // the mock authenticate function intercepts before any real credential usage.
-func fakeSetupCredential(label, _, _, _, cacheName, authRecordDir string) (
+func fakeSetupCredential(label, _, _, _, cacheName, authRecordDir, _ string) (
 	azcore.TokenCredential, auth.Authenticator, string, string, error,
 ) {
 	return nil, nil, authRecordDir + "/" + label + "_auth_record.json", cacheName + "-" + label, nil
