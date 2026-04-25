@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/desek/outlook-local-mcp/internal/audit"
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/config"
 	"github.com/desek/outlook-local-mcp/internal/graph"
@@ -51,17 +50,6 @@ import (
 func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout time.Duration, m *observability.ToolMetrics, t trace.Tracer, readOnly bool, authMW func(mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc, registry *auth.AccountRegistry, cfg config.Config, cred auth.Authenticator) {
 	accountResolverMW := auth.AccountResolver(registry)
 
-	// wrap builds the standard middleware chain for calendar tools:
-	// authMW -> accountResolverMW -> WithObservability -> AuditWrap -> Handler
-	wrap := func(name, auditOp string, handler mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
-		return authMW(accountResolverMW(observability.WithObservability(name, m, t, audit.AuditWrap(name, auditOp, handler))))
-	}
-
-	// wrapWrite adds ReadOnlyGuard between observability and audit for write tools.
-	wrapWrite := func(name, auditOp string, handler mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
-		return authMW(accountResolverMW(observability.WithObservability(name, m, t, ReadOnlyGuard(name, readOnly, audit.AuditWrap(name, auditOp, handler)))))
-	}
-
 	// CR-0040: Build provenance property ID once at startup. Empty when
 	// provenance tagging is disabled (cfg.ProvenanceTag == "").
 	var provenancePropertyID string
@@ -69,33 +57,36 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		provenancePropertyID = graph.BuildProvenancePropertyID(cfg.ProvenanceTag)
 	}
 
-	// CR-0006: Read-only calendar tools.
-	s.AddTool(tools.NewListCalendarsTool(), wrap("calendar_list", "read", tools.NewHandleListCalendars(retryCfg, timeout)))
-	s.AddTool(tools.NewListEventsTool(), wrap("calendar_list_events", "read", tools.NewHandleListEvents(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-	s.AddTool(tools.NewGetEventTool(), wrap("calendar_get_event", "read", tools.NewHandleGetEvent(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-
-	// CR-0008: Create and update event tools.
-	s.AddTool(tools.NewCreateEventTool(), wrapWrite("calendar_create_event", "write", tools.HandleCreateEvent(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-	s.AddTool(tools.NewUpdateEventTool(), wrapWrite("calendar_update_event", "write", tools.HandleUpdateEvent(retryCfg, timeout, cfg.DefaultTimezone)))
-
-	// CR-0007: Search and free/busy tools.
-	s.AddTool(tools.NewSearchEventsTool(provenancePropertyID != ""), wrap("calendar_search_events", "read", tools.NewHandleSearchEvents(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-	s.AddTool(tools.NewGetFreeBusyTool(), wrap("calendar_get_free_busy", "read", tools.NewHandleGetFreeBusy(retryCfg, timeout, cfg.DefaultTimezone)))
-
-	// CR-0009: Delete and cancel event tools.
-	s.AddTool(tools.NewDeleteEventTool(), wrapWrite("calendar_delete_event", "delete", tools.HandleDeleteEvent(retryCfg, timeout)))
-	s.AddTool(tools.NewCancelMeetingTool(), wrapWrite("calendar_cancel_meeting", "delete", tools.HandleCancelEvent(retryCfg, timeout)))
-
-	// CR-0042: Respond to meeting invitations (accept/tentative/decline).
-	s.AddTool(tools.NewRespondEventTool(), wrapWrite("calendar_respond_event", "write", tools.HandleRespondEvent(retryCfg, timeout)))
-
-	// CR-0042: Reschedule event (preserves duration, computes new end time).
-	s.AddTool(tools.NewRescheduleEventTool(), wrapWrite("calendar_reschedule_event", "write", tools.HandleRescheduleEvent(retryCfg, timeout, cfg.DefaultTimezone)))
-
-	// CR-0054: Meeting tools (attendee-focused variants reusing event handlers).
-	s.AddTool(tools.NewCreateMeetingTool(), wrapWrite("calendar_create_meeting", "write", tools.HandleCreateEvent(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-	s.AddTool(tools.NewUpdateMeetingTool(), wrapWrite("calendar_update_meeting", "write", tools.HandleUpdateEvent(retryCfg, timeout, cfg.DefaultTimezone)))
-	s.AddTool(tools.NewRescheduleMeetingTool(), wrapWrite("calendar_reschedule_meeting", "write", tools.HandleRescheduleEvent(retryCfg, timeout, cfg.DefaultTimezone)))
+	// CR-0060 Phase 3d: calendar domain aggregate tool. Replaces the 14
+	// individual calendar_* tool registrations (calendar_list, calendar_list_events,
+	// calendar_get_event, calendar_search_events, calendar_create_event,
+	// calendar_update_event, calendar_delete_event, calendar_respond_event,
+	// calendar_reschedule_event, calendar_create_meeting, calendar_update_meeting,
+	// calendar_cancel_meeting, calendar_reschedule_meeting, calendar_get_free_busy)
+	// with a single "calendar" tool dispatched by operation verb.
+	//
+	// The calRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *calRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	calVerbs, calRegistry := buildCalendarVerbs(calendarVerbsConfig{
+		retryCfg:             retryCfg,
+		timeout:              timeout,
+		defaultTimezone:      cfg.DefaultTimezone,
+		provenancePropertyID: provenancePropertyID,
+		m:                    m,
+		tracer:               t,
+		authMW:               authMW,
+		accountResolverMW:    accountResolverMW,
+		readOnly:             readOnly,
+	})
+	populatedCal := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+		Domain:          "calendar",
+		Intro:           "Calendar operations for Microsoft Outlook via Microsoft Graph.",
+		Verbs:           calVerbs,
+		ToolAnnotations: calendarToolAnnotations(),
+	})
+	*calRegistry = populatedCal
 
 	// CR-0060 Phase 3b: account domain aggregate tool. Replaces the individual
 	// account_add, account_list, account_remove, account_login, account_logout,
@@ -180,9 +171,9 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	})
 	*mailRegistry = populatedMail
 
-	// Tool count: 14 calendar + 1 account aggregate + 1 system aggregate + 1 mail aggregate.
-	// complete_auth is a verb within system; account and mail verbs are within their aggregates.
-	toolCount := 17
+	// Tool count: 4 aggregate domain tools (calendar, mail, account, system).
+	// All verbs are dispatched within their domain tool.
+	toolCount := 4
 
 	slog.Info("tool registration complete", "tools", toolCount)
 }

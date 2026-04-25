@@ -97,8 +97,8 @@ func TestRegisterTools_ReadOnly_BlocksWriteTool(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, true, identityMW, testRegistry(), testConfig(), nil)
 
-	// Invoke calendar_create_event through the server's HandleMessage.
-	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_create_event","arguments":{"subject":"test","start":"2026-01-01T00:00:00","end":"2026-01-01T01:00:00"}}}`
+	// Invoke calendar create_event verb through the server's HandleMessage.
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar","arguments":{"operation":"create_event","subject":"test","start":"2026-01-01T00:00:00","end":"2026-01-01T01:00:00"}}}`
 	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
 	rpcResp, ok := resp.(mcp.JSONRPCResponse)
@@ -147,8 +147,8 @@ func TestRegisterTools_ReadOnly_AllowsReadTool(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, true, identityMW, testRegistry(), testConfig(), nil)
 
-	// Invoke calendar_list through the server's HandleMessage.
-	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_list","arguments":{}}}`
+	// Invoke calendar list_calendars verb through the server's HandleMessage.
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar","arguments":{"operation":"list_calendars"}}}`
 	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
 	// The response may be an error (nil Graph client panic recovered), but
@@ -195,9 +195,9 @@ func TestRegisterTools_ReadOnly_False_AllWriteToolsPass(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), testConfig(), nil)
 
-	writeTools := []string{"calendar_create_event", "calendar_update_event", "calendar_delete_event", "calendar_cancel_meeting"}
-	for _, toolName := range writeTools {
-		msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + toolName + `","arguments":{}}}`
+	writeVerbs := []string{"create_event", "update_event", "delete_event", "cancel_meeting"}
+	for _, verb := range writeVerbs {
+		msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar","arguments":{"operation":"` + verb + `"}}}`
 		resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
 		switch v := resp.(type) {
@@ -206,16 +206,16 @@ func TestRegisterTools_ReadOnly_False_AllWriteToolsPass(t *testing.T) {
 			if ok && result.IsError && len(result.Content) > 0 {
 				if tc, ok := result.Content[0].(mcp.TextContent); ok {
 					if strings.Contains(tc.Text, "read-only mode") {
-						t.Errorf("tool %s should not be blocked when readOnly=false", toolName)
+						t.Errorf("verb %s should not be blocked when readOnly=false", verb)
 					}
 				}
 			}
 		case mcp.JSONRPCError:
 			if strings.Contains(v.Error.Message, "read-only mode") {
-				t.Errorf("tool %s should not be blocked when readOnly=false", toolName)
+				t.Errorf("verb %s should not be blocked when readOnly=false", verb)
 			}
 		default:
-			t.Fatalf("tool %s: unexpected response type %T", toolName, resp)
+			t.Fatalf("verb %s: unexpected response type %T", verb, resp)
 		}
 	}
 }
@@ -463,11 +463,11 @@ func TestRegisterTools_BackwardCompatSingleAccount(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, registry, testConfig(), nil)
 
-	// Invoke list_calendars without "account" parameter. The AccountResolver
+	// Invoke list_calendars verb without "account" parameter. The AccountResolver
 	// should auto-select the single "default" account. The call will fail
 	// (nil Graph client) but must NOT fail with "account not found" or
 	// "multiple accounts" errors.
-	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar_list","arguments":{}}}`
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar","arguments":{"operation":"list_calendars"}}}`
 	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
 	switch v := resp.(type) {
@@ -674,8 +674,8 @@ func TestRegisterTools_MailEnabled(t *testing.T) {
 		t.Error("aggregate 'mail' tool should be registered when MailEnabled=true")
 	}
 
-	// Verify total count: 14 calendar + 1 account aggregate + 1 system aggregate + 1 mail aggregate = 17.
-	const expectedTotal = 17
+	// Verify total count: 4 aggregate domain tools (calendar, mail, account, system).
+	const expectedTotal = 4
 	if got := len(registered); got != expectedTotal {
 		t.Errorf("expected %d tools with mail enabled, got %d", expectedTotal, got)
 	}

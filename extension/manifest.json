@@ -53,60 +53,8 @@
   },
   "tools": [
     {
-      "name": "calendar_list",
-      "description": "List all calendars accessible to the authenticated user."
-    },
-    {
-      "name": "calendar_list_events",
-      "description": "List calendar events within a time range. Expands recurring events into individual occurrences."
-    },
-    {
-      "name": "calendar_get_event",
-      "description": "Get full details of a single calendar event by its ID."
-    },
-    {
-      "name": "calendar_search_events",
-      "description": "Search calendar events by subject text, importance, sensitivity, and other properties within a time range."
-    },
-    {
-      "name": "calendar_get_free_busy",
-      "description": "Get free/busy availability for a time range. Returns busy periods with start, end, status, and subject."
-    },
-    {
-      "name": "calendar_create_event",
-      "description": "Create a new personal calendar event (no attendees). Supports Teams online meetings, recurrence, and all standard event properties."
-    },
-    {
-      "name": "calendar_create_meeting",
-      "description": "Create a new calendar meeting with attendees. Sends invitations automatically. Supports Teams online meetings, recurrence, and all standard event properties."
-    },
-    {
-      "name": "calendar_update_event",
-      "description": "Update an existing calendar event (no attendee changes). Only specified fields are changed (PATCH semantics)."
-    },
-    {
-      "name": "calendar_update_meeting",
-      "description": "Update an existing calendar meeting including attendee changes. Sends update notifications to attendees. Only specified fields are changed (PATCH semantics)."
-    },
-    {
-      "name": "calendar_delete_event",
-      "description": "Delete a calendar event by ID. Organizer deletions send cancellation notices to attendees."
-    },
-    {
-      "name": "calendar_cancel_meeting",
-      "description": "Cancel a meeting and send a cancellation message to all attendees. Only the organizer can cancel."
-    },
-    {
-      "name": "calendar_respond_event",
-      "description": "Respond to a meeting invitation: accept, tentatively accept, or decline. Sends a response to the organizer."
-    },
-    {
-      "name": "calendar_reschedule_event",
-      "description": "Move a personal event to a new time, preserving its original duration."
-    },
-    {
-      "name": "calendar_reschedule_meeting",
-      "description": "Move a meeting to a new time, preserving its original duration. Sends update notifications to all attendees."
+      "name": "calendar",
+      "description": "Calendar operations for Microsoft Outlook via Microsoft Graph. Required operation: help (detailed docs), list_calendars (list user calendars), list_events (list events in a window), get_event (fetch one event), search_events (query events by subject and filters), create_event (personal event without attendees), update_event (edit personal event), delete_event (remove personal event), respond_event (accept/decline invitation), reschedule_event (move personal event), create_meeting (event with attendees), update_meeting (edit meeting with attendee changes), cancel_meeting (cancel and notify attendees), reschedule_meeting (move meeting and notify), get_free_busy (check availability)."
     },
     {
       "name": "mail",
