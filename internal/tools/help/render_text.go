@@ -9,6 +9,14 @@ import (
 	"github.com/desek/outlook-local-mcp/internal/tools"
 )
 
+// paramReqLabel returns the required/optional label rendered in text output.
+func paramReqLabel(required bool) string {
+	if required {
+		return "required"
+	}
+	return "optional"
+}
+
 // renderText produces a CLI-like plain-text help document for the given list
 // of verbs (tier 1 output). Each verb is rendered as a numbered section with
 // its name and summary. This is the default output mode when `output` is
@@ -46,6 +54,31 @@ func formatVerbText(v tools.Verb, n int) string {
 		b.WriteString("   ")
 		b.WriteString(v.Summary)
 		b.WriteString("\n")
+	}
+	params := verbParameters(v)
+	if len(params) > 0 {
+		b.WriteString("   Parameters:\n")
+		for _, p := range params {
+			b.WriteString("     ")
+			b.WriteString(p.Name)
+			b.WriteString(" (")
+			if p.Type != "" {
+				b.WriteString(p.Type)
+				b.WriteString(", ")
+			}
+			b.WriteString(paramReqLabel(p.Required))
+			b.WriteString(")")
+			if p.Description != "" {
+				b.WriteString("  ")
+				b.WriteString(p.Description)
+			}
+			if len(p.Enum) > 0 {
+				b.WriteString(" [")
+				b.WriteString(strings.Join(p.Enum, "|"))
+				b.WriteString("]")
+			}
+			b.WriteString("\n")
+		}
 	}
 	return b.String()
 }

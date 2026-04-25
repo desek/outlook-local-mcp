@@ -19,6 +19,11 @@ type verbSummary struct {
 
 	// Summary is the ≤80-character human-readable description.
 	Summary string `json:"summary"`
+
+	// Parameters lists the verb's input parameters with name, type, and
+	// required-ness so callers can construct valid invocations without
+	// trial-and-error. Omitted when the verb takes no parameters.
+	Parameters []paramSpec `json:"parameters,omitempty"`
 }
 
 // renderSummary produces compact JSON for the given list of verbs (tier 2
@@ -33,7 +38,7 @@ type verbSummary struct {
 func renderSummary(verbs []tools.Verb) *mcp.CallToolResult {
 	summaries := make([]verbSummary, len(verbs))
 	for i, v := range verbs {
-		summaries[i] = verbSummary{Name: v.Name, Summary: v.Summary}
+		summaries[i] = verbSummary{Name: v.Name, Summary: v.Summary, Parameters: verbParameters(v)}
 	}
 
 	payload := map[string]any{"operations": summaries}

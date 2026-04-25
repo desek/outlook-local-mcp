@@ -19,6 +19,8 @@ Step-by-step instruction for Claude Code to exercise the MCP tools through a com
 
 Follow every step sequentially. Use the **default account** (omit `account` param) unless the user specifies otherwise. Omit the `output` parameter for all read operations (the default is `text`) unless a step specifies otherwise.
 
+**Always call `help` first.** Before invoking any verb in a domain you have not yet exercised, call `{tool: "<domain>", args: {operation: "help"}}` to enumerate the available verbs **and their parameters**. The help output lists every parameter's exact name, type, required/optional status, and (where applicable) accepted enum values. Use those exact parameter names — do not guess (`id` vs `message_id` vs `event_id` differ between verbs and inventing names will surface as `missing required parameter` errors at call time). When a step's parameter spec disagrees with `help`, trust `help` and report the discrepancy in the findings section of the report.
+
 Pick a test date **7 days from today** to avoid conflicts with real events. Use the timezone `Europe/Amsterdam` for all operations.
 
 ### Step 0 -- Discover and verify connectivity
@@ -267,7 +269,7 @@ Call `{tool: "calendar", args: {operation: "list_events", date: "<test date>"}}`
 | `show_as`           | `free`                                           |
 | `attendees`         | `[{"email":"<attendee email>","name":"Attendee","type":"required"}]` |
 
-**If single-account mode**, call `{tool: "calendar", args: {operation: "create_event", ...}}` with the same parameters **without** the `attendees` field (single-account mode uses the event variant since no attendees are involved).
+**If single-account mode**, call `{tool: "calendar", args: {operation: "create_meeting", ...}}` with the same parameters but set `attendees` to a single self-addressed entry using the authenticated account's own UPN: `[{"email":"<self UPN>","name":"Self","type":"required"}]`. A self-attendee is required because Microsoft Graph only provisions a Teams `onlineMeeting` resource (and populates `joinUrl`) when the event is created via `create_meeting` with at least one attendee. The LLM must still present a confirmation summary before invoking the tool, and the resulting self-invitation email is expected test artifact noise.
 
 - **Pass:** Response is a plain text confirmation containing the event subject and an `ID:` line.
 - Save the returned **Teams event ID** from the `ID:` line.
@@ -277,13 +279,15 @@ Call `{tool: "calendar", args: {operation: "list_events", date: "<test date>"}}`
 
 Call `{tool: "calendar", args: {operation: "get_event", event_id: "<saved Teams event ID>", output: "raw"}}`.
 
-- **Verify:**
-  - `isOnlineMeeting` is `true`.
-  - `onlineMeeting.joinUrl` is a non-empty string.
+- **Primary evidence (Pass requires all):**
+  - `onlineMeeting.joinUrl` is a non-empty string (this is the observable proof Graph provisioned a Teams meeting; `isOnlineMeeting` is only the input flag).
   - `body.content` contains a Teams join link (look for `teams.microsoft.com` or the `joinUrl` value).
-- **If multi-account mode, also verify:**
-  - `attendees` array contains at least one entry with the attendee email.
-- **Fail:** Report any missing Teams meeting information.
+  - `isOnlineMeeting` is `true` (sanity check on echoed input flag).
+- **Single-account mode, also verify:**
+  - `attendees` array contains exactly one entry whose email matches the authenticated account's own UPN.
+- **Multi-account mode, also verify:**
+  - `attendees` array contains at least one entry with the external attendee email.
+- **Fail:** If `onlineMeeting.joinUrl` is empty or absent, Teams promotion did not happen; report the failure (commonly caused by calling `create_event` instead of `create_meeting`, or omitting attendees).
 
 ### Step 20 -- Verify invitation on attendee calendar
 
@@ -541,7 +545,7 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 16   | Provenance search (deleted)       | PASS/FAIL      | e.g., "event absent after deletion"                      |
 | 17   | List after delete (text)          | PASS/FAIL      | e.g., "count back to baseline"                           |
 | 18   | Create Teams meeting (text)       | PASS/FAIL      | e.g., "online meeting created"                           |
-| 19   | Verify Teams meeting details      | PASS/FAIL      | e.g., "isOnlineMeeting=true, joinUrl present"            |
+| 19   | Verify Teams meeting details      | PASS/FAIL      | e.g., "onlineMeeting.joinUrl present, isOnlineMeeting=true, self-attendee echoed (single-account)" |
 | 20   | Verify invitation (attendee)      | PASS/FAIL/SKIP | e.g., "single-account mode" or "invitation visible"      |
 | 21   | Respond from attendee (text)      | PASS/FAIL/SKIP | e.g., "single-account mode" or "tentative response sent" |
 | 22   | Verify attendee response          | PASS/FAIL/SKIP | e.g., "single-account mode" or "status=tentative"        |

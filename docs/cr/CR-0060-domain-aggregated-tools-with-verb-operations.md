@@ -476,6 +476,18 @@ make ci
 
 Chosen approach: "four domain tools with a required `operation` verb and a self-documenting `help` verb", because it maximises token efficiency, preserves all existing semantics, keeps annotation grouping coherent, and introduces a single dispatch point that future operations can slot into without new server wiring.
 
+## Deferred Items
+
+The following enhancements were identified during post-implementation testing (2026-04-25 CRUD test run) but are intentionally **NOT** in scope for CR-0060. They are recorded here so they remain discoverable for future change requests.
+
+**Context.** The aggregate tool's MCP input schema declares only `operation` as a typed property; verb-specific parameters (`message_id`, `event_id`, etc.) flow through as untyped extra fields. During the CRUD test the wrong parameter name (`id` instead of `message_id`) was sent and only surfaced as a runtime `missing required parameter` error. The shipped fix in CR-0060 (Option 1) extends the `help` verb to render every verb's parameters with name, type, required-ness, description, and enum values, drawn from each verb's existing `Schema` options via `mcp.NewTool` introspection. That makes parameter contracts discoverable, but clients still cannot validate calls before sending them.
+
+**Deferred Item 1: Per-verb JSON Schema as discoverable MCP resource (Option 2).** Publish each verb's full JSON Schema at a URI such as `outlook-local-mcp://schema/<domain>/<verb>` via the MCP resources API and reference it from the verb's `help` entry. Clients that opt in can fetch and validate; clients that ignore resources keep working unchanged. Requires adding a resources handler to the server and a small generator that serialises each verb's existing `Schema` options into a JSON Schema document. No breaking change to the tool surface.
+
+**Deferred Item 2: Inline per-verb schemas via discriminated `oneOf` (Option 3).** Replace the current `{operation: enum, ...untyped}` aggregate input schema with a `oneOf` of branches, each branch fixing `operation` to a single literal and declaring that verb's exact parameter set with `additionalProperties: false`. Clients gain pre-flight validation and full IDE/LLM autocomplete. Tradeoffs: (a) the aggregate schema balloons (one branch per verb, currently up to 37 branches across the four domains), undermining the cold-start byte-count target measured for NFR-1; (b) `mcp-go` may need helper code to register a discriminated schema cleanly; (c) clients that currently send unknown extra fields silently would start receiving validation errors, which is a behavior change worth a deprecation period. Should only be pursued if static client-side validation is judged worth the schema-size cost and `mcp-go` adds first-class support.
+
+**Recommendation order if revisited:** Option 2 first (additive, low risk). Reassess Option 3 only after Option 2 ships and adoption data shows clients still need machine-checkable contracts beyond `help` + resource schemas.
+
 ## Related Items
 
 * CR-0050 — MCP tool naming and manifest sync

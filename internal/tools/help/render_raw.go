@@ -20,6 +20,11 @@ type verbRaw struct {
 
 	// Summary is the ≤80-character human-readable description.
 	Summary string `json:"summary"`
+
+	// Parameters lists the verb's input parameters extracted from the Schema
+	// options (name, type, required, description, enum). Omitted when the
+	// verb takes no parameters.
+	Parameters []paramSpec `json:"parameters,omitempty"`
 }
 
 // renderRaw produces the full structured JSON payload for the given list of
@@ -39,7 +44,7 @@ type verbRaw struct {
 func renderRaw(verbs []tools.Verb) *mcp.CallToolResult {
 	raws := make([]verbRaw, len(verbs))
 	for i, v := range verbs {
-		raws[i] = verbRaw{Name: v.Name, Summary: v.Summary}
+		raws[i] = verbRaw{Name: v.Name, Summary: v.Summary, Parameters: verbParameters(v)}
 	}
 
 	payload := map[string]any{"operations": raws}

@@ -138,6 +138,81 @@ func TestRenderHelp_SummaryTier(t *testing.T) {
 	}
 }
 
+// TestRenderHelp_TextIncludesParameters verifies that text output lists
+// parameters with name, type, required-ness, description, and enum values
+// (CR-0060 follow-up: parameter discoverability).
+func TestRenderHelp_TextIncludesParameters(t *testing.T) {
+	reg := tools.VerbRegistry{
+		"delete_draft": {
+			Name:    "delete_draft",
+			Summary: "permanently delete a draft message",
+			Schema: []mcp.ToolOption{
+				mcp.WithString("message_id",
+					mcp.Required(),
+					mcp.Description("The unique identifier of the draft message to delete."),
+				),
+				mcp.WithString("output",
+					mcp.Description("Output mode."),
+					mcp.Enum("text", "summary", "raw"),
+				),
+			},
+		},
+	}
+	result, err := Render(reg, "delete_draft", "text")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	text := resultText(t, result)
+	for _, want := range []string{
+		"Parameters:",
+		"message_id",
+		"required",
+		"The unique identifier of the draft message to delete.",
+		"output",
+		"optional",
+		"[text|summary|raw]",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text help missing %q\noutput:\n%s", want, text)
+		}
+	}
+}
+
+// TestRenderHelp_SummaryIncludesParameters verifies that summary JSON contains
+// the parameters array per verb.
+func TestRenderHelp_SummaryIncludesParameters(t *testing.T) {
+	reg := tools.VerbRegistry{
+		"delete_draft": {
+			Name:    "delete_draft",
+			Summary: "permanently delete a draft message",
+			Schema: []mcp.ToolOption{
+				mcp.WithString("message_id", mcp.Required(), mcp.Description("draft id")),
+			},
+		},
+	}
+	result, err := Render(reg, "", "summary")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	text := resultText(t, result)
+	var payload struct {
+		Operations []struct {
+			Name       string      `json:"name"`
+			Parameters []paramSpec `json:"parameters"`
+		} `json:"operations"`
+	}
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		t.Fatalf("summary JSON unmarshal: %v\n%s", err, text)
+	}
+	if len(payload.Operations) != 1 || len(payload.Operations[0].Parameters) != 1 {
+		t.Fatalf("expected 1 op with 1 param, got %+v", payload)
+	}
+	p := payload.Operations[0].Parameters[0]
+	if p.Name != "message_id" || !p.Required || p.Type != "string" {
+		t.Errorf("unexpected paramSpec: %+v", p)
+	}
+}
+
 // TestRenderHelp_UnknownVerb verifies that scoping to an unregistered verb
 // returns a structured error (AC-3 / FR-5).
 func TestRenderHelp_UnknownVerb(t *testing.T) {
