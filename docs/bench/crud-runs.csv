@@ -1,6 +1,2 @@
-run_ts,branch,sha,wall_s,duration_ms,duration_api_ms,num_turns,total_cost_usd,input_tokens,output_tokens,cache_creation_input_tokens,cache_read_input_tokens,is_error
-"2026-04-25T19-15-36","dev/cr-0061","d92bd46","336.51",333590,323771,57,1.5972234000000003,79,17627,79262,3451163,false
-"2026-04-25T19-15-25","dev/cr-0061","d92bd46","356.54",353516,15018,4,0.05667225,6,485,9219,49360,false
-"2026-04-25T19-15-12","dev/cr-0061","d92bd46","382.70",379613,20996,7,0.0930789,9,784,12918,109498,false
-"2026-04-25T19-15-03","dev/cr-0061","d92bd46","406.00",403306,18615,7,0.0954906,9,834,13388,109162,false
-"2026-04-25T19-14-54","dev/cr-0061","d92bd46","428.20",425593,17579,7,0.09373514999999999,9,758,13209,109348,false
+run_ts,branch,sha,wall_s,duration_ms,duration_api_ms,num_turns,total_cost_usd,input_tokens,output_tokens,cache_creation_input_tokens,cache_read_input_tokens,is_error,mcp_calendar,mcp_mail,mcp_account,mcp_system,bash,read,write,tool_other
+"2026-04-25T19-54-00","dev/cr-0061","7d5f23e","358.03",355041,346303,56,1.5488458500000002,64,22075,93689,2887317,false,23,16,2,7,4,1,1,1

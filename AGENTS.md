@@ -131,6 +131,16 @@ Every token in an MCP tool response competes with user instructions, conversatio
 
 When a new MCP tool is added or an existing tool's parameters/behavior change, `docs/prompts/mcp-tool-crud-test.md` **MUST** be updated to include testing steps that exercise the new or changed functionality. This keeps the CRUD lifecycle test accurate and ensures all tools are covered by the integration test script.
 
+### Harness Maintenance
+
+The `make crud-test` harness (`scripts/crud-test.sh`) **MUST** be lifecycled alongside MCP tool surface changes. When a verb, domain, or tool is added, renamed, or removed, the following **MUST** be updated in the same change:
+
+* `docs/prompts/mcp-tool-crud-test.md` — the prompt the headless agent executes; new verbs need new test steps, removed verbs need their steps deleted.
+* `scripts/crud-test.sh` — if a new top-level domain (currently `calendar`, `mail`, `account`, `system`) is introduced, add a corresponding `mcp_<domain>` column to the CSV header and a matching bucket in the per-run tool-count `awk` block. Removed domains require pruning the column and bucket.
+* `docs/bench/crud-runs.csv` — header **MUST** match the script's output schema; reset historical rows when columns change rather than leaving short rows.
+
+The harness's value depends on this coupling: drift means the bench either silently skips new functionality or emits malformed CSV rows.
+
 ## Quality Standards
 
 All code changes **MUST** meet the following quality requirements before committing. Use the `Makefile` targets to run checks:
