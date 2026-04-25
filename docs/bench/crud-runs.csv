@@ -1,2 +1,3 @@
 run_ts,branch,sha,wall_s,duration_ms,duration_api_ms,num_turns,total_cost_usd,input_tokens,output_tokens,cache_creation_input_tokens,cache_read_input_tokens,is_error,mcp_calendar,mcp_mail,mcp_account,mcp_system,bash,read,write,tool_other
 "2026-04-25T19-54-00","dev/cr-0061","7d5f23e","358.03",355041,346303,56,1.5488458500000002,64,22075,93689,2887317,false,23,16,2,7,4,1,1,1
+"2026-04-25T20-28-19","dev/cr-0061","44fdc13","340.89",338150,328877,59,1.4605989,60,19418,94924,2710613,false,23,16,2,11,3,1,1,1

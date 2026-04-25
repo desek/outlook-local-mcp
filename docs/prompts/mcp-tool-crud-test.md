@@ -65,6 +65,21 @@ Pick a test date **7 days from today** to avoid conflicts with real events. Use 
 - **Purpose:** Exercises the `raw` output mode of `get_docs` (CR-0061 AC-3).
 - **Fail:** Report if the verb errors.
 
+**0a6.** Intent verification — self-troubleshooting via the docs surface.
+
+Treat the following as a user question that you must answer using only the in-server documentation verbs (`system.search_docs`, `system.get_docs`). Do not rely on prior context, training data, or web knowledge for the answer:
+
+> "A user reports that the auto-registered `default` account keeps reappearing after they remove it. What does the server's in-built troubleshooting guide say to do?"
+
+- **Required actions:**
+  1. Call `system.search_docs` with a query you derive from the question (e.g. `"auto default account"` or `"default account reappear"`).
+  2. Based on the search hits, call `system.get_docs` with the most relevant `slug` (and `section` if the hit identifies one) to fetch the actual guidance.
+  3. Compose a short answer (2–4 sentences) that paraphrases the retrieved section.
+- **Verify:** Both `system.search_docs` and `system.get_docs` were called in this step (recorded in the run's tool-call log).
+- **Verify:** Your answer references the troubleshooting section about the implicit default (anchor `#auto-default-account` or equivalent) — for example, mentioning that removal is persistent and the implicit `default` only re-registers when no other accounts are connected (CR-0064 semantics).
+- **Purpose:** Confirms the **intent** of CR-0061 — that an LLM faced with an unfamiliar problem will discover and consult the in-server docs to help the user, rather than hallucinating from priors.
+- **Fail:** If you answer without calling `search_docs` AND `get_docs` in this step, or if the answer does not reflect content from the troubleshooting guide.
+
 **0b.** Call `{tool: "system", args: {operation: "status", output: "summary"}}` (the full JSON config is needed for this verification step).
 
 - **Verify:** At least one account is listed with an authenticated status.
@@ -600,6 +615,7 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 0a3  | search_docs (token refresh)       | PASS/FAIL      | e.g., "troubleshooting slug ranked in results"           |
 | 0a4  | get_docs section (token-refresh)  | PASS/FAIL      | e.g., "section content returned, no cross-section bleed" |
 | 0a5  | get_docs raw (troubleshooting)    | PASS/FAIL      | e.g., "raw markdown starts with # Troubleshooting"       |
+| 0a6  | docs intent (self-troubleshoot)   | PASS/FAIL      | e.g., "search_docs + get_docs called; answer cites #auto-default-account" |
 | 0b   | status docs section present       | PASS/FAIL      | e.g., "base_uri + troubleshooting_slug + version"        |
 | 1    | List accounts (text)              | PASS/FAIL      | e.g., "1 authenticated, 1 disconnected"                  |
 | 2    | List calendars (text)             | PASS/FAIL      | e.g., "default + Birthdays"                              |
