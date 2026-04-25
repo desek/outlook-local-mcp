@@ -2,14 +2,15 @@
 name: conditional-implicit-default-account-registration
 description: Make the implicit "default" account registration conditional on accounts.json contents and persist account_remove to accounts.json so removal survives restart.
 id: "CR-0064"
-status: "proposed"
+status: "completed"
 date: 2026-04-25
+completed-date: 2026-04-25
 requestor: Daniel Grenemark
 stakeholders: Maintainers, LLM end-users (Claude Desktop, Claude Code)
 priority: "high"
 target-version: "0.7.0"
 source-branch: dev/cr-0061
-source-commit: b834a73
+source-commit: 1b2c27e
 ---
 
 # Conditional Implicit Default Account Registration
@@ -268,26 +269,26 @@ Then the result includes a heading whose anchor is "auto-default-account"
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
-- [ ] `make docs-bundle` succeeds
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
+- [x] `make docs-bundle` succeeds
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] `docs/troubleshooting.md` updated with `## Auto-default account` section
-- [ ] `internal/docs/files/troubleshooting.md` regenerated via `make docs-bundle`
-- [ ] `extension/manifest.json` requires no change
+- [x] `docs/troubleshooting.md` updated with `## Auto-default account` section
+- [x] `internal/docs/files/troubleshooting.md` regenerated via `make docs-bundle`
+- [x] `extension/manifest.json` requires no change
 
 ### Code Review
 
