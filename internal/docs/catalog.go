@@ -3,6 +3,8 @@ package docs
 import (
 	"fmt"
 	"io/fs"
+
+	extdocs "github.com/desek/outlook-local-mcp/docs"
 )
 
 // Entry describes a single document in the embedded bundle.
@@ -30,8 +32,8 @@ type Entry struct {
 }
 
 // staticEntries defines the catalog metadata for every embedded document.
-// The slug must match the filename stem in Bundle (files/{slug}.md).
-// This list is the single source of truth for the Phase 1 bundle allowlist.
+// The slug must match the filename stem in docs.Bundle ({slug}.md).
+// This list is the single source of truth for the bundle allowlist.
 var staticEntries = []struct {
 	slug    string
 	title   string
@@ -60,15 +62,15 @@ var staticEntries = []struct {
 
 // Catalog returns the full catalog of embedded documents with resolved file sizes.
 //
-// It reads each file from [Bundle] to determine its uncompressed size, then
-// assembles [Entry] values from the static metadata defined in staticEntries.
+// It reads each file from [extdocs.Bundle] to determine its uncompressed size,
+// then assembles [Entry] values from the static metadata defined in staticEntries.
 // An error is returned only when an embedded file is unreadable — which
 // indicates a broken build rather than a runtime condition.
 func Catalog() ([]Entry, error) {
 	entries := make([]Entry, 0, len(staticEntries))
 	for _, s := range staticEntries {
-		path := "files/" + s.slug + ".md"
-		info, err := fs.Stat(Bundle, path)
+		path := s.slug + ".md"
+		info, err := fs.Stat(extdocs.Bundle, path)
 		if err != nil {
 			return nil, fmt.Errorf("docs: catalog: slug %q not found in bundle: %w", s.slug, err)
 		}
@@ -100,8 +102,8 @@ func MustCatalog() []Entry {
 // It returns an error when the slug is not in the bundle — either because the
 // slug is unknown or because the embedded file is missing (broken build).
 func ReadSlug(slug string) ([]byte, error) {
-	path := "files/" + slug + ".md"
-	data, err := Bundle.ReadFile(path)
+	path := slug + ".md"
+	data, err := extdocs.Bundle.ReadFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("docs: slug %q not found in bundle: %w", slug, err)
 	}

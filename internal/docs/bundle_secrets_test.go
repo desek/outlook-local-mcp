@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/desek/outlook-local-mcp/internal/docs"
+	extdocs "github.com/desek/outlook-local-mcp/docs"
 )
 
 // secretPatterns is the denylist of substrings that must not appear in any
@@ -24,14 +24,14 @@ var secretPatterns = []string{
 func TestBundleContainsNoSecrets(t *testing.T) {
 	t.Parallel()
 
-	err := fs.WalkDir(docs.Bundle, ".", func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(extdocs.Bundle, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
 			return nil
 		}
-		data, err := docs.Bundle.ReadFile(path)
+		data, err := extdocs.Bundle.ReadFile(path)
 		if err != nil {
 			return err
 		}

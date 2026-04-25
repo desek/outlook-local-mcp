@@ -1,13 +1,14 @@
 // Package docs provides the embedded documentation bundle for outlook-local-mcp.
 //
-// The bundle embeds a curated set of user-facing Markdown files (README.md,
-// QUICKSTART.md, and docs/troubleshooting.md) into the compiled binary via
-// Go's embed.FS so no filesystem access is required at runtime.
+// The bundle is declared in the top-level docs package (github.com/desek/outlook-local-mcp/docs)
+// and consumed here. The canonical user-facing Markdown files live at docs/{slug}.md
+// so they are visible to humans browsing the repository on GitHub. This package
+// is a pure consumer of that bundle.
 //
 // The package exposes three public surfaces:
 //
-//   - [Bundle] — the raw embed.FS containing the embedded files.
 //   - [Catalog] — a pre-built slice of [Entry] descriptors (slug, title, summary, tags, size).
+//   - [ReadSlug] — returns raw Markdown bytes for a slug from the bundle.
 //   - [Search] — a case-insensitive substring and token search function that returns
 //     ranked [Result] values with ±2 lines of snippet context and 1-based line numbers.
 //

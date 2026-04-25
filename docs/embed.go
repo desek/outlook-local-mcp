@@ -10,5 +10,9 @@ import "embed"
 // accidentally added paths fail the build rather than silently enlarging the
 // binary.
 //
-//go:embed files/readme.md files/quickstart.md files/troubleshooting.md
+// The canonical files live here at docs/{slug}.md so they are visible to
+// humans browsing the repository on GitHub and to the Go embed directive.
+// internal/docs consumes this Bundle rather than declaring its own embed.
+//
+//go:embed readme.md quickstart.md troubleshooting.md
 var Bundle embed.FS

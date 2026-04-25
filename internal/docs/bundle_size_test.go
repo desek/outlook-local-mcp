@@ -4,7 +4,7 @@ import (
 	"io/fs"
 	"testing"
 
-	"github.com/desek/outlook-local-mcp/internal/docs"
+	extdocs "github.com/desek/outlook-local-mcp/docs"
 )
 
 // maxBundleBytes is the hard upper limit for the total uncompressed size of all
@@ -18,7 +18,7 @@ func TestBundleSizeUnder2MiB(t *testing.T) {
 	t.Parallel()
 
 	var total int64
-	err := fs.WalkDir(docs.Bundle, ".", func(path string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(extdocs.Bundle, ".", func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
