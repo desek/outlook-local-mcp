@@ -20,6 +20,34 @@ THINKING="${THINKING:-low}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
+# Precondition: a connected account must exist. An account is "connected" when
+# it is registered in accounts.json AND has a corresponding {label}_auth_record.json.
+# If the requested ACCOUNT label is not connected, fall back to the first
+# connected account. If none are connected, abort and instruct the user.
+ACCOUNTS_DIR="${HOME}/.outlook-local-mcp"
+ACCOUNTS_JSON="${ACCOUNTS_DIR}/accounts.json"
+if [[ ! -s "$ACCOUNTS_JSON" ]]; then
+  echo "ERROR: no accounts registered at ${ACCOUNTS_JSON}." >&2
+  echo "Run the server interactively and add an account via the 'account.login' verb before retrying." >&2
+  exit 2
+fi
+
+mapfile -t CONNECTED < <(jq -r '.accounts[].label' "$ACCOUNTS_JSON" 2>/dev/null \
+  | while read -r label; do
+      [[ -n "$label" && -s "${ACCOUNTS_DIR}/${label}_auth_record.json" ]] && echo "$label"
+    done)
+
+if [[ ${#CONNECTED[@]} -eq 0 ]]; then
+  echo "ERROR: no connected accounts found (no {label}_auth_record.json in ${ACCOUNTS_DIR})." >&2
+  echo "Run the server interactively and authenticate an account via 'account.login' before retrying." >&2
+  exit 2
+fi
+
+if ! printf '%s\n' "${CONNECTED[@]}" | grep -qx "$ACCOUNT"; then
+  echo "==> Requested account '${ACCOUNT}' is not connected; using '${CONNECTED[0]}' instead."
+  ACCOUNT="${CONNECTED[0]}"
+fi
+
 RUN_TS="$(date +%Y-%m-%dT%H-%M-%S)"
 BENCH_DIR="docs/bench"
 RUN_DIR="${BENCH_DIR}/runs/${RUN_TS}"
