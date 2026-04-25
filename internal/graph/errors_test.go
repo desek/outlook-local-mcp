@@ -2,9 +2,12 @@ package graph
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
+	"unicode"
 
+	"github.com/desek/outlook-local-mcp/internal/docs"
 	"github.com/microsoftgraph/msgraph-sdk-go/models/odataerrors"
 )
 
@@ -176,4 +179,69 @@ func TestErrorSeeHint_Unknown(t *testing.T) {
 	if got := ErrorSeeHint(err); got != "" {
 		t.Errorf("ErrorSeeHint(unknown) = %q, want empty", got)
 	}
+}
+
+// headingSlugRe matches Markdown ATX headings (## or deeper) and captures the
+// heading text so it can be normalised to a slug for anchor comparison.
+var headingSlugRe = regexp.MustCompile(`(?m)^#{2,}\s+(.+)$`)
+
+// headingToSlug converts a Markdown heading string to a GitHub-compatible
+// anchor slug: lowercase, spaces replaced by hyphens, non-alphanumeric
+// characters (except hyphens) removed.
+func headingToSlug(heading string) string {
+	s := strings.ToLower(strings.TrimSpace(heading))
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == ' ':
+			b.WriteRune('-')
+		case r == '-' || unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// TestErrorSeeTable_AnchorsCoverEmbeddedHeadings is a build-time guard that
+// verifies every anchor slug in errorSeeTable resolves to an actual ## (or
+// deeper) heading in the embedded troubleshooting document. The test fails if
+// any anchor has no corresponding heading, ensuring that the mapping stays
+// consistent with the documentation as both evolve.
+func TestErrorSeeTable_AnchorsCoverEmbeddedHeadings(t *testing.T) {
+	data, err := docs.ReadSlug("troubleshooting")
+	if err != nil {
+		t.Fatalf("docs.ReadSlug(\"troubleshooting\") error: %v", err)
+	}
+
+	// Build the set of slugs present in the embedded document.
+	matches := headingSlugRe.FindAllStringSubmatch(string(data), -1)
+	knownSlugs := make(map[string]bool, len(matches))
+	for _, m := range matches {
+		knownSlugs[headingToSlug(m[1])] = true
+	}
+
+	// Collect unique anchors from errorSeeTable and assert each resolves.
+	seen := make(map[string]bool)
+	for code, anchor := range errorSeeTable {
+		if seen[anchor] {
+			continue
+		}
+		seen[anchor] = true
+		t.Run(anchor, func(t *testing.T) {
+			if !knownSlugs[anchor] {
+				t.Errorf("errorSeeTable[%q] = %q: anchor %q has no matching ## heading in embedded troubleshooting.md; available slugs: %v",
+					code, anchor, anchor, slugList(knownSlugs))
+			}
+		})
+	}
+}
+
+// slugList returns a sorted human-readable list of known slugs for error
+// messages. It is used only in test failure output.
+func slugList(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

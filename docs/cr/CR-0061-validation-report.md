@@ -12,13 +12,13 @@ validation-date: 2026-04-25
 
 | Category | Pass | Fail | Partial | Deferred | Total |
 |----------|------|------|---------|----------|-------|
-| Functional Requirements | 14 | 0 | 1 | 0 | 15 |
+| Functional Requirements | 15 | 0 | 0 | 0 | 15 |
 | Acceptance Criteria | 9 | 0 | 0 | 0 | 9 |
-| Tests (unit) | 14 | 0 | 1 | 0 | 15 |
+| Tests (unit) | 15 | 0 | 0 | 0 | 15 |
 | CRUD Test Steps | 0 | 0 | 0 | 5 | 5 |
-| Gaps | None significant | | | | |
+| Gaps | None | | | | |
 
-**Overall: PASS with one PARTIAL on FR-9 (no exhaustive anchor-resolution test; per-class tests cover the defined error table).**
+**Overall: PASS. All functional requirements and acceptance criteria are satisfied. `make ci` is clean.**
 
 `make ci` ran clean: build, vet, fmt-check, tidy, lint, all unit tests, goreleaser check, mcpb validate — all pass.
 
@@ -36,7 +36,7 @@ validation-date: 2026-04-25
 | FR-6 | `system.get_docs` accepts `slug`, optional `section`, optional `output` (`text`/`raw`) | PASS | `internal/tools/get_docs.go`; `TestSystemGetDocs_Section`, `TestSystemGetDocs_Raw` pass |
 | FR-7 | New verbs conform to CR-0060/CLAUDE.md: system domain registry, text-tier default, help output, no new manifest entry | PASS | Verbs registered via `internal/server/system_verbs.go` in `VerbRegistry`; help enumerated in `TestSystemHelp_ListsDocsVerbs`; `extension/manifest.json` unchanged; note: CR listed `dispatch_registry.go` as location but `system_verbs.go` is the correct implementation file per the server architecture |
 | FR-8 | `docs/troubleshooting.md` authored covering all required topics | PASS | `docs/troubleshooting.md` 273 lines; 15 `##` sections including all mandated topics (auth failures, token refresh, device code, browser auth, auth code, keychain, multi-account, 429 throttling, inefficient filter, mail disabled, mail management disabled, read-only, log location, account lifecycle, in-server docs) |
-| FR-9 | Error payloads include `see` field for all error classes with troubleshooting sections; build-time test fails on missing/unresolved mapping | PARTIAL | `internal/graph/errors.go` defines `errorSeeTable` with 9 entries; `TestErrorSeeHint_InefficientFilter`, `TestErrorSeeHint_Throttling`, `TestErrorSeeHint_SentinelString` cover specific classes. **Gap:** no single exhaustive test iterates all `errorSeeTable` entries and verifies each anchor resolves in the embedded bundle. The CR requires "a build-time test MUST fail if any such mapping is missing or points to an unresolved anchor" — this is partially satisfied by per-class tests but not by a table-driven anchor-resolution test. |
+| FR-9 | Error payloads include `see` field for all error classes with troubleshooting sections; build-time test fails on missing/unresolved mapping | PASS | `internal/graph/errors.go` defines `errorSeeTable` with 9 entries; `TestErrorSeeTable_AnchorsCoverEmbeddedHeadings` (`internal/graph/errors_test.go:201`) iterates every unique anchor, normalises each `##` heading to a slug, and fails the build if any anchor is unresolved. All 6 unique anchors pass. Per-class tests `TestErrorSeeHint_InefficientFilter`, `TestErrorSeeHint_Throttling`, `TestErrorSeeHint_SentinelString` provide additional coverage. Gap closed by N+3 fix. |
 | FR-10 | Bundle limited to `readme`, `quickstart`, `troubleshooting`; engineering docs excluded; test fails if disallowed path added | PASS | `internal/docs/bundle_allowlist_test.go:TestBundle_OnlyAllowedSlugsPresent` and `TestBundle_AllAllowedSlugsPresent` enforce explicit allowlist; `embed.go` uses explicit file list, not globs |
 | FR-11 | `system.status` includes `docs` section with base URI and troubleshooting slug | PASS | `internal/tools/status.go:68-86` defines `statusDocs` with `BaseURI`, `TroubleshootingSlug`, `Version`; `TestStatus_Text` asserts presence |
 | FR-12 | Bundle regenerated at build time via `make docs-bundle`; verifies every slug resolves | PASS | `Makefile:54-74` `docs-bundle` target copies source files, runs `TestCatalog_AllSlugsResolve`, `TestBundleSizeUnder2MiB`, secret-pattern scan, regenerates `llms.txt`, runs `TestLLMsTxt_MatchesCatalog`; wired into `ci` target at `Makefile:30` |
@@ -82,7 +82,7 @@ validation-date: 2026-04-25
 | `internal/docs/llmstxt_test.go` | `TestLLMsTxt_LinksAreAbsolute` | PASS | Confirmed in test suite output |
 | `internal/tools/status_test.go` | `TestStatus_Text` (modified) | PASS | Asserts `docs` section present |
 | `internal/tools/tool_annotations_test.go` | `TestAggregateAnnotations_System` (modified) | PASS | Conservative aggregation on `system` verified after adding read-only docs verbs |
-| Exhaustive `errorSeeTable` anchor-resolution test | Not authored | PARTIAL | FR-9 gap: no table-driven test iterates all 9 `errorSeeTable` entries and verifies each anchor resolves in the embedded bundle |
+| `internal/graph/errors_test.go` | `TestErrorSeeTable_AnchorsCoverEmbeddedHeadings` | PASS | Table-driven; iterates all unique anchors in `errorSeeTable`; verifies each resolves to a `##` heading in embedded troubleshooting.md; added by N+3 gap fix |
 
 ---
 
@@ -149,16 +149,4 @@ No stray changed files detected outside Affected Components defined in the CR.
 
 ## Gaps
 
-### GAP-1 (PARTIAL): FR-9 — No exhaustive anchor-resolution test
-
-**Requirement:** "A build-time test MUST fail if any such mapping is missing or points to an unresolved anchor."
-
-**Finding:** `internal/graph/errors.go` defines `errorSeeTable` with 9 entries. Individual per-class tests (`TestErrorSeeHint_InefficientFilter`, `TestErrorSeeHint_Throttling`, `TestErrorSeeHint_SentinelString`) exercise three of them. No single test iterates all entries and cross-references each anchor against the headings in the embedded `troubleshooting.md`. If a new entry is added to `errorSeeTable` with a typo in the anchor, the build will not fail.
-
-**Severity:** Low. All current entries are manually verified against actual `##` headings in `docs/troubleshooting.md`. The per-class tests provide meaningful coverage for the most important error classes. The gap is a coverage completeness issue, not a correctness defect.
-
-**Recommendation:** Add a table-driven test in `internal/graph/errors_test.go` that iterates `errorSeeTable`, strips `docBase`, and asserts each anchor corresponds to a `## Heading` in the embedded troubleshooting document (via `headingToAnchor` normalization).
-
----
-
-*All other requirements, acceptance criteria, and test strategy entries are PASS. `make ci` is clean. CRUD live tests are DEFERRED.*
+*All requirements, acceptance criteria, and test strategy entries are PASS. `make ci` is clean. CRUD live tests are DEFERRED.*
