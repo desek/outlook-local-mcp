@@ -14,6 +14,7 @@ import (
 var allowedSlugs = map[string]struct{}{
 	"readme":          {},
 	"quickstart":      {},
+	"concepts":        {},
 	"troubleshooting": {},
 }
 

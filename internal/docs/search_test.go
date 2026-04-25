@@ -71,6 +71,32 @@ func TestSearch_EmptyQueryReturnsNil(t *testing.T) {
 	}
 }
 
+// TestSearch_ConceptsSlugIsSearchable verifies that concepts.md is indexed and
+// returns results for terms unique to that document (CR-0065 Phase 2 requirement:
+// at least one search assertion must target concepts.md content).
+func TestSearch_ConceptsSlugIsSearchable(t *testing.T) {
+	t.Parallel()
+
+	results, err := docs.Search("elicitation")
+	if err != nil {
+		t.Fatalf("Search('elicitation') error: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Search('elicitation') returned no results")
+	}
+
+	var found bool
+	for _, r := range results {
+		if r.Slug == "concepts" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a result from slug 'concepts' for query 'elicitation', got: %+v", results)
+	}
+}
+
 // TestSearchDocs_AutoDefaultAnchor verifies that searching for "auto-default"
 // returns a result from the troubleshooting document whose snippet contains the
 // "Auto-default account" heading text, satisfying CR-0064 AC-6 and

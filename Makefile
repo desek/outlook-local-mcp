@@ -52,18 +52,13 @@ license-check:
 	grant check $(BINARY_NAME).license.cdx.json
 
 docs-bundle:
-	@echo "==> Regenerating docs bundle (internal/docs/files/)"
-	@mkdir -p internal/docs/files
-	@cp README.md internal/docs/files/readme.md
-	@cp QUICKSTART.md internal/docs/files/quickstart.md
-	@cp docs/troubleshooting.md internal/docs/files/troubleshooting.md
 	@echo "==> Verifying slugs resolve"
 	@CGO_ENABLED=0 go test ./internal/docs/... -run TestCatalog_AllSlugsResolve -v
 	@echo "==> Enforcing 2 MiB size budget"
 	@CGO_ENABLED=0 go test ./internal/docs/... -run TestBundleSizeUnder2MiB -v
 	@echo "==> Running secret-pattern lint"
 	@for pat in eyJ sk- client_secret refresh_token; do \
-		if grep -rq "$$pat" internal/docs/files/; then \
+		if grep -rq "$$pat" docs/*.md; then \
 			echo "ERROR: secret pattern '$$pat' found in docs bundle" && exit 1; \
 		fi; \
 	done
