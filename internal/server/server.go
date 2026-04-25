@@ -4,7 +4,6 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/desek/outlook-local-mcp/internal/audit"
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/config"
 	"github.com/desek/outlook-local-mcp/internal/graph"
@@ -51,17 +50,6 @@ import (
 func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout time.Duration, m *observability.ToolMetrics, t trace.Tracer, readOnly bool, authMW func(mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc, registry *auth.AccountRegistry, cfg config.Config, cred auth.Authenticator) {
 	accountResolverMW := auth.AccountResolver(registry)
 
-	// wrap builds the standard middleware chain for calendar tools:
-	// authMW -> accountResolverMW -> WithObservability -> AuditWrap -> Handler
-	wrap := func(name, auditOp string, handler mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
-		return authMW(accountResolverMW(observability.WithObservability(name, m, t, audit.AuditWrap(name, auditOp, handler))))
-	}
-
-	// wrapWrite adds ReadOnlyGuard between observability and audit for write tools.
-	wrapWrite := func(name, auditOp string, handler mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc {
-		return authMW(accountResolverMW(observability.WithObservability(name, m, t, ReadOnlyGuard(name, readOnly, audit.AuditWrap(name, auditOp, handler)))))
-	}
-
 	// CR-0040: Build provenance property ID once at startup. Empty when
 	// provenance tagging is disabled (cfg.ProvenanceTag == "").
 	var provenancePropertyID string
@@ -69,92 +57,123 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		provenancePropertyID = graph.BuildProvenancePropertyID(cfg.ProvenanceTag)
 	}
 
-	// CR-0006: Read-only calendar tools.
-	s.AddTool(tools.NewListCalendarsTool(), wrap("calendar_list", "read", tools.NewHandleListCalendars(retryCfg, timeout)))
-	s.AddTool(tools.NewListEventsTool(), wrap("calendar_list_events", "read", tools.NewHandleListEvents(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-	s.AddTool(tools.NewGetEventTool(), wrap("calendar_get_event", "read", tools.NewHandleGetEvent(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
+	// CR-0060 Phase 3d: calendar domain aggregate tool. Replaces the 14
+	// individual calendar_* tool registrations (calendar_list, calendar_list_events,
+	// calendar_get_event, calendar_search_events, calendar_create_event,
+	// calendar_update_event, calendar_delete_event, calendar_respond_event,
+	// calendar_reschedule_event, calendar_create_meeting, calendar_update_meeting,
+	// calendar_cancel_meeting, calendar_reschedule_meeting, calendar_get_free_busy)
+	// with a single "calendar" tool dispatched by operation verb.
+	//
+	// The calRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *calRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	calVerbs, calRegistry := buildCalendarVerbs(calendarVerbsConfig{
+		retryCfg:             retryCfg,
+		timeout:              timeout,
+		defaultTimezone:      cfg.DefaultTimezone,
+		provenancePropertyID: provenancePropertyID,
+		m:                    m,
+		tracer:               t,
+		authMW:               authMW,
+		accountResolverMW:    accountResolverMW,
+		readOnly:             readOnly,
+	})
+	populatedCal := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+		Domain:          "calendar",
+		Intro:           "Calendar operations for Microsoft Outlook via Microsoft Graph.",
+		Verbs:           calVerbs,
+		ToolAnnotations: calendarToolAnnotations(),
+	})
+	*calRegistry = populatedCal
 
-	// CR-0008: Create and update event tools.
-	s.AddTool(tools.NewCreateEventTool(), wrapWrite("calendar_create_event", "write", tools.HandleCreateEvent(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-	s.AddTool(tools.NewUpdateEventTool(), wrapWrite("calendar_update_event", "write", tools.HandleUpdateEvent(retryCfg, timeout, cfg.DefaultTimezone)))
+	// CR-0060 Phase 3b: account domain aggregate tool. Replaces the individual
+	// account_add, account_list, account_remove, account_login, account_logout,
+	// and account_refresh registrations with a single "account" tool dispatched
+	// by operation verb. Each verb's handler is pre-wrapped with authMW,
+	// observability, and audit middleware inside buildAccountVerbs using the
+	// fully-qualified identity "account.<verb>" per FR-13/FR-14.
+	//
+	// The accRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *accRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	accVerbs, accRegistry := buildAccountVerbs(accountVerbsConfig{
+		registry: registry,
+		cfg:      cfg,
+		m:        m,
+		tracer:   t,
+		authMW:   authMW,
+	})
+	populatedAcc := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+		Domain:          "account",
+		Intro:           "Account management for Microsoft accounts connected to the Outlook MCP server.",
+		Verbs:           accVerbs,
+		ToolAnnotations: accountToolAnnotations(),
+	})
+	*accRegistry = populatedAcc
 
-	// CR-0007: Search and free/busy tools.
-	s.AddTool(tools.NewSearchEventsTool(provenancePropertyID != ""), wrap("calendar_search_events", "read", tools.NewHandleSearchEvents(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-	s.AddTool(tools.NewGetFreeBusyTool(), wrap("calendar_get_free_busy", "read", tools.NewHandleGetFreeBusy(retryCfg, timeout, cfg.DefaultTimezone)))
+	// CR-0060 Phase 3a: system domain aggregate tool. Replaces the individual
+	// status and complete_auth tool registrations with a single "system" tool
+	// dispatched by operation verb. complete_auth is gated on auth_code within
+	// NewSystemVerbs, preserving the pre-existing conditional behaviour.
+	//
+	// The sysRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *sysRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	sysVerbs, sysRegistry := buildSystemVerbs(systemVerbsConfig{
+		cfg:       cfg,
+		registry:  registry,
+		startTime: time.Now(),
+		m:         m,
+		tracer:    t,
+		authMW:    authMW,
+		cred:      cred,
+	})
+	populated := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+		Domain:          "system",
+		Intro:           "System diagnostics and authentication utilities for the Outlook MCP server.",
+		Verbs:           sysVerbs,
+		ToolAnnotations: systemToolAnnotations(),
+	})
+	*sysRegistry = populated
 
-	// CR-0009: Delete and cancel event tools.
-	s.AddTool(tools.NewDeleteEventTool(), wrapWrite("calendar_delete_event", "delete", tools.HandleDeleteEvent(retryCfg, timeout)))
-	s.AddTool(tools.NewCancelMeetingTool(), wrapWrite("calendar_cancel_meeting", "delete", tools.HandleCancelEvent(retryCfg, timeout)))
+	// CR-0060 Phase 3c: mail domain aggregate tool. Replaces the individual
+	// mail_list_folders, mail_list_messages, mail_get_message, mail_search_messages,
+	// mail_get_conversation, mail_get_attachment, mail_list_attachments,
+	// mail_create_draft, mail_create_reply_draft, mail_create_forward_draft,
+	// mail_update_draft, and mail_delete_draft registrations with a single "mail"
+	// tool dispatched by operation verb. The tool is registered unconditionally
+	// per FR-1; verbs are gated by feature flags inside buildMailVerbs per FR-2.
+	//
+	// The mailRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *mailRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	mailVerbs, mailRegistry := buildMailVerbs(mailVerbsConfig{
+		retryCfg:             retryCfg,
+		timeout:              timeout,
+		cfg:                  cfg,
+		provenancePropertyID: provenancePropertyID,
+		m:                    m,
+		tracer:               t,
+		authMW:               authMW,
+		accountResolverMW:    accountResolverMW,
+		readOnly:             readOnly,
+	})
+	populatedMail := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+		Domain:          "mail",
+		Intro:           "Mail operations for Microsoft Outlook via Microsoft Graph.",
+		Verbs:           mailVerbs,
+		ToolAnnotations: mailToolAnnotations(),
+	})
+	*mailRegistry = populatedMail
 
-	// CR-0042: Respond to meeting invitations (accept/tentative/decline).
-	s.AddTool(tools.NewRespondEventTool(), wrapWrite("calendar_respond_event", "write", tools.HandleRespondEvent(retryCfg, timeout)))
-
-	// CR-0042: Reschedule event (preserves duration, computes new end time).
-	s.AddTool(tools.NewRescheduleEventTool(), wrapWrite("calendar_reschedule_event", "write", tools.HandleRescheduleEvent(retryCfg, timeout, cfg.DefaultTimezone)))
-
-	// CR-0054: Meeting tools (attendee-focused variants reusing event handlers).
-	s.AddTool(tools.NewCreateMeetingTool(), wrapWrite("calendar_create_meeting", "write", tools.HandleCreateEvent(retryCfg, timeout, cfg.DefaultTimezone, provenancePropertyID)))
-	s.AddTool(tools.NewUpdateMeetingTool(), wrapWrite("calendar_update_meeting", "write", tools.HandleUpdateEvent(retryCfg, timeout, cfg.DefaultTimezone)))
-	s.AddTool(tools.NewRescheduleMeetingTool(), wrapWrite("calendar_reschedule_meeting", "write", tools.HandleRescheduleEvent(retryCfg, timeout, cfg.DefaultTimezone)))
-
-	// CR-0025: Account management tools. These do NOT go through
-	// AccountResolver (they manage the registry) or ReadOnlyGuard (they are
-	// not calendar operations). list_accounts is inherently read-only.
-	s.AddTool(tools.NewAddAccountTool(), authMW(observability.WithObservability("account_add", m, t, audit.AuditWrap("account_add", "write", tools.HandleAddAccount(registry, cfg)))))
-	s.AddTool(tools.NewListAccountsTool(), authMW(observability.WithObservability("account_list", m, t, audit.AuditWrap("account_list", "read", tools.HandleListAccounts(registry)))))
-	s.AddTool(tools.NewRemoveAccountTool(), authMW(observability.WithObservability("account_remove", m, t, audit.AuditWrap("account_remove", "write", tools.HandleRemoveAccount(registry, cfg.AccountsPath)))))
-
-	// CR-0056: Account lifecycle tools (login, logout, refresh). Same pattern as
-	// other account management tools: authMW -> WithObservability -> AuditWrap.
-	// They manage the registry directly and do NOT use AccountResolver.
-	s.AddTool(tools.NewLoginAccountTool(), authMW(observability.WithObservability("account_login", m, t, audit.AuditWrap("account_login", "write", tools.HandleLoginAccount(registry, cfg)))))
-	s.AddTool(tools.NewLogoutAccountTool(), authMW(observability.WithObservability("account_logout", m, t, audit.AuditWrap("account_logout", "write", tools.HandleLogoutAccount(registry)))))
-	s.AddTool(tools.NewRefreshAccountTool(), authMW(observability.WithObservability("account_refresh", m, t, audit.AuditWrap("account_refresh", "write", tools.HandleRefreshAccount(registry, cfg)))))
-
-	// CR-0037: Status diagnostic tool. No auth middleware, no account
-	// resolver — purely reads in-memory state with no Graph API calls.
-	s.AddTool(tools.NewStatusTool(), observability.WithObservability("status", m, t, audit.AuditWrap("status", "read", tools.HandleStatus(cfg, registry, time.Now()))))
-
-	// CR-0043: Mail tools, registered only when mail access is enabled.
-	// All mail tools are read-only and use the standard middleware chain.
-	if cfg.MailEnabled {
-		s.AddTool(tools.NewListMailFoldersTool(), wrap("mail_list_folders", "read", tools.NewHandleListMailFolders(retryCfg, timeout)))
-		s.AddTool(tools.NewListMessagesTool(), wrap("mail_list_messages", "read", tools.NewHandleListMessages(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewSearchMessagesTool(), wrap("mail_search_messages", "read", tools.NewHandleSearchMessages(retryCfg, timeout)))
-		s.AddTool(tools.NewGetMessageTool(), wrap("mail_get_message", "read", tools.NewHandleGetMessage(retryCfg, timeout, provenancePropertyID)))
-
-		// CR-0058: Additional read-only mail tools for conversation threading and
-		// attachment retrieval. Registered under MailEnabled since these only
-		// require Mail.Read (or Mail.ReadWrite when MailManageEnabled escalates).
-		s.AddTool(tools.NewGetConversationTool(), wrap("mail_get_conversation", "read", tools.NewHandleGetConversation(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewGetAttachmentTool(), wrap("mail_get_attachment", "read", tools.NewHandleGetAttachment(retryCfg, timeout, cfg.MaxAttachmentSizeBytes)))
-		s.AddTool(tools.NewListAttachmentsTool(), wrap("mail_list_attachments", "read", tools.NewHandleListAttachments(retryCfg, timeout)))
-	}
-
-	// CR-0058: Mail management (draft-centric write) tools. Gated on the
-	// MailManageEnabled feature flag which requires Mail.ReadWrite scope.
-	if cfg.MailManageEnabled {
-		s.AddTool(tools.NewCreateDraftTool(), wrapWrite("mail_create_draft", "write", tools.NewHandleCreateDraft(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewCreateReplyDraftTool(), wrapWrite("mail_create_reply_draft", "write", tools.NewHandleCreateReplyDraft(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewCreateForwardDraftTool(), wrapWrite("mail_create_forward_draft", "write", tools.NewHandleCreateForwardDraft(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewUpdateDraftTool(), wrapWrite("mail_update_draft", "write", tools.NewHandleUpdateDraft(retryCfg, timeout)))
-		s.AddTool(tools.NewDeleteDraftTool(), wrapWrite("mail_delete_draft", "delete", tools.NewHandleDeleteDraft(retryCfg, timeout)))
-	}
-
-	// CR-0030: complete_auth fallback tool for auth_code method. Only
-	// registered when auth_code is active, since the tool is meaningless
-	// for browser or device_code flows.
-	toolCount := 21
-	if cfg.MailEnabled {
-		toolCount += 6
-	}
-	if cfg.MailManageEnabled {
-		toolCount += 5
-	}
-	if cfg.AuthMethod == "auth_code" {
-		s.AddTool(tools.NewCompleteAuthTool(), authMW(observability.WithObservability("complete_auth", m, t, audit.AuditWrap("complete_auth", "write", tools.HandleCompleteAuth(cred, cfg.AuthRecordPath, registry, auth.Scopes(cfg))))))
-		toolCount++
-	}
+	// Tool count: 4 aggregate domain tools (calendar, mail, account, system).
+	// All verbs are dispatched within their domain tool.
+	toolCount := 4
 
 	slog.Info("tool registration complete", "tools", toolCount)
 }

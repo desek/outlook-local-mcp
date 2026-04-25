@@ -24,9 +24,9 @@ type manifestDoc struct {
 	Tools []manifestTool `json:"tools"`
 }
 
-// TestManifest_NewTools verifies that the three CR-0056 account lifecycle
-// tools (account_login, account_logout, account_refresh) are present in the
-// extension manifest so Claude Desktop can discover them (AC-16).
+// TestManifest_NewTools verifies that the CR-0060 Phase 3b+3c aggregate tools
+// are present in the extension manifest, replacing the individual account_* and
+// mail_* entries (AC-12).
 func TestManifest_NewTools(t *testing.T) {
 	data, err := os.ReadFile("manifest.json")
 	if err != nil {
@@ -37,7 +37,18 @@ func TestManifest_NewTools(t *testing.T) {
 		t.Fatalf("unmarshal manifest.json: %v", err)
 	}
 
-	required := []string{"account_login", "account_logout", "account_refresh"}
+	// After CR-0060 Phase 3b+3c the individual account_* and mail_* tools are
+	// replaced by single aggregate tools. Verify they are present.
+	required := []string{"account", "mail"}
+	// Verify no old individual account_* or mail_* names remain.
+	deprecated := []string{
+		"account_login", "account_logout", "account_refresh", "account_add", "account_remove", "account_list",
+		"mail_list_folders", "mail_list_messages", "mail_get_message", "mail_search_messages",
+		"mail_get_conversation", "mail_get_attachment", "mail_list_attachments",
+		"mail_create_draft", "mail_create_reply_draft", "mail_create_forward_draft",
+		"mail_update_draft", "mail_delete_draft",
+	}
+
 	present := make(map[string]bool, len(m.Tools))
 	for _, tool := range m.Tools {
 		present[tool.Name] = true
@@ -45,6 +56,11 @@ func TestManifest_NewTools(t *testing.T) {
 	for _, name := range required {
 		if !present[name] {
 			t.Errorf("manifest.json tools[] missing required entry %q", name)
+		}
+	}
+	for _, name := range deprecated {
+		if present[name] {
+			t.Errorf("manifest.json tools[] should not contain deprecated entry %q (replaced by aggregate tool)", name)
 		}
 	}
 }

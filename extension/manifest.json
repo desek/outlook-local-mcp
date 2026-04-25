@@ -53,140 +53,20 @@
   },
   "tools": [
     {
-      "name": "calendar_list",
-      "description": "List all calendars accessible to the authenticated user."
+      "name": "calendar",
+      "description": "Calendar operations for Microsoft Outlook via Microsoft Graph. Required operation: help (detailed docs), list_calendars (list user calendars), list_events (list events in a window), get_event (fetch one event), search_events (query events by subject and filters), create_event (personal event without attendees), update_event (edit personal event), delete_event (remove personal event), respond_event (accept/decline invitation), reschedule_event (move personal event), create_meeting (event with attendees), update_meeting (edit meeting with attendee changes), cancel_meeting (cancel and notify attendees), reschedule_meeting (move meeting and notify), get_free_busy (check availability)."
     },
     {
-      "name": "calendar_list_events",
-      "description": "List calendar events within a time range. Expands recurring events into individual occurrences."
+      "name": "mail",
+      "description": "Mail operations for Microsoft Outlook via Microsoft Graph. Required operation: help (detailed docs), list_folders (list mail folders with unread counts), list_messages (list messages with filtering), get_message (get full message details), search_messages (KQL full-text search), get_conversation (fetch full thread chronologically — MailEnabled), list_attachments (list attachment metadata — MailEnabled), get_attachment (download attachment content — MailEnabled), create_draft (create new draft — MailManageEnabled), create_reply_draft (reply draft preserving threading — MailManageEnabled), create_forward_draft (forward draft with new recipients — MailManageEnabled), update_draft (update draft fields — MailManageEnabled), delete_draft (permanently delete a draft — MailManageEnabled)."
     },
     {
-      "name": "calendar_get_event",
-      "description": "Get full details of a single calendar event by its ID."
+      "name": "account",
+      "description": "Account management for Microsoft accounts. Required operation: help (detailed docs), add (add and authenticate a new account), remove (remove an account and clear tokens), list (list all accounts with state), login (re-authenticate a disconnected account), logout (disconnect without removing), refresh (force token refresh)."
     },
     {
-      "name": "calendar_search_events",
-      "description": "Search calendar events by subject text, importance, sensitivity, and other properties within a time range."
-    },
-    {
-      "name": "calendar_get_free_busy",
-      "description": "Get free/busy availability for a time range. Returns busy periods with start, end, status, and subject."
-    },
-    {
-      "name": "calendar_create_event",
-      "description": "Create a new personal calendar event (no attendees). Supports Teams online meetings, recurrence, and all standard event properties."
-    },
-    {
-      "name": "calendar_create_meeting",
-      "description": "Create a new calendar meeting with attendees. Sends invitations automatically. Supports Teams online meetings, recurrence, and all standard event properties."
-    },
-    {
-      "name": "calendar_update_event",
-      "description": "Update an existing calendar event (no attendee changes). Only specified fields are changed (PATCH semantics)."
-    },
-    {
-      "name": "calendar_update_meeting",
-      "description": "Update an existing calendar meeting including attendee changes. Sends update notifications to attendees. Only specified fields are changed (PATCH semantics)."
-    },
-    {
-      "name": "calendar_delete_event",
-      "description": "Delete a calendar event by ID. Organizer deletions send cancellation notices to attendees."
-    },
-    {
-      "name": "calendar_cancel_meeting",
-      "description": "Cancel a meeting and send a cancellation message to all attendees. Only the organizer can cancel."
-    },
-    {
-      "name": "calendar_respond_event",
-      "description": "Respond to a meeting invitation: accept, tentatively accept, or decline. Sends a response to the organizer."
-    },
-    {
-      "name": "calendar_reschedule_event",
-      "description": "Move a personal event to a new time, preserving its original duration."
-    },
-    {
-      "name": "calendar_reschedule_meeting",
-      "description": "Move a meeting to a new time, preserving its original duration. Sends update notifications to all attendees."
-    },
-    {
-      "name": "mail_list_folders",
-      "description": "List the user's mail folders (Inbox, Sent Items, Drafts, etc.) with display name, unread count, and total count."
-    },
-    {
-      "name": "mail_list_messages",
-      "description": "List email messages in a mail folder or across all folders. Supports filtering by date range, sender, and conversation ID."
-    },
-    {
-      "name": "mail_search_messages",
-      "description": "Full-text search across email messages using Microsoft Graph KQL syntax. Returns messages ranked by relevance."
-    },
-    {
-      "name": "mail_get_message",
-      "description": "Get full details of a single email message by its ID. Returns body content, all recipients, headers, and attachment metadata."
-    },
-    {
-      "name": "mail_get_conversation",
-      "description": "Get all messages in a conversation thread by conversation ID, ordered chronologically. Useful for reading full email threads."
-    },
-    {
-      "name": "mail_get_attachment",
-      "description": "Download a specific attachment from a message by message ID and attachment ID. Returns metadata and base64-encoded content subject to size limits."
-    },
-    {
-      "name": "mail_list_attachments",
-      "description": "List attachments (metadata only — id, name, contentType, size, isInline) for a message. Use the returned id with mail_get_attachment to download content."
-    },
-    {
-      "name": "mail_create_draft",
-      "description": "Create a new email draft in the Drafts folder. Supports to/cc/bcc recipients, subject, body (text or HTML), importance, and attachments. Requires Mail.ReadWrite."
-    },
-    {
-      "name": "mail_create_reply_draft",
-      "description": "Create a reply draft to an existing message, with optional reply-all. Preserves quoted content; requires Mail.ReadWrite."
-    },
-    {
-      "name": "mail_create_forward_draft",
-      "description": "Create a forward draft for an existing message with new recipients. Preserves the original message body; requires Mail.ReadWrite."
-    },
-    {
-      "name": "mail_update_draft",
-      "description": "Update fields of an existing mail draft (subject, body, recipients, importance). PATCH semantics — only specified fields change. Requires Mail.ReadWrite."
-    },
-    {
-      "name": "mail_delete_draft",
-      "description": "Delete a mail draft by ID. Only messages in the Drafts folder may be deleted through this tool. Requires Mail.ReadWrite."
-    },
-    {
-      "name": "account_add",
-      "description": "Add and authenticate a new Microsoft account with isolated token cache and auth record."
-    },
-    {
-      "name": "account_list",
-      "description": "List all registered accounts and their authentication status."
-    },
-    {
-      "name": "account_remove",
-      "description": "Remove a registered account. The default account cannot be removed."
-    },
-    {
-      "name": "account_login",
-      "description": "Re-authenticate an existing disconnected account using its persisted auth method, client ID, and tenant ID."
-    },
-    {
-      "name": "account_logout",
-      "description": "Disconnect an account without removing it from the registry. Clears the cached token and Graph client; the account configuration is preserved."
-    },
-    {
-      "name": "account_refresh",
-      "description": "Force a token refresh for an authenticated account. Returns the new token expiry time on success."
-    },
-    {
-      "name": "status",
-      "description": "Get server health summary: version, detected timezone, per-account authentication state, and uptime. No parameters required."
-    },
-    {
-      "name": "complete_auth",
-      "description": "Complete an in-progress authorization code authentication by providing the redirect URL from the browser."
+      "name": "system",
+      "description": "System diagnostics and authentication utilities. Required operation: help (detailed docs), status (server health, accounts, config), complete_auth (finish auth_code flow — only when auth=auth_code)."
     }
   ],
   "compatibility": {

@@ -25,7 +25,7 @@ outlook-mcp/
     validate/                  # Input validation helpers
     observability/             # OpenTelemetry metrics and tracing, WithObservability middleware
     server/                    # RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
-    tools/                     # 32 MCP tool handlers (14 calendar + 11 mail + 6 account + 1 system; +1 complete_auth when auth_code; mail breakdown: 4 read always + 2 extra read when MailEnabled + 5 draft management when MailManageEnabled; see CR-0056, CR-0058)
+    tools/                     # 4 aggregate domain tools dispatching verb sets: calendar (15 verbs), mail (5-13 verbs gated by MailEnabled/MailManageEnabled), account (7 verbs), system (2-3 verbs gated by auth_code); see CR-0056, CR-0058, CR-0060
   docs/
     ...
 ```
@@ -77,33 +77,30 @@ All MCP tools **MUST** be registered in `extension/manifest.json` under the `too
 
 ## Tool Naming Convention
 
-All MCP tools **MUST** follow the domain-prefixed naming pattern:
+As of CR-0060 (v0.6.0) the MCP surface is four aggregate domain tools, each dispatched by a required `operation` verb. New work **MUST** add a verb to the appropriate domain registry, not a new top-level MCP tool.
 
-```
-{domain}_{operation}[_{resource}]
-```
+Aggregate tools and their domains:
 
-Recognized domain prefixes:
+* `calendar` -- Calendar and event verbs
+* `mail` -- Mail message, folder, and draft verbs
+* `account` -- Account management verbs
+* `system` -- Server-level verbs (`status`, optional `complete_auth`, `help`)
 
-* `calendar_` -- Calendar and event operations
-* `mail_` -- Mail message and folder operations
-* `account_` -- Account management operations
+Verb names **MUST** be self-explanatory English verbs or verb phrases without the domain prefix (for example `create_event`, not `calendar_create_event`). Every domain tool exposes an `operation="help"` verb that documents its registered verbs. The `{domain}.{operation}` identity is what surfaces in audit logs and OpenTelemetry attributes.
 
-System tools (`status`, `complete_auth`) are exempt from domain prefixing.
-
-New tools **MUST** follow this convention. The tool name in `mcp.NewTool()` must match the name used in all middleware calls (`wrap`/`wrapWrite`, `WithObservability`, `AuditWrap`) in `server.go`.
+The aggregate tool name registered with `mcp.NewTool()` must match the name used in all middleware calls (`wrap`/`wrapWrite`, `WithObservability`, `AuditWrap`) in `server.go`. Per-verb dispatch is handled by `internal/tools/dispatch_route.go`.
 
 ## MCP Tool Annotations
 
-All MCP tools **MUST** include the full set of five MCP annotations for Anthropic Software Directory compliance (see CR-0052):
+All four aggregate MCP tools **MUST** include the full set of five MCP annotations for Anthropic Software Directory compliance (see CR-0052). Per CR-0060, the aggregate annotation **MUST** be the most conservative across the verbs the tool hosts:
 
 * `mcp.WithTitleAnnotation(string)` -- human-readable display name for UI tool pickers.
-* `mcp.WithReadOnlyHintAnnotation(bool)` -- `true` for read tools, `false` for write/delete tools.
-* `mcp.WithDestructiveHintAnnotation(bool)` -- `true` only for tools that irreversibly delete data or send cancellation notices (`calendar_delete_event`, `calendar_cancel_meeting`, `account_remove`).
-* `mcp.WithIdempotentHintAnnotation(bool)` -- `true` when calling with the same arguments produces the same result (e.g., GET, PATCH, DELETE); `false` for tools that create new resources each call.
-* `mcp.WithOpenWorldHintAnnotation(bool)` -- `true` for tools that call external APIs (Microsoft Graph); `false` for local-only tools (`account_list`, `account_remove`, `status`).
+* `mcp.WithReadOnlyHintAnnotation(bool)` -- `false` if any verb writes (true only for tools whose every verb is read-only).
+* `mcp.WithDestructiveHintAnnotation(bool)` -- `true` if any verb irreversibly deletes data or sends cancellation notices (verbs `calendar.delete_event`, `calendar.cancel_meeting`, `account.remove`).
+* `mcp.WithIdempotentHintAnnotation(bool)` -- `false` if any verb is non-idempotent (creates new resources each call).
+* `mcp.WithOpenWorldHintAnnotation(bool)` -- `true` if any verb calls Microsoft Graph; `false` only for tools whose every verb is local (no Graph verbs).
 
-Annotation values **MUST** be explicitly set even when they match MCP spec defaults. The complete annotation matrix is defined in CR-0052. New tools **MUST** add a corresponding annotation test in `internal/tools/tool_annotations_test.go`.
+Per-verb annotation semantics **MUST** be documented in the `operation="help"` output for the domain. Annotation values **MUST** be explicitly set even when they match MCP spec defaults. The complete annotation matrix is defined in CR-0052; the conservative-aggregation rule is defined in CR-0060. New verbs **MUST** add a corresponding assertion in `internal/tools/tool_annotations_test.go`.
 
 ## MCP Tool Response Tiering
 
