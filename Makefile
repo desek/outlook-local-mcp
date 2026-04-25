@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt fmt-check vet tidy ci verify govulncheck security vuln-scan license-check clean snapshot goreleaser-check build-mcpb-binaries build-mcpb-local mcpb-validate mcpb-pack mcpb-local mcpb-clean
+.PHONY: build test lint fmt fmt-check vet tidy ci verify govulncheck security vuln-scan license-check clean snapshot goreleaser-check build-mcpb-binaries build-mcpb-local mcpb-validate mcpb-pack mcpb-local mcpb-clean docs-bundle
 
 BINARY_NAME := outlook-local-mcp
 BUILD_DIR := .
@@ -27,7 +27,7 @@ tidy:
 	go mod tidy
 	@git diff --exit-code go.mod go.sum || (echo "go.mod or go.sum not tidy" && exit 1)
 
-ci: build vet fmt-check tidy lint test goreleaser-check mcpb-validate
+ci: docs-bundle build vet fmt-check tidy lint test goreleaser-check mcpb-validate
 
 verify:
 	go mod verify
@@ -50,6 +50,24 @@ vuln-scan: build
 license-check:
 	syft scan dir:. --override-default-catalogers gomod -o cyclonedx-json=$(BINARY_NAME).license.cdx.json
 	grant check $(BINARY_NAME).license.cdx.json
+
+docs-bundle:
+	@echo "==> Regenerating docs bundle (internal/docs/files/)"
+	@mkdir -p internal/docs/files
+	@cp README.md internal/docs/files/readme.md
+	@cp QUICKSTART.md internal/docs/files/quickstart.md
+	@cp docs/troubleshooting.md internal/docs/files/troubleshooting.md
+	@echo "==> Verifying slugs resolve"
+	@CGO_ENABLED=0 go test ./internal/docs/... -run TestCatalog_AllSlugsResolve -v
+	@echo "==> Enforcing 2 MiB size budget"
+	@CGO_ENABLED=0 go test ./internal/docs/... -run TestBundleSizeUnder2MiB -v
+	@echo "==> Running secret-pattern lint"
+	@for pat in eyJ sk- client_secret refresh_token; do \
+		if grep -rq "$$pat" internal/docs/files/; then \
+			echo "ERROR: secret pattern '$$pat' found in docs bundle" && exit 1; \
+		fi; \
+	done
+	@echo "==> docs-bundle OK"
 
 clean:
 	rm -f $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/$(BINARY_NAME)-* coverage.out $(BINARY_NAME).cdx.json $(BINARY_NAME).spdx.json $(BINARY_NAME).license.cdx.json
