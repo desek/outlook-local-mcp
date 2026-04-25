@@ -13,9 +13,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -71,7 +71,7 @@ func NewCompleteAuthTool() mcp.Tool {
 // persists account metadata to disk on success.
 func HandleCompleteAuth(cred auth.Authenticator, authRecordPath string, registry *auth.AccountRegistry, scopes []string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "complete_auth")
+		logger := logging.Logger(ctx)
 
 		redirectURL, err := request.RequireString("redirect_url")
 		if err != nil {

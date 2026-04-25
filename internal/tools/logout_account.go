@@ -14,9 +14,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -74,8 +74,8 @@ func NewLogoutAccountTool() mcp.Tool {
 // Client=nil, Authenticated=false) and best-effort deletes the token cache
 // artifacts for the account's CacheName.
 func HandleLogoutAccount(registry *auth.AccountRegistry) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "account_logout")
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger := logging.Logger(ctx)
 
 		label, err := request.RequireString("label")
 		if err != nil {

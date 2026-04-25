@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -300,5 +301,36 @@ func TestDispatch_MiddlewareIsApplied(t *testing.T) {
 	}
 	if handlerCalled != 1 {
 		t.Errorf("handler called %d times, want 1", handlerCalled)
+	}
+}
+
+// TestDispatch_InjectsFQNIntoContext verifies that the dispatcher stores the
+// FQN "{domain}.{operation}" in the context before invoking the verb handler,
+// so that logging.ToolName returns the dispatched verb identity rather than the
+// hardcoded name used before CR-0061. This guards the shared-handler case where
+// calendar.create_meeting delegates to HandleCreateEvent but must log as
+// "calendar.create_meeting".
+func TestDispatch_InjectsFQNIntoContext(t *testing.T) {
+	var capturedFQN string
+
+	handler := func(ctx context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		capturedFQN = logging.ToolName(ctx)
+		return mcp.NewToolResultText("ok"), nil
+	}
+
+	dispatch := buildDispatcher(t, DomainToolConfig{
+		Domain: "calendar",
+		Intro:  "Calendar domain.",
+		Verbs: []Verb{
+			makeTestVerb("create_meeting", "create a meeting", handler),
+		},
+	})
+
+	_, err := dispatch(context.Background(), buildRequest("calendar", map[string]any{"operation": "create_meeting"}))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if capturedFQN != "calendar.create_meeting" {
+		t.Errorf("ToolName in ctx = %q, want %q", capturedFQN, "calendar.create_meeting")
 	}
 }

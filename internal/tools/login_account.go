@@ -13,11 +13,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"path/filepath"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/config"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -87,7 +87,7 @@ func HandleLoginAccount(registry *auth.AccountRegistry, cfg config.Config) func(
 // existing registry entry instead of creating a new one.
 func handleLoginAccount(s *addAccountState, registry *auth.AccountRegistry, cfg config.Config) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "account_login")
+		logger := logging.Logger(ctx)
 
 		label, err := request.RequireString("label")
 		if err != nil {

@@ -13,11 +13,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	abstractions "github.com/microsoft/kiota-abstractions-go"
@@ -148,7 +148,7 @@ func NewSearchEventsTool(provenanceEnabled bool) mcp.Tool {
 //   - Serializes events using SerializeEvent and returns a JSON array.
 func NewHandleSearchEvents(retryCfg graph.RetryConfig, timeout time.Duration, defaultTimezone, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "calendar_search_events")
+		logger := logging.Logger(ctx)
 		start := time.Now()
 
 		client, err := GraphClient(ctx)
@@ -444,7 +444,7 @@ func executeSearchCalendarView(
 		cfg.Headers = headers
 	}
 
-	logger := slog.With("tool", "calendar_search_events")
+	logger := logging.Logger(ctx)
 	logger.Debug("graph API request",
 		"endpoint", "GET /me/calendarView",
 		"start_datetime", startDatetime,

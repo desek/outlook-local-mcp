@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	msgraphsdk "github.com/microsoftgraph/msgraph-sdk-go"
@@ -85,7 +86,7 @@ func NewUpdateDraftTool() mcp.Tool {
 // the Microsoft Graph API.
 func NewHandleUpdateDraft(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "mail_update_draft")
+		logger := logging.Logger(ctx)
 
 		client, err := GraphClient(ctx)
 		if err != nil {

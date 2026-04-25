@@ -11,11 +11,11 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/config"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -264,8 +264,8 @@ type statusConfigObservability struct {
 // Side effects: none. The handler only reads from the registry and computes
 // elapsed time.
 func HandleStatus(cfg config.Config, registry *auth.AccountRegistry, startTime time.Time) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(_ context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "status")
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		logger := logging.Logger(ctx)
 		logger.Debug("tool called")
 
 		// Validate output mode.

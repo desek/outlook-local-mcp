@@ -12,11 +12,11 @@ package tools
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
@@ -122,7 +122,7 @@ func NewUpdateEventTool() mcp.Tool {
 // debug level on entry, error level on failure, and info level on success.
 func HandleUpdateEvent(retryCfg graph.RetryConfig, timeout time.Duration, defaultTimezone string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "calendar_update_event")
+		logger := logging.Logger(ctx)
 		args := request.GetArguments()
 		logger.DebugContext(ctx, "tool called", "params", args)
 

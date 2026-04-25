@@ -13,11 +13,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
@@ -132,7 +132,7 @@ func NewCreateEventTool() mcp.Tool {
 // and info level on success.
 func HandleCreateEvent(retryCfg graph.RetryConfig, timeout time.Duration, defaultTimezone string, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "calendar_create_event")
+		logger := logging.Logger(ctx)
 		args := request.GetArguments()
 		logger.DebugContext(ctx, "tool called", "params", args)
 
