@@ -107,13 +107,13 @@ Example for `calendar`:
 
 ### Functional Requirements
 
-1. The server **MUST** register exactly four MCP tools: `calendar`, `mail`, `account`, `system`.
-2. Each aggregate tool **MUST** declare a required string parameter `operation` with a JSON Schema `enum` listing every supported verb, including `help`.
+1. The server **MUST** register exactly four MCP tools: `calendar`, `mail`, `account`, `system`. All four tools **MUST** be registered unconditionally; feature flags (`MailEnabled`, `MailManageEnabled`, `auth=auth_code`) gate verbs within a tool, not the tool itself.
+2. Each aggregate tool **MUST** declare a required string parameter `operation` with a JSON Schema `enum` listing every verb registered for that domain at server start (after applying feature-flag gating such as `MailEnabled` and `MailManageEnabled`), including `help`. The enum **MUST NOT** include verbs whose feature flags are disabled.
 3. Each aggregate tool's top-level description **MUST** list every supported operation with a ≤80-character summary per verb.
 4. Each aggregate tool **MUST** support `operation="help"` returning per-operation documentation as specified in the `help` Verb Contract above.
 5. The `help` operation **MUST** accept an optional `verb` parameter to scope documentation to a single verb.
 6. Each aggregate tool **MUST** dispatch non-`help` operations to the existing handler implementations without changing their business logic, Graph API calls, validation rules, or error semantics.
-7. Every existing operation **MUST** remain reachable via its verb under the corresponding domain tool. No functionality from the 26-tool surface may be dropped.
+7. Every existing operation **MUST** remain reachable via its verb under the corresponding domain tool. No functionality from the up-to-32-tool surface may be dropped.
 8. Aggregate tools **MUST** preserve CR-0051 response tiering: every read verb **MUST** continue to honour `output=text|summary|raw` with `text` as default; every write verb **MUST** continue to return unconditional text confirmations.
 9. Aggregate tools **MUST** preserve CR-0052 annotations at the tool level using the **most conservative** annotation across the verbs they host: `readOnlyHint=false` if any verb writes, `destructiveHint=true` if any verb is destructive, `idempotentHint=false` if any verb is non-idempotent, `openWorldHint=true` if any verb calls Graph. Per-verb semantics **MUST** be documented in the `help` output.
 10. `extension/manifest.json` **MUST** be updated so that its `tools` array contains exactly the four aggregate tool entries.
@@ -125,7 +125,7 @@ Example for `calendar`:
 
 ### Non-Functional Requirements
 
-1. The server **MUST** start with cold-start tool-description payload at least 60 % smaller (by byte count of the registered tool schemas) than the current 26-tool surface. The reduction **MUST** be measured and recorded in the validation report.
+1. The server **MUST** start with cold-start tool-description payload at least 60 % smaller (by byte count of the registered tool schemas) than the current up-to-32-tool surface measured with all feature flags enabled. The reduction **MUST** be measured and recorded in the validation report.
 2. Dispatch from aggregate tool to concrete handler **MUST** add no more than 1 ms of overhead at p99 under the existing benchmark harness.
 3. All existing `golangci-lint`, `go vet`, `go test -race`, and vulnerability-scan checks **MUST** pass.
 4. No new external dependencies **MUST** be introduced.
@@ -147,7 +147,7 @@ Example for `calendar`:
 
 ### In Scope
 
-* Aggregating all 26 MCP tools into four domain tools with a verb-dispatched `operation` parameter.
+* Aggregating all up-to-32 MCP tools into four domain tools with a verb-dispatched `operation` parameter.
 * Implementing the `help` verb for every domain tool.
 * Preserving every existing operation's business logic, parameters, validation, error handling, response tiering, audit behaviour, and observability attributes.
 * Updating the manifest, annotation tests, description tests, integration test prompt, and user-facing docs.
@@ -159,7 +159,7 @@ Example for `calendar`:
 * Changing the annotation semantics defined in CR-0052 (only their grouping changes).
 * Introducing new business operations that do not exist today.
 * Introducing cross-domain verbs (e.g., a `search` verb that straddles mail + calendar).
-* Backwards-compatible aliases for the old 26-tool names — this CR performs a clean cutover at `v0.6.0`. Deprecation shims are explicitly deferred.
+* Backwards-compatible aliases for the old up-to-32 tool names — this CR performs a clean cutover at `v0.6.0`. Deprecation shims are explicitly deferred.
 * Localisation of the `help` output — English only for this CR.
 
 ## Alternative Approaches Considered
@@ -195,7 +195,7 @@ Implement `internal/tools/help/render.go` producing (a) tier-1 text and (b) tier
 
 ### Phase 3 — Domain migrations
 
-Migrate each domain in sequence: `system` (smallest, 2 verbs) → `account` (6) → `mail` (4) → `calendar` (14). Each phase lands behind a checkpoint commit and updates the manifest incrementally.
+Migrate each domain in sequence (smallest verb count first): `system` (`help` + `status` always, plus `complete_auth` when `auth=auth_code`) → `account` (`help` + 6 verbs) → `mail` (`help` + 4 always-on verbs + up to 3 `MailEnabled` verbs + up to 5 `MailManageEnabled` verbs) → `calendar` (`help` + 14 verbs). Each phase lands behind a checkpoint commit and updates the manifest incrementally.
 
 ### Phase 4 — Tests, docs, manifest finalisation
 
@@ -244,10 +244,10 @@ flowchart LR
 
 | Test File | Test Name | Current Behavior | New Behavior | Reason for Change |
 |-----------|-----------|------------------|--------------|-------------------|
-| `internal/tools/tool_annotations_test.go` | per-tool annotation cases | Asserts annotations on 26 tools | Asserts annotations on 4 aggregate tools plus per-verb docs | Tool surface changed |
-| `internal/tools/tool_description_test.go` | per-tool description cases | Asserts on 26 descriptions | Asserts on 4 aggregate descriptions | Tool surface changed |
+| `internal/tools/tool_annotations_test.go` | per-tool annotation cases | Asserts annotations on up to 32 tools | Asserts annotations on 4 aggregate tools plus per-verb docs | Tool surface changed |
+| `internal/tools/tool_description_test.go` | per-tool description cases | Asserts on up to 32 descriptions | Asserts on 4 aggregate descriptions | Tool surface changed |
 | `internal/tools/*_test.go` (all handler tests) | Handler invocation | Called via old tool name | Called via dispatcher with `operation` | Dispatch layer introduced |
-| `docs/prompts/mcp-tool-crud-test.md` | CRUD walkthrough | Invokes 26 tool names | Invokes 4 tools with `operation` verbs | Integration script must reflect new shape |
+| `docs/prompts/mcp-tool-crud-test.md` | CRUD walkthrough | Invokes up to 32 tool names | Invokes 4 tools with `operation` verbs | Integration script must reflect new shape |
 
 ### Tests to Remove
 
@@ -488,5 +488,20 @@ Fixes applied:
 8. Added Test Strategy entries covering AC-10, AC-11, audit-log identity (FR-13), help summary tier, and unknown-verb arg, so every AC has at least one test.
 
 Unresolvable items: none. All contradictions and ambiguities resolved within the CR. The pre-CR baseline byte count for AC-8 will be measured during implementation and recorded in `docs/cr/CR-0060-validation-report.md`.
+
+## CR Review Summary (2026-04-25, second pass)
+
+Findings: 5
+
+Fixes applied:
+1. FR-1 clarified: the four aggregate tools **MUST** be registered unconditionally; feature flags gate verbs within a tool, not the tool itself, removing ambiguity about conditional tool registration.
+2. FR-2 clarified: the `operation` enum reflects only verbs registered after feature-flag gating at server start, and **MUST NOT** include disabled verbs, resolving the contradiction with conditional gating in the inventory table.
+3. FR-7 stale "26-tool surface" wording updated to "up-to-32-tool surface" to align with the corrected inventory.
+4. Phase 3 verb counts corrected: `system` count includes the conditional `complete_auth` verb; `mail` count enumerates the always/`MailEnabled`/`MailManageEnabled` tiers; `calendar`/`account` counts now include `help`. Removes the contradiction between Phase 3 numbers and the inventory table.
+5. NFR-1 and the Tests-to-Modify rows ("26 tools/descriptions/tool names") updated to "up to 32" so the cold-start baseline and modified tests are unambiguous.
+
+Coverage re-verified: every FR has at least one AC (FR-1→AC-1, FR-2→AC-1+AC-5, FR-3→AC-4, FR-4→AC-2, FR-5→AC-3, FR-6→AC-6, FR-7→AC-1, FR-8→AC-7, FR-9→AC-9, FR-10→AC-12, FR-11→AC-5, FR-12→AC-10, FR-13→AC-6, FR-14→AC-11, FR-15→AC-12). Every AC has at least one Test Strategy entry. Affected Components matches Implementation Approach files. Mermaid diagrams remain accurate. CLAUDE.md compliance (small-isolated files, manifest sync, doc-comments, three-tier output, annotations, CRUD test update) is preserved.
+
+Unresolvable items: none.
 -->
 
