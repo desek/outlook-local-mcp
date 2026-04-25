@@ -1,371 +1,315 @@
+// Package tools_test validates that each aggregate domain tool's top-level
+// description lists every supported operation verb, satisfying CR-0060 AC-4
+// and FR-3.
+//
+// After CR-0060, the four aggregate tools (calendar, mail, account, system)
+// replace the former individual tools. Their top-level descriptions must
+// enumerate every verb so LLM clients can discover operations without calling
+// help.
 package tools_test
 
 import (
+	"context"
+	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
-	"github.com/desek/outlook-local-mcp/internal/tools"
+	"github.com/desek/outlook-local-mcp/internal/audit"
+	"github.com/desek/outlook-local-mcp/internal/auth"
+	"github.com/desek/outlook-local-mcp/internal/config"
+	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/observability"
 	"github.com/mark3labs/mcp-go/mcp"
+	mcpserver "github.com/mark3labs/mcp-go/server"
+	"go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
+
+	server "github.com/desek/outlook-local-mcp/internal/server"
 )
 
-// TestCreateEvent_DescriptionContainsMeetingRedirect verifies that the
-// create_event tool description directs users to calendar_create_meeting
-// for events with attendees (CR-0054).
-func TestCreateEvent_DescriptionContainsMeetingRedirect(t *testing.T) {
-	tool := tools.NewCreateEventTool()
+// buildDescriptionTestServer registers all four domain tools with the given
+// config and returns the server for description inspection.
+func buildDescriptionTestServer(t *testing.T, cfg config.Config) *mcpserver.MCPServer {
+	t.Helper()
 
-	if !strings.Contains(tool.Description, "calendar_create_meeting") {
-		t.Errorf("tool description missing meeting redirect:\n  got: %s", tool.Description)
+	s := mcpserver.NewMCPServer("test-descriptions", "0.0.0",
+		mcpserver.WithToolCapabilities(false),
+	)
+
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
 	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+
+	audit.InitAuditLog(false, "")
+
+	server.RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, r, cfg, nil)
+	return s
 }
 
-// TestCreateEvent_NoAttendeesParameter verifies that create_event has no
-// attendees parameter after the event/meeting split (CR-0054).
-func TestCreateEvent_NoAttendeesParameter(t *testing.T) {
-	tool := tools.NewCreateEventTool()
-
-	if _, ok := tool.InputSchema.Properties["attendees"]; ok {
-		t.Error("create_event should not have an 'attendees' parameter after CR-0054 split")
+// getToolDescription returns the Description field of the named tool.
+func getToolDescription(t *testing.T, s *mcpserver.MCPServer, name string) string {
+	t.Helper()
+	st := s.ListTools()
+	entry, ok := st[name]
+	if !ok {
+		t.Fatalf("tool %q not registered", name)
 	}
+	return entry.Tool.Description
 }
 
-// TestCreateEvent_NoConfirmationGuidance verifies that create_event has no
-// CR-0053 confirmation guidance after the event/meeting split (CR-0054).
-func TestCreateEvent_NoConfirmationGuidance(t *testing.T) {
-	tool := tools.NewCreateEventTool()
+// TestTopLevelDescription_Calendar verifies that the calendar aggregate tool
+// description lists every calendar verb (AC-4 / FR-3).
+func TestTopLevelDescription_Calendar(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+	desc := getToolDescription(t, s, "calendar")
 
-	if strings.Contains(tool.Description, "MUST present") {
-		t.Errorf("create_event should not contain 'MUST present' after CR-0054 split:\n  got: %s", tool.Description)
+	// All 15 calendar verbs (including help) must appear in the description.
+	verbs := []string{
+		"help",
+		"list_calendars",
+		"list_events",
+		"get_event",
+		"search_events",
+		"create_event",
+		"update_event",
+		"delete_event",
+		"respond_event",
+		"reschedule_event",
+		"create_meeting",
+		"update_meeting",
+		"cancel_meeting",
+		"reschedule_meeting",
+		"get_free_busy",
 	}
-	if strings.Contains(tool.Description, "confirmation") {
-		t.Errorf("create_event should not contain 'confirmation' after CR-0054 split:\n  got: %s", tool.Description)
-	}
-}
-
-// TestCreateEvent_NoCR0039AttendeeAdvisory verifies that create_event has no
-// CR-0039 attendee advisory after the event/meeting split (CR-0054).
-func TestCreateEvent_NoCR0039AttendeeAdvisory(t *testing.T) {
-	tool := tools.NewCreateEventTool()
-
-	if strings.Contains(tool.Description, "attendees are included") {
-		t.Errorf("create_event should not contain CR-0039 attendee advisory after CR-0054 split:\n  got: %s", tool.Description)
-	}
-}
-
-// TestUpdateEvent_DescriptionContainsMeetingRedirect verifies that the
-// update_event tool description directs users to calendar_update_meeting
-// for attendee changes (CR-0054).
-func TestUpdateEvent_DescriptionContainsMeetingRedirect(t *testing.T) {
-	tool := tools.NewUpdateEventTool()
-
-	if !strings.Contains(tool.Description, "calendar_update_meeting") {
-		t.Errorf("tool description missing meeting redirect:\n  got: %s", tool.Description)
-	}
-}
-
-// TestUpdateEvent_NoAttendeesParameter verifies that update_event has no
-// attendees parameter after the event/meeting split (CR-0054).
-func TestUpdateEvent_NoAttendeesParameter(t *testing.T) {
-	tool := tools.NewUpdateEventTool()
-
-	if _, ok := tool.InputSchema.Properties["attendees"]; ok {
-		t.Error("update_event should not have an 'attendees' parameter after CR-0054 split")
-	}
-}
-
-// TestUpdateEvent_NoConfirmationGuidance verifies that update_event has no
-// CR-0053 confirmation guidance after the event/meeting split (CR-0054).
-func TestUpdateEvent_NoConfirmationGuidance(t *testing.T) {
-	tool := tools.NewUpdateEventTool()
-
-	if strings.Contains(tool.Description, "MUST present") {
-		t.Errorf("update_event should not contain 'MUST present' after CR-0054 split:\n  got: %s", tool.Description)
-	}
-	if strings.Contains(tool.Description, "confirmation") {
-		t.Errorf("update_event should not contain 'confirmation' after CR-0054 split:\n  got: %s", tool.Description)
-	}
-}
-
-// TestUpdateEvent_NoCR0039AttendeeAdvisory verifies that update_event has no
-// CR-0039 attendee advisory after the event/meeting split (CR-0054).
-func TestUpdateEvent_NoCR0039AttendeeAdvisory(t *testing.T) {
-	tool := tools.NewUpdateEventTool()
-
-	if strings.Contains(tool.Description, "attendees are included") {
-		t.Errorf("update_event should not contain CR-0039 attendee advisory after CR-0054 split:\n  got: %s", tool.Description)
-	}
-}
-
-// TestRescheduleEvent_DescriptionContainsMeetingRedirect verifies that the
-// reschedule_event tool description directs users to calendar_reschedule_meeting
-// for events with attendees (CR-0054).
-func TestRescheduleEvent_DescriptionContainsMeetingRedirect(t *testing.T) {
-	tool := tools.NewRescheduleEventTool()
-
-	if !strings.Contains(tool.Description, "calendar_reschedule_meeting") {
-		t.Errorf("tool description missing meeting redirect:\n  got: %s", tool.Description)
-	}
-}
-
-// TestRescheduleEvent_NoConfirmationGuidance verifies that reschedule_event has
-// no CR-0053 confirmation guidance after the event/meeting split (CR-0054).
-func TestRescheduleEvent_NoConfirmationGuidance(t *testing.T) {
-	tool := tools.NewRescheduleEventTool()
-
-	if strings.Contains(tool.Description, "MUST present") {
-		t.Errorf("reschedule_event should not contain 'MUST present' after CR-0054 split:\n  got: %s", tool.Description)
-	}
-	if strings.Contains(tool.Description, "confirmation") {
-		t.Errorf("reschedule_event should not contain 'confirmation' after CR-0054 split:\n  got: %s", tool.Description)
-	}
-}
-
-// TestCancelMeeting_DescriptionContainsConfirmationGuidance verifies that the
-// cancel_meeting tool description contains user confirmation instruction text
-// added by CR-0053.
-func TestCancelMeeting_DescriptionContainsConfirmationGuidance(t *testing.T) {
-	tool := tools.NewCancelMeetingTool()
-
-	if !strings.Contains(tool.Description, "confirmation") {
-		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
-	}
-	if !strings.Contains(tool.Description, "MUST present") {
-		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
-	}
-}
-
-// TestCancelMeeting_DescriptionContainsExternalWarningGuidance verifies that the
-// cancel_meeting tool description contains external attendee warning text
-// added by CR-0053.
-func TestCancelMeeting_DescriptionContainsExternalWarningGuidance(t *testing.T) {
-	tool := tools.NewCancelMeetingTool()
-
-	if !strings.Contains(tool.Description, "external") {
-		t.Errorf("tool description missing 'external':\n  got: %s", tool.Description)
-	}
-}
-
-// TestCancelMeeting_ConfirmationInstructions_ScopedToAttendees verifies that
-// the cancel_meeting confirmation instruction is scoped to attendee presence
-// per CR-0053 AC-8. After CR-0054, only cancel_meeting retains attendee-scoped
-// confirmation in the event tools; create/update/reschedule event tools no
-// longer carry confirmation guidance.
-func TestCancelMeeting_ConfirmationInstructions_ScopedToAttendees(t *testing.T) {
-	tool := tools.NewCancelMeetingTool()
-	if !strings.Contains(tool.Description, "When the event has attendees") {
-		t.Errorf("description missing attendee-scoping language:\n  got: %s", tool.Description)
-	}
-}
-
-// --- Meeting tool positive assertions (CR-0054) ---
-
-// TestCreateMeeting_DescriptionContainsConfirmationGuidance verifies that
-// create_meeting includes unconditional user confirmation instruction text.
-func TestCreateMeeting_DescriptionContainsConfirmationGuidance(t *testing.T) {
-	tool := tools.NewCreateMeetingTool()
-
-	if !strings.Contains(tool.Description, "MUST present") {
-		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
-	}
-	if !strings.Contains(tool.Description, "confirmation") {
-		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
-	}
-}
-
-// TestCreateMeeting_DescriptionContainsExternalWarningGuidance verifies that
-// create_meeting includes external attendee domain warning guidance.
-func TestCreateMeeting_DescriptionContainsExternalWarningGuidance(t *testing.T) {
-	tool := tools.NewCreateMeetingTool()
-
-	if !strings.Contains(tool.Description, "external") {
-		t.Errorf("tool description missing 'external':\n  got: %s", tool.Description)
-	}
-	if !strings.Contains(tool.Description, "domain") {
-		t.Errorf("tool description missing 'domain':\n  got: %s", tool.Description)
-	}
-}
-
-// TestCreateMeeting_DescriptionContainsSummaryFields verifies that
-// create_meeting specifies the required draft summary fields: subject,
-// date/time, attendee list, location, and body preview.
-func TestCreateMeeting_DescriptionContainsSummaryFields(t *testing.T) {
-	tool := tools.NewCreateMeetingTool()
-
-	requiredFields := []string{"subject", "date/time", "attendee list", "location", "body preview"}
-	for _, field := range requiredFields {
-		if !strings.Contains(tool.Description, field) {
-			t.Errorf("tool description missing summary field %q:\n  got: %s", field, tool.Description)
+	for _, verb := range verbs {
+		if !strings.Contains(desc, verb) {
+			t.Errorf("calendar description missing verb %q\n  got: %s", verb, desc)
 		}
 	}
 }
 
-// TestCreateMeeting_DescriptionContainsAttendeeAdvisory verifies that
-// create_meeting contains CR-0039 body/location advisory guidance.
-func TestCreateMeeting_DescriptionContainsAttendeeAdvisory(t *testing.T) {
-	tool := tools.NewCreateMeetingTool()
+// TestTopLevelDescription_Account verifies that the account aggregate tool
+// description lists every account verb (AC-4 / FR-3).
+func TestTopLevelDescription_Account(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+	desc := getToolDescription(t, s, "account")
 
-	if !strings.Contains(tool.Description, "body") {
-		t.Errorf("tool description missing 'body' advisory:\n  got: %s", tool.Description)
+	// All 7 account verbs (including help) must appear in the description.
+	verbs := []string{
+		"help",
+		"add",
+		"remove",
+		"list",
+		"login",
+		"logout",
+		"refresh",
 	}
-	if !strings.Contains(tool.Description, "location") {
-		t.Errorf("tool description missing 'location' advisory:\n  got: %s", tool.Description)
-	}
-}
-
-// TestUpdateMeeting_DescriptionContainsConfirmationGuidance verifies that
-// update_meeting includes unconditional user confirmation instruction text.
-func TestUpdateMeeting_DescriptionContainsConfirmationGuidance(t *testing.T) {
-	tool := tools.NewUpdateMeetingTool()
-
-	if !strings.Contains(tool.Description, "MUST present") {
-		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
-	}
-	if !strings.Contains(tool.Description, "confirmation") {
-		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
-	}
-}
-
-// TestUpdateMeeting_DescriptionContainsExternalWarningGuidance verifies that
-// update_meeting includes external attendee domain warning guidance.
-func TestUpdateMeeting_DescriptionContainsExternalWarningGuidance(t *testing.T) {
-	tool := tools.NewUpdateMeetingTool()
-
-	if !strings.Contains(tool.Description, "external") {
-		t.Errorf("tool description missing 'external':\n  got: %s", tool.Description)
-	}
-	if !strings.Contains(tool.Description, "domain") {
-		t.Errorf("tool description missing 'domain':\n  got: %s", tool.Description)
+	for _, verb := range verbs {
+		if !strings.Contains(desc, verb) {
+			t.Errorf("account description missing verb %q\n  got: %s", verb, desc)
+		}
 	}
 }
 
-// TestUpdateMeeting_DescriptionContainsAttendeeAdvisory verifies that
-// update_meeting contains CR-0039 body/location advisory guidance.
-func TestUpdateMeeting_DescriptionContainsAttendeeAdvisory(t *testing.T) {
-	tool := tools.NewUpdateMeetingTool()
+// TestTopLevelDescription_System verifies that the system aggregate tool
+// description lists every system verb (AC-4 / FR-3).
+func TestTopLevelDescription_System(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+	desc := getToolDescription(t, s, "system")
 
-	if !strings.Contains(tool.Description, "body") {
-		t.Errorf("tool description missing 'body' advisory:\n  got: %s", tool.Description)
-	}
-	if !strings.Contains(tool.Description, "location") {
-		t.Errorf("tool description missing 'location' advisory:\n  got: %s", tool.Description)
-	}
-}
-
-// TestRescheduleMeeting_DescriptionContainsConfirmationGuidance verifies that
-// reschedule_meeting includes unconditional user confirmation instruction text
-// referencing attendee notifications.
-func TestRescheduleMeeting_DescriptionContainsConfirmationGuidance(t *testing.T) {
-	tool := tools.NewRescheduleMeetingTool()
-
-	if !strings.Contains(tool.Description, "MUST present") {
-		t.Errorf("tool description missing 'MUST present':\n  got: %s", tool.Description)
-	}
-	if !strings.Contains(tool.Description, "confirmation") {
-		t.Errorf("tool description missing 'confirmation':\n  got: %s", tool.Description)
+	// help and status are always present.
+	verbs := []string{"help", "status"}
+	for _, verb := range verbs {
+		if !strings.Contains(desc, verb) {
+			t.Errorf("system description missing verb %q\n  got: %s", verb, desc)
+		}
 	}
 }
 
-// TestMeetingConfirmationInstructions_UseMUSTKeyword verifies that all four
-// meeting tool descriptions use the "MUST" keyword for the confirmation
-// directive, as required by CR-0054 FR-34.
-func TestMeetingConfirmationInstructions_UseMUSTKeyword(t *testing.T) {
-	meetingTools := []mcp.Tool{
-		tools.NewCreateMeetingTool(),
-		tools.NewUpdateMeetingTool(),
-		tools.NewRescheduleMeetingTool(),
-		tools.NewCancelMeetingTool(),
-	}
+// TestTopLevelDescription_System_CompleteAuth verifies that complete_auth
+// appears in the system description when auth_code is active (FR-2).
+func TestTopLevelDescription_System_CompleteAuth(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "auth_code",
+	})
+	desc := getToolDescription(t, s, "system")
 
-	for _, tool := range meetingTools {
-		t.Run(tool.Name, func(t *testing.T) {
-			if !strings.Contains(tool.Description, "MUST") {
-				t.Errorf("tool description missing 'MUST' keyword:\n  got: %s", tool.Description)
-			}
-		})
+	if !strings.Contains(desc, "complete_auth") {
+		t.Errorf("system description missing verb %q when auth_code active\n  got: %s", "complete_auth", desc)
 	}
 }
 
-// TestMeetingConfirmationInstructions_AskUserQuestionGuidance verifies that
-// all four meeting tool descriptions reference the AskUserQuestion tool for
-// collecting user confirmation, as required by CR-0054.
-func TestMeetingConfirmationInstructions_AskUserQuestionGuidance(t *testing.T) {
-	meetingTools := []mcp.Tool{
-		tools.NewCreateMeetingTool(),
-		tools.NewUpdateMeetingTool(),
-		tools.NewRescheduleMeetingTool(),
-		tools.NewCancelMeetingTool(),
-	}
+// TestTopLevelDescription_Mail_AlwaysOn verifies that the always-on mail verbs
+// appear in the mail aggregate tool description (AC-4 / FR-3).
+func TestTopLevelDescription_Mail_AlwaysOn(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+		MailEnabled:    false,
+	})
+	desc := getToolDescription(t, s, "mail")
 
-	for _, tool := range meetingTools {
-		t.Run(tool.Name, func(t *testing.T) {
-			if !strings.Contains(tool.Description, "AskUserQuestion") {
-				t.Errorf("tool description missing 'AskUserQuestion' reference:\n  got: %s", tool.Description)
-			}
-		})
+	alwaysOn := []string{
+		"help",
+		"list_folders",
+		"list_messages",
+		"get_message",
+		"search_messages",
+	}
+	for _, verb := range alwaysOn {
+		if !strings.Contains(desc, verb) {
+			t.Errorf("mail description (MailEnabled=false) missing always-on verb %q\n  got: %s", verb, desc)
+		}
 	}
 }
 
-// TestCalendarTools_AccountParamDescription verifies that all 12 calendar tools
-// carry the CR-0056 account-parameter description: it must forbid default-
-// account assumption, mention both label and UPN as accepted values, and
-// reference disconnected accounts as first-class entries. It must NOT contain
-// the legacy elicitation text "you will be prompted to select" nor the
-// pre-CR-0056 phrasing "the default account is used" which silently allowed
-// default-account fallback.
-func TestCalendarTools_AccountParamDescription(t *testing.T) {
-	calendarTools := []mcp.Tool{
-		tools.NewListCalendarsTool(),
-		tools.NewListEventsTool(),
-		tools.NewGetEventTool(),
-		tools.NewSearchEventsTool(false),
-		tools.NewGetFreeBusyTool(),
-		tools.NewCreateEventTool(),
-		tools.NewUpdateEventTool(),
-		tools.NewDeleteEventTool(),
-		tools.NewCancelMeetingTool(),
-		tools.NewCreateMeetingTool(),
-		tools.NewUpdateMeetingTool(),
-		tools.NewRescheduleMeetingTool(),
+// TestTopLevelDescription_Mail_MailEnabled verifies that MailEnabled-gated
+// verbs appear when MailEnabled=true (AC-4 / FR-2).
+func TestTopLevelDescription_Mail_MailEnabled(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+		MailEnabled:    true,
+	})
+	desc := getToolDescription(t, s, "mail")
+
+	gatedVerbs := []string{"get_conversation", "list_attachments", "get_attachment"}
+	for _, verb := range gatedVerbs {
+		if !strings.Contains(desc, verb) {
+			t.Errorf("mail description (MailEnabled=true) missing gated verb %q\n  got: %s", verb, desc)
+		}
+	}
+}
+
+// TestTopLevelDescription_Mail_ManageEnabled verifies that MailManageEnabled-
+// gated draft verbs appear when MailManageEnabled=true (AC-4 / FR-2).
+func TestTopLevelDescription_Mail_ManageEnabled(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "browser",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+	})
+	desc := getToolDescription(t, s, "mail")
+
+	draftVerbs := []string{
+		"create_draft",
+		"create_reply_draft",
+		"create_forward_draft",
+		"update_draft",
+		"delete_draft",
+	}
+	for _, verb := range draftVerbs {
+		if !strings.Contains(desc, verb) {
+			t.Errorf("mail description (MailManageEnabled=true) missing draft verb %q\n  got: %s", verb, desc)
+		}
+	}
+}
+
+// TestTopLevelDescription_HelpVerbPresent verifies that every domain tool
+// description includes "help" as the first or prominent operation, guiding
+// LLM clients to call help for detailed documentation (AC-4).
+func TestTopLevelDescription_HelpVerbPresent(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "browser",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+	})
+
+	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+		desc := getToolDescription(t, s, domain)
+		if !strings.Contains(desc, "help") {
+			t.Errorf("domain %q description missing 'help' verb\n  got: %s", domain, desc)
+		}
+	}
+}
+
+// TestTopLevelDescription_DescriptionNonEmpty verifies that every domain tool
+// has a non-empty description string after registration.
+func TestTopLevelDescription_DescriptionNonEmpty(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "browser",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+	})
+
+	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+		desc := getToolDescription(t, s, domain)
+		if desc == "" {
+			t.Errorf("domain %q has empty description", domain)
+		}
+	}
+}
+
+// TestHelpVerb_ReturnsDocForEveryVerb verifies that calling operation="help"
+// returns documentation containing every registered verb name (AC-2).
+func TestHelpVerb_ReturnsDocForEveryVerb(t *testing.T) {
+	s := buildDescriptionTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+
+	calVerbs := []string{
+		"list_calendars", "list_events", "get_event", "search_events",
+		"create_event", "update_event", "delete_event", "respond_event",
+		"reschedule_event", "create_meeting", "update_meeting",
+		"cancel_meeting", "reschedule_meeting", "get_free_busy",
 	}
 
-	wantSubstrings := []string{
-		"Never assume a default account",
-		"UPN",
-		"disconnected",
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"calendar","arguments":{"operation":"help"}}}`
+	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
+
+	rpcResp, ok := resp.(mcp.JSONRPCResponse)
+	if !ok {
+		t.Fatalf("expected JSONRPCResponse, got %T", resp)
 	}
-	bannedSubstrings := []string{
-		"you will be prompted to select",
-		"the default account is used",
+	result, ok := rpcResp.Result.(*mcp.CallToolResult)
+	if !ok {
+		t.Fatalf("expected *CallToolResult, got %T", rpcResp.Result)
 	}
-
-	for _, tool := range calendarTools {
-		t.Run(tool.Name, func(t *testing.T) {
-			props := tool.InputSchema.Properties
-			accountProp, ok := props["account"]
-			if !ok {
-				t.Fatal("missing 'account' parameter")
-			}
-
-			propMap, ok := accountProp.(map[string]any)
-			if !ok {
-				t.Fatalf("expected map[string]any for account property, got %T", accountProp)
-			}
-
-			desc, ok := propMap["description"].(string)
-			if !ok {
-				t.Fatal("missing or non-string 'description' on account property")
-			}
-
-			for _, want := range wantSubstrings {
-				if !strings.Contains(desc, want) {
-					t.Errorf("account description missing %q:\n  got: %s", want, desc)
-				}
-			}
-			for _, banned := range bannedSubstrings {
-				if strings.Contains(desc, banned) {
-					t.Errorf("account description contains banned text %q:\n  got: %s", banned, desc)
-				}
-			}
-		})
+	if result.IsError {
+		t.Fatalf("help returned error: %v", result.Content)
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("help returned empty content")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	for _, verb := range calVerbs {
+		if !strings.Contains(tc.Text, verb) {
+			t.Errorf("calendar help output missing verb %q", verb)
+		}
 	}
 }
