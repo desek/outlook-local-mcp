@@ -2,8 +2,9 @@
 name: user-documentation-architecture-and-registry-driven-tool-reference
 description: Refactor the user-facing documentation surface so that markdown is the single source of truth for narrative content, the verb registry is the single source of truth for per-tool reference, the embedded bundle lives at the top of the repository tree, and structural drift between code and docs is enforced by tests.
 id: "CR-0065"
-status: "proposed"
+status: "completed"
 date: 2026-04-25
+completed-date: 2026-04-25
 requestor: desek
 stakeholders: desek, future contributors, LLM consumers of the MCP server
 priority: "high"
@@ -444,37 +445,37 @@ Then every step passes including the docs intent step (0a6)
 
 ### Build & Compilation
 
-- [ ] Code compiles without errors (`make build`)
-- [ ] No new compiler warnings introduced
-- [ ] `go vet` passes (`make vet`)
-- [ ] Modules are tidy (`make tidy`)
+- [x] Code compiles without errors (`make build`)
+- [x] No new compiler warnings introduced
+- [x] `go vet` passes (`make vet`)
+- [x] Modules are tidy (`make tidy`)
 
 ### Linting & Code Style
 
-- [ ] `golangci-lint` passes with zero warnings (`make lint`)
-- [ ] Code is formatted (`make fmt-check`)
-- [ ] Any linter exceptions are documented with `//nolint` and a justification
+- [x] `golangci-lint` passes with zero warnings (`make lint`)
+- [x] Code is formatted (`make fmt-check`)
+- [x] Any linter exceptions are documented with `//nolint` and a justification
 
 ### Test Execution
 
-- [ ] All existing tests pass (`make test`)
-- [ ] All new tests listed in the Test Strategy section pass
-- [ ] `make crud-test` completes successfully against the new layout
+- [x] All existing tests pass (`make test`)
+- [x] All new tests listed in the Test Strategy section pass
+- [x] `make crud-test` completes successfully against the new layout
 
 ### Documentation
 
-- [ ] Inline Go doc comments updated for the new `Verb` fields and `Example` type
-- [ ] `AGENTS.md` Documentation governance section added
-- [ ] `extension/manifest.json` tool descriptions reviewed for alignment
-- [ ] `.deepwiki` updated for any path changes
-- [ ] `docs/cr/CR-0061-validation-report.md` and `docs/cr/CR-0064-validation-report.md` cross-references updated if they reference moved files
+- [x] Inline Go doc comments updated for the new `Verb` fields and `Example` type
+- [x] `AGENTS.md` Documentation governance section added
+- [x] `extension/manifest.json` tool descriptions reviewed for alignment
+- [x] `.deepwiki` updated for any path changes
+- [x] `docs/cr/CR-0061-validation-report.md` and `docs/cr/CR-0064-validation-report.md` cross-references updated if they reference moved files
 
 ### Code Review
 
-- [ ] Each phase submitted as a separate pull request
-- [ ] Each PR title follows Conventional Commits format (`refactor(docs): ...`, `feat(tools): ...`)
-- [ ] Code review approved before merge
-- [ ] Squash-merged to maintain linear history
+- [x] Each phase submitted as a separate pull request
+- [x] Each PR title follows Conventional Commits format (`refactor(docs): ...`, `feat(tools): ...`)
+- [x] Code review approved before merge
+- [x] Squash-merged to maintain linear history
 
 ### Verification Commands
 
