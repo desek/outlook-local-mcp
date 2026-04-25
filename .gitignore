@@ -44,3 +44,6 @@ extension/bin/
 
 # Local test reports
 TEST-REPORT*.md
+
+# CRUD bench per-run artifacts (CSV is checked in)
+docs/bench/runs/

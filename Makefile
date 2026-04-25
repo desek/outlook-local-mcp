@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt fmt-check vet tidy ci verify govulncheck security vuln-scan license-check clean snapshot goreleaser-check build-mcpb-binaries build-mcpb-local mcpb-validate mcpb-pack mcpb-local mcpb-clean docs-bundle
+.PHONY: build test lint fmt fmt-check vet tidy ci verify govulncheck security vuln-scan license-check clean snapshot goreleaser-check build-mcpb-binaries build-mcpb-local mcpb-validate mcpb-pack mcpb-local mcpb-clean docs-bundle crud-test
 
 BINARY_NAME := outlook-local-mcp
 BUILD_DIR := .
@@ -76,6 +76,14 @@ docs-bundle:
 clean:
 	rm -f $(BUILD_DIR)/$(BINARY_NAME) $(BUILD_DIR)/$(BINARY_NAME)-* coverage.out $(BINARY_NAME).cdx.json $(BINARY_NAME).spdx.json $(BINARY_NAME).license.cdx.json
 	rm -rf dist/
+
+# Headless CRUD lifecycle test runner. Wraps scripts/crud-test.sh which spawns
+# claude -p, captures stream-json metrics to docs/bench/runs/{ts}/, appends a
+# row to docs/bench/crud-runs.csv, and writes TEST-REPORT-{ts}.md.
+# Override defaults with env: ACCOUNT (default), MODEL (claude-sonnet-4-6),
+# THINKING (low|medium|high|xhigh|max).
+crud-test:
+	./scripts/crud-test.sh
 
 # MCPB extension packaging targets
 EXTENSION_DIR := extension
