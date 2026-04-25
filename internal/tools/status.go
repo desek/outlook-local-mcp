@@ -61,6 +61,29 @@ type statusResponse struct {
 	// into six categories: identity, logging, storage, graph_api, features,
 	// and observability.
 	Config statusConfig `json:"config"`
+
+	// Docs describes the embedded documentation surface so the LLM can
+	// discover the doc:// URI scheme, the troubleshooting slug, and the
+	// docs version from a single known entry point (CR-0061 AC-5).
+	Docs statusDocs `json:"docs"`
+}
+
+// statusDocs describes the in-server documentation surface exposed by
+// the system.list_docs / search_docs / get_docs verbs and by MCP resources.
+type statusDocs struct {
+	// BaseURI is the root URI prefix for all embedded MCP resources
+	// (e.g., "doc://outlook-local-mcp/").
+	BaseURI string `json:"base_uri"`
+
+	// TroubleshootingSlug is the slug of the embedded troubleshooting guide
+	// (e.g., "troubleshooting"). The LLM can fetch it via
+	// system.get_docs or resources/read.
+	TroubleshootingSlug string `json:"troubleshooting_slug"`
+
+	// Version is the build version of the documentation bundle, which
+	// matches the server version. A mismatch between this value and an
+	// external copy of the docs indicates stale documentation.
+	Version string `json:"version"`
 }
 
 // statusAccount represents a single account's label, UPN, auth method, and
@@ -267,6 +290,11 @@ func HandleStatus(cfg config.Config, registry *auth.AccountRegistry, startTime t
 			Timezone:            cfg.DefaultTimezone,
 			Accounts:            accounts,
 			ServerUptimeSeconds: int64(time.Since(startTime).Seconds()),
+			Docs: statusDocs{
+				BaseURI:             "doc://outlook-local-mcp/",
+				TroubleshootingSlug: "troubleshooting",
+				Version:             cfg.Version,
+			},
 			Config: statusConfig{
 				Identity: statusConfigIdentity{
 					ClientID:         cfg.ClientID,

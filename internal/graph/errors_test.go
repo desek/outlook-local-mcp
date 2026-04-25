@@ -107,3 +107,73 @@ func TestRedactGraphError_NonODataError(t *testing.T) {
 		t.Errorf("expected [email redacted], got %q", got)
 	}
 }
+
+// TestErrorSeeHint_InefficientFilter verifies that a Graph ErrorInvalidRequest
+// or InefficientFilter OData error returns the troubleshooting URI for the
+// inefficient-filter anchor. This assertion acts as a build guard: if the
+// mapping is removed or the anchor changes, this test fails.
+func TestErrorSeeHint_InefficientFilter(t *testing.T) {
+	code := "ErrorInvalidRequest"
+	msg := "The request filter is inefficient"
+
+	mainErr := odataerrors.NewMainError()
+	mainErr.SetCode(&code)
+	mainErr.SetMessage(&msg)
+
+	odataErr := odataerrors.NewODataError()
+	odataErr.SetErrorEscaped(mainErr)
+
+	got := ErrorSeeHint(odataErr)
+	want := "doc://outlook-local-mcp/troubleshooting#inefficient-filter"
+	if got != want {
+		t.Errorf("ErrorSeeHint() = %q, want %q", got, want)
+	}
+}
+
+// TestErrorSeeHint_Throttling verifies that TooManyRequests OData errors
+// resolve to the graph-429-throttling anchor.
+func TestErrorSeeHint_Throttling(t *testing.T) {
+	code := "TooManyRequests"
+	msg := "Too many requests"
+
+	mainErr := odataerrors.NewMainError()
+	mainErr.SetCode(&code)
+	mainErr.SetMessage(&msg)
+
+	odataErr := odataerrors.NewODataError()
+	odataErr.SetErrorEscaped(mainErr)
+
+	got := ErrorSeeHint(odataErr)
+	want := "doc://outlook-local-mcp/troubleshooting#graph-429-throttling"
+	if got != want {
+		t.Errorf("ErrorSeeHint() = %q, want %q", got, want)
+	}
+}
+
+// TestErrorSeeHint_SentinelString verifies that the sentinel string
+// "auth_expired" embedded in a plain error is mapped to the token-refresh
+// anchor via the fallback string-scan path.
+func TestErrorSeeHint_SentinelString(t *testing.T) {
+	err := errors.New("auth_expired: token cache empty")
+	got := ErrorSeeHint(err)
+	want := "doc://outlook-local-mcp/troubleshooting#token-refresh"
+	if got != want {
+		t.Errorf("ErrorSeeHint() = %q, want %q", got, want)
+	}
+}
+
+// TestErrorSeeHint_Nil verifies that a nil error returns an empty string.
+func TestErrorSeeHint_Nil(t *testing.T) {
+	if got := ErrorSeeHint(nil); got != "" {
+		t.Errorf("ErrorSeeHint(nil) = %q, want empty", got)
+	}
+}
+
+// TestErrorSeeHint_Unknown verifies that an unmapped error returns an empty
+// string rather than a garbage URI.
+func TestErrorSeeHint_Unknown(t *testing.T) {
+	err := errors.New("completely unknown error class")
+	if got := ErrorSeeHint(err); got != "" {
+		t.Errorf("ErrorSeeHint(unknown) = %q, want empty", got)
+	}
+}

@@ -27,14 +27,40 @@ Pick a test date **7 days from today** to avoid conflicts with real events. Use 
 
 **0a.** Call `{tool: "system", args: {operation: "help"}}`.
 
-- **Verify:** The response is plain text listing the available system verbs (at least `help`, `status`).
-- **Purpose:** Exercises the help verb and confirms the server is responding (AC-12 / FR-15).
-- **Fail:** Stop and report if the help verb errors.
+- **Verify:** The response is plain text listing the available system verbs (at least `help`, `status`, `list_docs`, `search_docs`, `get_docs`).
+- **Purpose:** Exercises the help verb and confirms the server is responding and that the docs verbs are registered (CR-0061 AC-1).
+- **Fail:** Stop and report if the help verb errors or if any docs verb is missing.
+
+**0a2.** Call `{tool: "system", args: {operation: "list_docs"}}`.
+
+- **Verify:** The response is plain text listing at least three slugs: `readme`, `quickstart`, and `troubleshooting`.
+- **Purpose:** Exercises the `list_docs` verb (CR-0061 AC-1).
+- **Fail:** Report if the verb errors or the expected slugs are absent.
+
+**0a3.** Call `{tool: "system", args: {operation: "search_docs", query: "token refresh"}}`.
+
+- **Verify:** The response includes at least one result with a snippet containing "token" or "refresh" and references the `troubleshooting` slug.
+- **Purpose:** Exercises the `search_docs` verb with a known query (CR-0061 AC-2).
+- **Fail:** Report if the verb errors. Zero results for this query is a failure.
+
+**0a4.** Call `{tool: "system", args: {operation: "get_docs", slug: "troubleshooting", section: "token-refresh"}}`.
+
+- **Verify:** The response is plain text containing the content of the `## Token refresh` section from the troubleshooting guide.
+- **Verify:** The response does NOT include sections from other parts of the document (e.g., `## Graph 429 throttling`).
+- **Purpose:** Exercises the `get_docs` verb with section slicing (CR-0061 AC-3).
+- **Fail:** Report if the verb errors or if the section content is missing or incorrect.
+
+**0a5.** Call `{tool: "system", args: {operation: "get_docs", slug: "troubleshooting", output: "raw"}}`.
+
+- **Verify:** The response is raw Markdown text (starts with `# Troubleshooting`).
+- **Purpose:** Exercises the `raw` output mode of `get_docs` (CR-0061 AC-3).
+- **Fail:** Report if the verb errors.
 
 **0b.** Call `{tool: "system", args: {operation: "status", output: "summary"}}` (the full JSON config is needed for this verification step).
 
 - **Verify:** At least one account is listed with an authenticated status.
-- **Fail:** Stop and report the authentication issue.
+- **Verify:** The response contains a `docs` object with `base_uri="doc://outlook-local-mcp/"`, `troubleshooting_slug="troubleshooting"`, and a `version` field (CR-0061 AC-5).
+- **Fail:** Stop and report the authentication issue or if the `docs` section is absent.
 
 **0c.** Record the top-level status fields and the `config` object from the Step 0b JSON response.
 
@@ -526,6 +552,12 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 0b   | Verify connectivity (summary)     | PASS/FAIL      | e.g., "default account authenticated; DEBUG logging on"  |
 | 0c   | Record config                     | PASS/FAIL      | e.g., "log_file present; timezone=Europe/Stockholm"      |
 | 0d   | Verify text default for status    | PASS/FAIL      | e.g., "plain text, no config leak"                       |
+| 0a   | system help (docs verbs listed)   | PASS/FAIL      | e.g., "list_docs, search_docs, get_docs present"         |
+| 0a2  | list_docs (text)                  | PASS/FAIL      | e.g., "3 slugs: readme, quickstart, troubleshooting"     |
+| 0a3  | search_docs (token refresh)       | PASS/FAIL      | e.g., "troubleshooting slug ranked in results"           |
+| 0a4  | get_docs section (token-refresh)  | PASS/FAIL      | e.g., "section content returned, no cross-section bleed" |
+| 0a5  | get_docs raw (troubleshooting)    | PASS/FAIL      | e.g., "raw markdown starts with # Troubleshooting"       |
+| 0b   | status docs section present       | PASS/FAIL      | e.g., "base_uri + troubleshooting_slug + version"        |
 | 1    | List accounts (text)              | PASS/FAIL      | e.g., "1 authenticated, 1 disconnected"                  |
 | 2    | List calendars (text)             | PASS/FAIL      | e.g., "default + Birthdays"                              |
 | 2a   | Discover calendar verbs (help)    | PASS/FAIL      | e.g., "all 14 verbs listed in help output"               |

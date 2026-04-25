@@ -1,0 +1,25 @@
+# outlook-local-mcp
+
+> A single-binary MCP server that connects Claude Desktop and Claude Code to Microsoft Outlook (Calendar and Mail) via the Microsoft Graph API, with multi-account support and in-server documentation access for LLM self-troubleshooting.
+
+This server embeds its own documentation and exposes it through three verbs on the `system` aggregate tool: `system.list_docs`, `system.search_docs`, and `system.get_docs`. Each embedded document is also available as an MCP resource at `doc://outlook-local-mcp/{slug}`. LLM clients that support `resources/list` and `resources/read` can fetch documents natively; clients that do not can use the `system.*_docs` verbs instead. Call `{tool: "system", args: {operation: "list_docs"}}` to see the available documents, or `{tool: "system", args: {operation: "status"}}` for the server entry point including `docs.base_uri`.
+
+## Docs
+
+- [Quick Start Guide](https://github.com/desek/outlook-local-mcp/blob/main/QUICKSTART.md): Prerequisites, installation, authentication, and first tool call.
+- [Troubleshooting Guide](https://github.com/desek/outlook-local-mcp/blob/main/docs/troubleshooting.md): Auth errors, token refresh, Keychain issues, Graph throttling, mail flags, and account lifecycle.
+- [Reference Specification](https://github.com/desek/outlook-local-mcp/blob/main/docs/reference/outlook-local-mcp-spec.md): Full environment variable reference, tool parameter matrix, and configuration schema.
+- [Changelog](https://github.com/desek/outlook-local-mcp/blob/main/CHANGELOG.md): Release history and notable changes by version.
+
+## Tools
+
+- [Extension Manifest](https://github.com/desek/outlook-local-mcp/blob/main/extension/manifest.json): MCP tool manifest listing all four aggregate domain tools (calendar, mail, account, system) with their annotations.
+
+## Change Requests
+
+- [Change Request Index](https://github.com/desek/outlook-local-mcp/blob/main/docs/cr/): Architecture and feature change requests for outlook-local-mcp.
+
+## Optional
+
+- [Research Notes](https://github.com/desek/outlook-local-mcp/blob/main/docs/research/): Investigation notes on Graph API quirks, auth flows, and implementation decisions.
+

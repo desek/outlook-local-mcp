@@ -67,6 +67,10 @@ docs-bundle:
 			echo "ERROR: secret pattern '$$pat' found in docs bundle" && exit 1; \
 		fi; \
 	done
+	@echo "==> Regenerating llms.txt"
+	@CGO_ENABLED=0 go run cmd/gen-llms/main.go
+	@echo "==> Verifying llms.txt matches catalog"
+	@CGO_ENABLED=0 go test ./internal/docs/... -run TestLLMsTxt_MatchesCatalog -v
 	@echo "==> docs-bundle OK"
 
 clean:

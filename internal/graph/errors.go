@@ -4,9 +4,82 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/microsoftgraph/msgraph-sdk-go/models/odataerrors"
 )
+
+// docBase is the URI prefix for embedded documentation resources. It is used
+// by ErrorSeeHint to build doc:// URIs that point the LLM at the relevant
+// troubleshooting section when a known error class is encountered.
+const docBase = "doc://outlook-local-mcp/troubleshooting#"
+
+// errorSeeTable maps Graph OData error codes (and sentinel strings used by
+// internal error wrappers) to troubleshooting anchor slugs in the embedded
+// docs/troubleshooting.md document. Every entry must correspond to a real ##
+// heading in that file; the mapping is verified by TestErrorSeeHint_* tests.
+var errorSeeTable = map[string]string{
+	// Graph throttling
+	"TooManyRequests":      "graph-429-throttling",
+	"ApplicationThrottled": "graph-429-throttling",
+
+	// Filter / query errors
+	"ErrorInvalidRequest": "inefficient-filter",
+	"InefficientFilter":   "inefficient-filter",
+
+	// Auth / token errors
+	"InvalidAuthenticationToken":  "token-refresh",
+	"AuthenticationError":         "authentication-failures",
+	"InvalidClientSecretProvided": "authentication-failures",
+	"auth_expired":                "token-refresh",
+
+	// Mail feature flags
+	"mail_disabled":            "mail-disabled",
+	"mail_management_disabled": "mail-management-disabled",
+}
+
+// ErrorSeeHint returns the doc:// URI of the troubleshooting section that
+// addresses the given error, or an empty string when no mapping exists.
+//
+// The function first attempts to look up the OData error code from an
+// *odataerrors.ODataError. When the error is not an ODataError, the raw
+// err.Error() string is scanned against the sentinel keys in errorSeeTable
+// (e.g., "auth_expired", "mail_disabled").
+//
+// Parameters:
+//   - err: any error value; may be nil (returns "").
+//
+// Returns a "doc://outlook-local-mcp/troubleshooting#anchor" URI string, or
+// "" when no mapping is found.
+//
+// Side effects: none.
+func ErrorSeeHint(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	// Try to extract the OData error code first.
+	var odataErr *odataerrors.ODataError
+	if errors.As(err, &odataErr) {
+		if mainErr := odataErr.GetErrorEscaped(); mainErr != nil {
+			if code := SafeStr(mainErr.GetCode()); code != "" {
+				if anchor, ok := errorSeeTable[code]; ok {
+					return docBase + anchor
+				}
+			}
+		}
+	}
+
+	// Fall back to scanning the raw error string for sentinel keys.
+	msg := err.Error()
+	for key, anchor := range errorSeeTable {
+		if strings.Contains(msg, key) {
+			return docBase + anchor
+		}
+	}
+
+	return ""
+}
 
 // emailRedactPattern matches standard email address patterns in arbitrary strings.
 // It is compiled once at package initialization time to avoid per-call
