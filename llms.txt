@@ -8,7 +8,8 @@ This server embeds its own documentation and exposes it through three verbs on t
 
 - [Quick Start Guide](https://github.com/desek/outlook-local-mcp/blob/main/QUICKSTART.md): Prerequisites, installation, authentication, and first tool call.
 - [Troubleshooting Guide](https://github.com/desek/outlook-local-mcp/blob/main/docs/troubleshooting.md): Auth errors, token refresh, Keychain issues, Graph throttling, mail flags, and account lifecycle.
-- [Reference Specification](https://github.com/desek/outlook-local-mcp/blob/main/docs/reference/outlook-local-mcp-spec.md): Full environment variable reference, tool parameter matrix, and configuration schema.
+- [Architecture Reference](https://github.com/desek/outlook-local-mcp/blob/main/docs/reference/architecture.md): Component layout, middleware chain, configuration reference, startup sequence, and known limitations.
+- [Auth Flows Reference](https://github.com/desek/outlook-local-mcp/blob/main/docs/reference/auth-flows.md): Device code flow, OAuth scopes, token caching, and Graph client initialization.
 - [Changelog](https://github.com/desek/outlook-local-mcp/blob/main/CHANGELOG.md): Release history and notable changes by version.
 
 ## Tools

@@ -84,7 +84,7 @@ All settings use environment variables prefixed with `OUTLOOK_MCP_`. Key variabl
 | `LOG_LEVEL` | `warn` | `debug`, `info`, `warn`, `error` |
 | `LOG_FILE` | *(disabled)* | File path for persistent log output |
 
-Full configuration reference is in [docs/reference/outlook-local-mcp-spec.md](docs/reference/outlook-local-mcp-spec.md).
+Full configuration reference is in [docs/reference/architecture.md](docs/reference/architecture.md#configuration).
 
 ## Troubleshooting
 

@@ -28,9 +28,14 @@ var llmsSections = []llmsSection{
 				description: "Auth errors, token refresh, Keychain issues, Graph throttling, mail flags, and account lifecycle.",
 			},
 			{
-				title:       "Reference Specification",
-				path:        "docs/reference/outlook-local-mcp-spec.md",
-				description: "Full environment variable reference, tool parameter matrix, and configuration schema.",
+				title:       "Architecture Reference",
+				path:        "docs/reference/architecture.md",
+				description: "Component layout, middleware chain, configuration reference, startup sequence, and known limitations.",
+			},
+			{
+				title:       "Auth Flows Reference",
+				path:        "docs/reference/auth-flows.md",
+				description: "Device code flow, OAuth scopes, token caching, and Graph client initialization.",
 			},
 			{
 				title:       "Changelog",
