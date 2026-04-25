@@ -2,14 +2,15 @@
 name: domain-aggregated-tools-with-verb-operations
 description: Aggregate all MCP tools into one tool per domain (calendar, mail, account, system) dispatched by a verb-based `operation` parameter, with a `help` verb returning detailed per-operation documentation.
 id: "CR-0060"
-status: "proposed"
+status: "completed"
 date: 2026-04-19
+completed-date: 2026-04-25
 requestor: daniel.grenemark@redeploy.com
 stakeholders: maintainers, MCP tool consumers (Claude Desktop / LLM clients), integration testers
 priority: "high"
 target-version: v0.6.0
-source-branch: dev/cr-0056
-source-commit: 631f27f
+source-branch: dev/cr-0060
+source-commit: 813595c
 ---
 
 # Domain-Aggregated MCP Tools with Verb-Based Operations
@@ -389,27 +390,27 @@ Then its tools array has exactly 4 entries
 
 ### Build & Compilation
 
-- [ ] `make build` succeeds
-- [ ] No new compiler warnings
+- [x] `make build` succeeds
+- [x] No new compiler warnings
 
 ### Linting & Code Style
 
-- [ ] `make lint` passes with zero warnings
-- [ ] `make vet` passes
-- [ ] `make fmt-check` passes
+- [x] `make lint` passes with zero warnings
+- [x] `make vet` passes
+- [x] `make fmt-check` passes
 
 ### Test Execution
 
-- [ ] `make test` passes (includes `-race` and coverage)
-- [ ] New dispatch + help tests pass
+- [x] `make test` passes (includes `-race` and coverage)
+- [x] New dispatch + help tests pass
 - [ ] Integration script in `docs/prompts/mcp-tool-crud-test.md` executes end-to-end
 
 ### Documentation
 
-- [ ] Package-level doc comments added for new `internal/tools/help` package and dispatcher
-- [ ] README updated with new invocation shape
-- [ ] Every verb has a help-payload docstring
-- [ ] `extension/manifest.json` synchronised
+- [x] Package-level doc comments added for new `internal/tools/help` package and dispatcher
+- [x] README updated with new invocation shape
+- [x] Every verb has a help-payload docstring
+- [x] `extension/manifest.json` synchronised
 
 ### Code Review
 
