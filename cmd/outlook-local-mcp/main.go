@@ -157,6 +157,7 @@ func main() {
 	// account selection and interactive authentication prompts.
 	s := server.NewMCPServer("outlook-local", version,
 		server.WithToolCapabilities(false),
+		server.WithResourceCapabilities(false, false),
 		server.WithRecovery(),
 		server.WithLogging(),
 		server.WithElicitation(),
@@ -176,6 +177,7 @@ func main() {
 		Logger:         slog.Default(),
 	}
 	internalserver.RegisterTools(s, retryCfg, cfg.RequestTimeout, metrics, tracer, cfg.ReadOnly, authMiddleware, registry, cfg, authenticator)
+	internalserver.RegisterResources(s)
 
 	// Create root context for graceful shutdown.
 	ctx, cancel := context.WithCancel(context.Background())

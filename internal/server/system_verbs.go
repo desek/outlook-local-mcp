@@ -100,9 +100,92 @@ func buildSystemVerbs(c systemVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 		},
 	}
 
+	// list_docs verb: read-only, local, idempotent; returns embedded doc catalog.
+	listDocsHandler := observability.WithObservability(
+		"system.list_docs", c.m, c.tracer,
+		audit.AuditWrap("system.list_docs", "read", tools.HandleListDocs()),
+	)
+	listDocsVerb := tools.Verb{
+		Name:    "list_docs",
+		Summary: "list embedded documentation: slug, title, summary, tags, size, and doc:// URI",
+		Handler: tools.Handler(listDocsHandler),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(false),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("output",
+				mcp.Description("Output mode: 'text' (default) returns a numbered list, 'raw' returns JSON array."),
+				mcp.Enum("text", "summary", "raw"),
+			),
+		},
+	}
+
+	// search_docs verb: read-only, local, idempotent; returns ranked snippets.
+	searchDocsHandler := observability.WithObservability(
+		"system.search_docs", c.m, c.tracer,
+		audit.AuditWrap("system.search_docs", "read", tools.HandleSearchDocs()),
+	)
+	searchDocsVerb := tools.Verb{
+		Name:    "search_docs",
+		Summary: "search embedded docs by keyword; returns ranked snippets with 1-based line numbers",
+		Handler: tools.Handler(searchDocsHandler),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(false),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("query",
+				mcp.Required(),
+				mcp.Description("Case-insensitive keyword or phrase to search across the embedded documentation bundle."),
+			),
+			mcp.WithString("output",
+				mcp.Description("Output mode: 'text' (default) returns formatted snippets, 'raw' returns JSON array."),
+				mcp.Enum("text", "summary", "raw"),
+			),
+		},
+	}
+
+	// get_docs verb: read-only, local, idempotent; fetches a doc or section.
+	getDocsHandler := observability.WithObservability(
+		"system.get_docs", c.m, c.tracer,
+		audit.AuditWrap("system.get_docs", "read", tools.HandleGetDocs()),
+	)
+	getDocsVerb := tools.Verb{
+		Name:    "get_docs",
+		Summary: "fetch a document or section by slug; use search_docs first to identify the slug",
+		Handler: tools.Handler(getDocsHandler),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(false),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("slug",
+				mcp.Required(),
+				mcp.Description("Document slug (e.g., 'troubleshooting', 'readme', 'quickstart'). Use list_docs to enumerate slugs."),
+			),
+			mcp.WithString("section",
+				mcp.Description("Optional H2 heading anchor to extract a single section (e.g., 'token-refresh'). Anchors are lower-cased heading text with spaces replaced by hyphens."),
+			),
+			mcp.WithString("output",
+				mcp.Description("Output mode: 'text' (default) returns trimmed plain text, 'raw' returns unmodified markdown."),
+				mcp.Enum("text", "summary", "raw"),
+			),
+		},
+	}
+
 	verbs := []tools.Verb{
 		help.NewHelpVerb(registryPtr),
 		statusVerb,
+		listDocsVerb,
+		searchDocsVerb,
+		getDocsVerb,
 	}
 
 	// complete_auth verb: conditional on auth_code; requires authMW and network.

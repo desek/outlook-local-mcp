@@ -586,6 +586,112 @@ func TestRegisterTools_CompleteAuthNotRegistered(t *testing.T) {
 	}
 }
 
+// TestSystemHelp_ListsDocsVerbs verifies that system.help enumerates the three
+// documentation verbs (list_docs, search_docs, get_docs) with per-verb
+// annotation semantics in its output (CR-0061 Phase 2 / AC-7).
+func TestSystemHelp_ListsDocsVerbs(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), testConfig(), nil)
+
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"help"}}}`
+	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
+
+	rpcResp, ok := resp.(mcp.JSONRPCResponse)
+	if !ok {
+		t.Fatalf("expected JSONRPCResponse, got %T", resp)
+	}
+	result, ok := rpcResp.Result.(*mcp.CallToolResult)
+	if !ok {
+		t.Fatalf("expected *CallToolResult, got %T", rpcResp.Result)
+	}
+	if result.IsError {
+		t.Fatalf("system.help returned error: %v", result.Content)
+	}
+
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+
+	for _, verb := range []string{"list_docs", "search_docs", "get_docs"} {
+		if !strings.Contains(tc.Text, verb) {
+			t.Errorf("system.help output missing verb %q; output:\n%s", verb, tc.Text)
+		}
+	}
+}
+
+// TestResourcesList_IncludesBundledDocs verifies that RegisterResources registers
+// MCP resources for every embedded document with the expected URI prefix and
+// MIME type (AC-1: resources/list returns all bundled doc URIs).
+func TestResourcesList_IncludesBundledDocs(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-resources", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithResourceCapabilities(false, false),
+		mcpserver.WithRecovery(),
+	)
+
+	RegisterResources(s)
+
+	// resources/list via HandleMessage.
+	msg := `{"jsonrpc":"2.0","id":1,"method":"resources/list","params":{}}`
+	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
+
+	rpcResp, ok := resp.(mcp.JSONRPCResponse)
+	if !ok {
+		t.Fatalf("expected JSONRPCResponse, got %T", resp)
+	}
+
+	data, err := json.Marshal(rpcResp.Result)
+	if err != nil {
+		t.Fatalf("marshal result: %v", err)
+	}
+
+	var listResult struct {
+		Resources []struct {
+			URI      string `json:"uri"`
+			MIMEType string `json:"mimeType"`
+		} `json:"resources"`
+	}
+	if err := json.Unmarshal(data, &listResult); err != nil {
+		t.Fatalf("unmarshal resources/list result: %v", err)
+	}
+
+	const wantPrefix = "doc://outlook-local-mcp/"
+	wantSlugs := map[string]bool{"readme": false, "quickstart": false, "troubleshooting": false}
+
+	for _, r := range listResult.Resources {
+		if !strings.HasPrefix(r.URI, wantPrefix) {
+			t.Errorf("resource URI %q does not start with %q", r.URI, wantPrefix)
+			continue
+		}
+		slug := strings.TrimPrefix(r.URI, wantPrefix)
+		if _, known := wantSlugs[slug]; known {
+			wantSlugs[slug] = true
+		}
+		if r.MIMEType != "text/markdown" {
+			t.Errorf("resource %q has MIME type %q, want %q", r.URI, r.MIMEType, "text/markdown")
+		}
+	}
+
+	for slug, seen := range wantSlugs {
+		if !seen {
+			t.Errorf("bundled doc slug %q not present in resources/list", slug)
+		}
+	}
+}
+
 // mockAuthCodeFlowCred implements both auth.Authenticator and auth.AuthCodeFlow
 // for server registration tests. ExchangeCode always succeeds.
 type mockAuthCodeFlowCred struct{}
