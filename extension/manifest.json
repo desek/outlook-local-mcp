@@ -181,12 +181,8 @@
       "description": "Force a token refresh for an authenticated account. Returns the new token expiry time on success."
     },
     {
-      "name": "status",
-      "description": "Get server health summary: version, detected timezone, per-account authentication state, and uptime. No parameters required."
-    },
-    {
-      "name": "complete_auth",
-      "description": "Complete an in-progress authorization code authentication by providing the redirect URL from the browser."
+      "name": "system",
+      "description": "System diagnostics and authentication utilities. Required operation: help (detailed docs), status (server health, accounts, config), complete_auth (finish auth_code flow — only when auth=auth_code)."
     }
   ],
   "compatibility": {

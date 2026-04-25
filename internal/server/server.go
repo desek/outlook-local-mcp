@@ -111,9 +111,31 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	s.AddTool(tools.NewLogoutAccountTool(), authMW(observability.WithObservability("account_logout", m, t, audit.AuditWrap("account_logout", "write", tools.HandleLogoutAccount(registry)))))
 	s.AddTool(tools.NewRefreshAccountTool(), authMW(observability.WithObservability("account_refresh", m, t, audit.AuditWrap("account_refresh", "write", tools.HandleRefreshAccount(registry, cfg)))))
 
-	// CR-0037: Status diagnostic tool. No auth middleware, no account
-	// resolver — purely reads in-memory state with no Graph API calls.
-	s.AddTool(tools.NewStatusTool(), observability.WithObservability("status", m, t, audit.AuditWrap("status", "read", tools.HandleStatus(cfg, registry, time.Now()))))
+	// CR-0060 Phase 3a: system domain aggregate tool. Replaces the individual
+	// status and complete_auth tool registrations with a single "system" tool
+	// dispatched by operation verb. complete_auth is gated on auth_code within
+	// NewSystemVerbs, preserving the pre-existing conditional behaviour.
+	//
+	// The sysRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *sysRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	sysVerbs, sysRegistry := buildSystemVerbs(systemVerbsConfig{
+		cfg:       cfg,
+		registry:  registry,
+		startTime: time.Now(),
+		m:         m,
+		tracer:    t,
+		authMW:    authMW,
+		cred:      cred,
+	})
+	populated := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+		Domain:          "system",
+		Intro:           "System diagnostics and authentication utilities for the Outlook MCP server.",
+		Verbs:           sysVerbs,
+		ToolAnnotations: systemToolAnnotations(),
+	})
+	*sysRegistry = populated
 
 	// CR-0043: Mail tools, registered only when mail access is enabled.
 	// All mail tools are read-only and use the standard middleware chain.
@@ -141,19 +163,14 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		s.AddTool(tools.NewDeleteDraftTool(), wrapWrite("mail_delete_draft", "delete", tools.NewHandleDeleteDraft(retryCfg, timeout)))
 	}
 
-	// CR-0030: complete_auth fallback tool for auth_code method. Only
-	// registered when auth_code is active, since the tool is meaningless
-	// for browser or device_code flows.
+	// Tool count: 14 calendar + 6 account + 1 system aggregate (plus mail when enabled).
+	// complete_auth is a verb within system, not a separate registered tool.
 	toolCount := 21
 	if cfg.MailEnabled {
 		toolCount += 6
 	}
 	if cfg.MailManageEnabled {
 		toolCount += 5
-	}
-	if cfg.AuthMethod == "auth_code" {
-		s.AddTool(tools.NewCompleteAuthTool(), authMW(observability.WithObservability("complete_auth", m, t, audit.AuditWrap("complete_auth", "write", tools.HandleCompleteAuth(cred, cfg.AuthRecordPath, registry, auth.Scopes(cfg))))))
-		toolCount++
 	}
 
 	slog.Info("tool registration complete", "tools", toolCount)

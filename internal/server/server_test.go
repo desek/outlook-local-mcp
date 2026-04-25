@@ -517,8 +517,8 @@ func TestRegisterTools_CompleteAuthRegistered(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, mock)
 
-	// Invoke complete_auth -- the tool should be registered and reachable.
-	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"complete_auth","arguments":{"redirect_url":"https://login.microsoftonline.com/common/oauth2/nativeclient?code=test"}}}`
+	// Invoke complete_auth as a verb under the system aggregate tool.
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"complete_auth","redirect_url":"https://login.microsoftonline.com/common/oauth2/nativeclient?code=test"}}}`
 	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
 	rpcResp, ok := resp.(mcp.JSONRPCResponse)
@@ -562,23 +562,24 @@ func TestRegisterTools_CompleteAuthNotRegistered(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
 
-	// Invoke complete_auth -- should return an error since the tool is not registered.
-	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"complete_auth","arguments":{"redirect_url":"https://example.com"}}}`
+	// Invoke system with operation=complete_auth -- should return a tool error
+	// because complete_auth is not in the operation enum when auth=browser.
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"complete_auth"}}}`
 	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
-	// The response should be a JSON-RPC error (tool not found).
+	// The system tool is always registered; calling an unknown verb returns a
+	// tool result error, not a JSON-RPC error.
 	switch v := resp.(type) {
 	case mcp.JSONRPCError:
-		if !strings.Contains(v.Error.Message, "complete_auth") {
-			t.Logf("error message: %s", v.Error.Message)
-		}
-		// This is expected -- tool not found.
+		// A JSON-RPC error is also acceptable (e.g. enum validation failure).
+		t.Logf("got JSON-RPC error: %s", v.Error.Message)
 	case mcp.JSONRPCResponse:
-		// Some MCP server implementations return a tool error result
-		// for unknown tools rather than a JSON-RPC error.
 		result, ok := v.Result.(*mcp.CallToolResult)
-		if ok && !result.IsError {
-			t.Error("expected error response for unregistered complete_auth tool")
+		if !ok {
+			t.Fatalf("expected *CallToolResult, got %T", v.Result)
+		}
+		if !result.IsError {
+			t.Error("expected error result for complete_auth verb when auth_code is not active")
 		}
 	default:
 		t.Fatalf("unexpected response type %T", resp)
