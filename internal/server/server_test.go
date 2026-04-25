@@ -605,12 +605,10 @@ func (m *mockAuthCodeFlowCred) ExchangeCode(_ context.Context, _ string, _ []str
 	return nil
 }
 
-// mailToolNames lists the six read-only mail tools gated by MailEnabled:
-// four from CR-0043 and the two conversation/attachment additions from CR-0058.
-var mailToolNames = []string{"mail_list_folders", "mail_list_messages", "mail_search_messages", "mail_get_message", "mail_get_conversation", "mail_get_attachment", "mail_list_attachments"}
-
-// TestRegisterTools_MailDisabled verifies that when MailEnabled is false,
-// none of the four mail tools are registered on the server.
+// TestRegisterTools_MailDisabled verifies that when MailEnabled is false, the
+// mail aggregate tool is still registered (FR-1) and its help verb is callable,
+// but MailEnabled-gated verbs (get_conversation, list_attachments, get_attachment)
+// are absent from the operation enum.
 func TestRegisterTools_MailDisabled(t *testing.T) {
 	s := mcpserver.NewMCPServer("test-server", "0.0.1",
 		mcpserver.WithToolCapabilities(false),
@@ -632,15 +630,23 @@ func TestRegisterTools_MailDisabled(t *testing.T) {
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
 
 	registered := s.ListTools()
-	for _, name := range mailToolNames {
+
+	// The aggregate "mail" tool must be registered unconditionally per FR-1.
+	if _, ok := registered["mail"]; !ok {
+		t.Error("aggregate 'mail' tool should always be registered, even when MailEnabled=false")
+	}
+
+	// No individual mail_* tool names should appear.
+	oldNames := []string{"mail_list_folders", "mail_list_messages", "mail_get_message", "mail_search_messages"}
+	for _, name := range oldNames {
 		if _, ok := registered[name]; ok {
-			t.Errorf("mail tool %q should NOT be registered when MailEnabled=false", name)
+			t.Errorf("old individual mail tool %q should not be registered (replaced by aggregate 'mail')", name)
 		}
 	}
 }
 
-// TestRegisterTools_MailEnabled verifies that when MailEnabled is true,
-// all four mail tools are registered and the total tool count includes them.
+// TestRegisterTools_MailEnabled verifies that when MailEnabled is true, the
+// aggregate mail tool is registered and the total tool count is correct.
 func TestRegisterTools_MailEnabled(t *testing.T) {
 	s := mcpserver.NewMCPServer("test-server", "0.0.1",
 		mcpserver.WithToolCapabilities(false),
@@ -663,23 +669,21 @@ func TestRegisterTools_MailEnabled(t *testing.T) {
 
 	registered := s.ListTools()
 
-	// Verify all 4 mail tools are present.
-	for _, name := range mailToolNames {
-		if _, ok := registered[name]; !ok {
-			t.Errorf("mail tool %q should be registered when MailEnabled=true", name)
-		}
+	// The aggregate "mail" tool must be present.
+	if _, ok := registered["mail"]; !ok {
+		t.Error("aggregate 'mail' tool should be registered when MailEnabled=true")
 	}
 
-	// Verify total count: 16 base (14 calendar + 1 account aggregate + 1 system aggregate) + 7 mail = 23.
-	const expectedTotal = 23
+	// Verify total count: 14 calendar + 1 account aggregate + 1 system aggregate + 1 mail aggregate = 17.
+	const expectedTotal = 17
 	if got := len(registered); got != expectedTotal {
 		t.Errorf("expected %d tools with mail enabled, got %d", expectedTotal, got)
 	}
 }
 
-// TestRegisterTools_MailToolsReadOnly verifies that all four mail tools have
-// ReadOnlyHint set to true in their tool annotations.
-func TestRegisterTools_MailToolsReadOnly(t *testing.T) {
+// TestRegisterTools_MailAggregate_HelpVerb verifies that the mail aggregate
+// tool's help verb is callable and returns documentation.
+func TestRegisterTools_MailAggregate_HelpVerb(t *testing.T) {
 	s := mcpserver.NewMCPServer("test-server", "0.0.1",
 		mcpserver.WithToolCapabilities(false),
 		mcpserver.WithRecovery(),
@@ -699,15 +703,28 @@ func TestRegisterTools_MailToolsReadOnly(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
 
-	registered := s.ListTools()
-	for _, name := range mailToolNames {
-		st, ok := registered[name]
-		if !ok {
-			t.Fatalf("mail tool %q not registered", name)
-		}
-		hint := st.Tool.Annotations.ReadOnlyHint
-		if hint == nil || !*hint {
-			t.Errorf("mail tool %q should have ReadOnlyHint=true", name)
-		}
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"mail","arguments":{"operation":"help"}}}`
+	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
+
+	rpcResp, ok := resp.(mcp.JSONRPCResponse)
+	if !ok {
+		t.Fatalf("expected JSONRPCResponse, got %T", resp)
+	}
+	result, ok := rpcResp.Result.(*mcp.CallToolResult)
+	if !ok {
+		t.Fatalf("expected *CallToolResult, got %T", rpcResp.Result)
+	}
+	if result.IsError {
+		t.Errorf("mail help verb should not return error, got: %v", result.Content)
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("expected non-empty content from mail help verb")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	if !strings.Contains(tc.Text, "list_folders") {
+		t.Errorf("mail help output should mention 'list_folders', got: %q", tc.Text)
 	}
 }

@@ -109,52 +109,8 @@
       "description": "Move a meeting to a new time, preserving its original duration. Sends update notifications to all attendees."
     },
     {
-      "name": "mail_list_folders",
-      "description": "List the user's mail folders (Inbox, Sent Items, Drafts, etc.) with display name, unread count, and total count."
-    },
-    {
-      "name": "mail_list_messages",
-      "description": "List email messages in a mail folder or across all folders. Supports filtering by date range, sender, and conversation ID."
-    },
-    {
-      "name": "mail_search_messages",
-      "description": "Full-text search across email messages using Microsoft Graph KQL syntax. Returns messages ranked by relevance."
-    },
-    {
-      "name": "mail_get_message",
-      "description": "Get full details of a single email message by its ID. Returns body content, all recipients, headers, and attachment metadata."
-    },
-    {
-      "name": "mail_get_conversation",
-      "description": "Get all messages in a conversation thread by conversation ID, ordered chronologically. Useful for reading full email threads."
-    },
-    {
-      "name": "mail_get_attachment",
-      "description": "Download a specific attachment from a message by message ID and attachment ID. Returns metadata and base64-encoded content subject to size limits."
-    },
-    {
-      "name": "mail_list_attachments",
-      "description": "List attachments (metadata only — id, name, contentType, size, isInline) for a message. Use the returned id with mail_get_attachment to download content."
-    },
-    {
-      "name": "mail_create_draft",
-      "description": "Create a new email draft in the Drafts folder. Supports to/cc/bcc recipients, subject, body (text or HTML), importance, and attachments. Requires Mail.ReadWrite."
-    },
-    {
-      "name": "mail_create_reply_draft",
-      "description": "Create a reply draft to an existing message, with optional reply-all. Preserves quoted content; requires Mail.ReadWrite."
-    },
-    {
-      "name": "mail_create_forward_draft",
-      "description": "Create a forward draft for an existing message with new recipients. Preserves the original message body; requires Mail.ReadWrite."
-    },
-    {
-      "name": "mail_update_draft",
-      "description": "Update fields of an existing mail draft (subject, body, recipients, importance). PATCH semantics — only specified fields change. Requires Mail.ReadWrite."
-    },
-    {
-      "name": "mail_delete_draft",
-      "description": "Delete a mail draft by ID. Only messages in the Drafts folder may be deleted through this tool. Requires Mail.ReadWrite."
+      "name": "mail",
+      "description": "Mail operations for Microsoft Outlook via Microsoft Graph. Required operation: help (detailed docs), list_folders (list mail folders with unread counts), list_messages (list messages with filtering), get_message (get full message details), search_messages (KQL full-text search), get_conversation (fetch full thread chronologically — MailEnabled), list_attachments (list attachment metadata — MailEnabled), get_attachment (download attachment content — MailEnabled), create_draft (create new draft — MailManageEnabled), create_reply_draft (reply draft preserving threading — MailManageEnabled), create_forward_draft (forward draft with new recipients — MailManageEnabled), update_draft (update draft fields — MailManageEnabled), delete_draft (permanently delete a draft — MailManageEnabled)."
     },
     {
       "name": "account",

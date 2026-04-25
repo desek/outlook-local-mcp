@@ -149,41 +149,40 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	})
 	*sysRegistry = populated
 
-	// CR-0043: Mail tools, registered only when mail access is enabled.
-	// All mail tools are read-only and use the standard middleware chain.
-	if cfg.MailEnabled {
-		s.AddTool(tools.NewListMailFoldersTool(), wrap("mail_list_folders", "read", tools.NewHandleListMailFolders(retryCfg, timeout)))
-		s.AddTool(tools.NewListMessagesTool(), wrap("mail_list_messages", "read", tools.NewHandleListMessages(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewSearchMessagesTool(), wrap("mail_search_messages", "read", tools.NewHandleSearchMessages(retryCfg, timeout)))
-		s.AddTool(tools.NewGetMessageTool(), wrap("mail_get_message", "read", tools.NewHandleGetMessage(retryCfg, timeout, provenancePropertyID)))
+	// CR-0060 Phase 3c: mail domain aggregate tool. Replaces the individual
+	// mail_list_folders, mail_list_messages, mail_get_message, mail_search_messages,
+	// mail_get_conversation, mail_get_attachment, mail_list_attachments,
+	// mail_create_draft, mail_create_reply_draft, mail_create_forward_draft,
+	// mail_update_draft, and mail_delete_draft registrations with a single "mail"
+	// tool dispatched by operation verb. The tool is registered unconditionally
+	// per FR-1; verbs are gated by feature flags inside buildMailVerbs per FR-2.
+	//
+	// The mailRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *mailRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	mailVerbs, mailRegistry := buildMailVerbs(mailVerbsConfig{
+		retryCfg:             retryCfg,
+		timeout:              timeout,
+		cfg:                  cfg,
+		provenancePropertyID: provenancePropertyID,
+		m:                    m,
+		tracer:               t,
+		authMW:               authMW,
+		accountResolverMW:    accountResolverMW,
+		readOnly:             readOnly,
+	})
+	populatedMail := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+		Domain:          "mail",
+		Intro:           "Mail operations for Microsoft Outlook via Microsoft Graph.",
+		Verbs:           mailVerbs,
+		ToolAnnotations: mailToolAnnotations(),
+	})
+	*mailRegistry = populatedMail
 
-		// CR-0058: Additional read-only mail tools for conversation threading and
-		// attachment retrieval. Registered under MailEnabled since these only
-		// require Mail.Read (or Mail.ReadWrite when MailManageEnabled escalates).
-		s.AddTool(tools.NewGetConversationTool(), wrap("mail_get_conversation", "read", tools.NewHandleGetConversation(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewGetAttachmentTool(), wrap("mail_get_attachment", "read", tools.NewHandleGetAttachment(retryCfg, timeout, cfg.MaxAttachmentSizeBytes)))
-		s.AddTool(tools.NewListAttachmentsTool(), wrap("mail_list_attachments", "read", tools.NewHandleListAttachments(retryCfg, timeout)))
-	}
-
-	// CR-0058: Mail management (draft-centric write) tools. Gated on the
-	// MailManageEnabled feature flag which requires Mail.ReadWrite scope.
-	if cfg.MailManageEnabled {
-		s.AddTool(tools.NewCreateDraftTool(), wrapWrite("mail_create_draft", "write", tools.NewHandleCreateDraft(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewCreateReplyDraftTool(), wrapWrite("mail_create_reply_draft", "write", tools.NewHandleCreateReplyDraft(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewCreateForwardDraftTool(), wrapWrite("mail_create_forward_draft", "write", tools.NewHandleCreateForwardDraft(retryCfg, timeout, provenancePropertyID)))
-		s.AddTool(tools.NewUpdateDraftTool(), wrapWrite("mail_update_draft", "write", tools.NewHandleUpdateDraft(retryCfg, timeout)))
-		s.AddTool(tools.NewDeleteDraftTool(), wrapWrite("mail_delete_draft", "delete", tools.NewHandleDeleteDraft(retryCfg, timeout)))
-	}
-
-	// Tool count: 14 calendar + 1 account aggregate + 1 system aggregate (plus mail when enabled).
-	// complete_auth is a verb within system; account verbs are within account.
-	toolCount := 16
-	if cfg.MailEnabled {
-		toolCount += 6
-	}
-	if cfg.MailManageEnabled {
-		toolCount += 5
-	}
+	// Tool count: 14 calendar + 1 account aggregate + 1 system aggregate + 1 mail aggregate.
+	// complete_auth is a verb within system; account and mail verbs are within their aggregates.
+	toolCount := 17
 
 	slog.Info("tool registration complete", "tools", toolCount)
 }
