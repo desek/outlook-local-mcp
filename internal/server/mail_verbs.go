@@ -143,9 +143,11 @@ func buildMailVerbs(c mailVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 // buildListFoldersVerb constructs the list_folders Verb.
 func buildListFoldersVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "list_folders",
-		Summary: "list mail folders (Inbox, Sent, Drafts, etc.) with unread and total counts",
-		Handler: wrap("mail.list_folders", "read", tools.NewHandleListMailFolders(rc, c.timeout)),
+		Name:        "list_folders",
+		Summary:     "list mail folders (Inbox, Sent, Drafts, etc.) with unread and total counts",
+		Description: "Returns all mail folders with their display name, unread message count, and total message count. Use the returned folder IDs with list_messages to scope queries to a specific folder. Requires mail access (MAIL_ENABLED=true).",
+		SeeDocs:     []string{"concepts#mail-gating"},
+		Handler:     wrap("mail.list_folders", "read", tools.NewHandleListMailFolders(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -171,8 +173,14 @@ func buildListFoldersVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(str
 // buildListMessagesVerb constructs the list_messages Verb.
 func buildListMessagesVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "list_messages",
-		Summary: "list messages in a folder or across all folders; filter by date, sender, thread",
+		Name:        "list_messages",
+		Summary:     "list messages in a folder or across all folders; filter by date, sender, thread",
+		Description: "Lists messages in a mail folder or across all folders, with optional filters for date range, sender, conversation thread, read state, draft state, attachment presence, importance, and flag status. Results include a bodyPreview; use get_message with output=raw for the full HTML body. For full-text search, use search_messages instead.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"folder_id": "Inbox", "is_read": false}, Comment: "list unread messages in inbox"},
+			{Args: map[string]any{"from": "alice@contoso.com", "max_results": 10}, Comment: "list recent messages from a sender"},
+		},
+		SeeDocs: []string{"concepts#output-tiers", "concepts#mail-gating"},
 		Handler: wrap("mail.list_messages", "read", tools.NewHandleListMessages(rc, c.timeout, c.provenancePropertyID)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -238,9 +246,11 @@ func buildListMessagesVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(st
 // buildGetMessageVerb constructs the get_message Verb.
 func buildGetMessageVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "get_message",
-		Summary: "get full details of a single message by ID (bodyPreview by default; full body via output=raw)",
-		Handler: wrap("mail.get_message", "read", tools.NewHandleGetMessage(rc, c.timeout, c.provenancePropertyID)),
+		Name:        "get_message",
+		Summary:     "get full message details by ID; bodyPreview by default, full body via output=raw",
+		Description: "Fetches full metadata for a single mail message by its ID. Text and summary output include a bodyPreview (first 255 characters). To read the complete HTML body and all headers, use output=raw. Use list_messages or search_messages to obtain a message ID.",
+		SeeDocs:     []string{"concepts#output-tiers"},
+		Handler:     wrap("mail.get_message", "read", tools.NewHandleGetMessage(rc, c.timeout, c.provenancePropertyID)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -266,8 +276,14 @@ func buildGetMessageVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(stri
 // buildSearchMessagesVerb constructs the search_messages Verb.
 func buildSearchMessagesVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "search_messages",
-		Summary: "full-text KQL search across messages; ranked by relevance, not chronologically",
+		Name:        "search_messages",
+		Summary:     "full-text KQL search across messages; ranked by relevance, not chronologically",
+		Description: "Searches mail messages using Keyword Query Language (KQL). Results are ranked by relevance, not chronological order. KQL supports field-scoped queries such as 'subject:\"meeting\"', 'from:alice@contoso.com', and 'hasAttachments:true'. Use list_messages with date filters for chronological browsing.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"query": "subject:\"quarterly review\""}, Comment: "find messages with a specific subject"},
+			{Args: map[string]any{"query": "from:alice@contoso.com hasAttachments:true"}, Comment: "find messages with attachments from a sender"},
+		},
+		SeeDocs: []string{"concepts#output-tiers"},
 		Handler: wrap("mail.search_messages", "read", tools.NewHandleSearchMessages(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -302,9 +318,11 @@ func buildSearchMessagesVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(
 // buildGetConversationVerb constructs the get_conversation Verb (MailEnabled-gated).
 func buildGetConversationVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "get_conversation",
-		Summary: "retrieve all messages in an email thread in chronological order",
-		Handler: wrap("mail.get_conversation", "read", tools.NewHandleGetConversation(rc, c.timeout, c.provenancePropertyID)),
+		Name:        "get_conversation",
+		Summary:     "retrieve all messages in an email thread in chronological order",
+		Description: "Retrieves all messages that share a conversation thread in chronological order. Supply either a message_id (the server resolves the conversationId) or a conversation_id directly. Requires MAIL_ENABLED=true.",
+		SeeDocs:     []string{"concepts#mail-gating"},
+		Handler:     wrap("mail.get_conversation", "read", tools.NewHandleGetConversation(rc, c.timeout, c.provenancePropertyID)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -337,9 +355,11 @@ func buildGetConversationVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func
 // buildListAttachmentsVerb constructs the list_attachments Verb (MailEnabled-gated).
 func buildListAttachmentsVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "list_attachments",
-		Summary: "list attachment metadata (id, name, contentType, size) for a message",
-		Handler: wrap("mail.list_attachments", "read", tools.NewHandleListAttachments(rc, c.timeout)),
+		Name:        "list_attachments",
+		Summary:     "list attachment metadata (id, name, contentType, size) for a message",
+		Description: "Lists the attachments of a mail message, returning metadata: attachment ID, name, content type, and size in bytes. Use get_attachment with the returned attachment_id to download the content. Requires MAIL_ENABLED=true.",
+		SeeDocs:     []string{"concepts#mail-gating"},
+		Handler:     wrap("mail.list_attachments", "read", tools.NewHandleListAttachments(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -365,9 +385,11 @@ func buildListAttachmentsVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func
 // buildGetAttachmentVerb constructs the get_attachment Verb (MailEnabled-gated).
 func buildGetAttachmentVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "get_attachment",
-		Summary: "download an attachment; returns metadata and base64 content up to the size limit",
-		Handler: wrap("mail.get_attachment", "read", tools.NewHandleGetAttachment(rc, c.timeout, c.cfg.MaxAttachmentSizeBytes)),
+		Name:        "get_attachment",
+		Summary:     "download an attachment; returns metadata and base64 content up to the size limit",
+		Description: "Downloads a mail attachment by ID and returns its metadata plus base64-encoded content. Attachments larger than the server's MaxAttachmentSizeBytes limit are rejected with an informative error. Requires MAIL_ENABLED=true.",
+		SeeDocs:     []string{"concepts#mail-gating"},
+		Handler:     wrap("mail.get_attachment", "read", tools.NewHandleGetAttachment(rc, c.timeout, c.cfg.MaxAttachmentSizeBytes)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -397,8 +419,13 @@ func buildGetAttachmentVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(s
 // buildCreateDraftVerb constructs the create_draft Verb (MailManageEnabled-gated).
 func buildCreateDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "create_draft",
-		Summary: "create a new email draft in the Drafts folder (not sent automatically)",
+		Name:        "create_draft",
+		Summary:     "create a new email draft in the Drafts folder (not sent automatically)",
+		Description: "Creates a new email draft and saves it to the Drafts folder. The draft is never sent automatically; the user opens Outlook and sends it manually. Supports To, Cc, Bcc recipients, subject, plain-text or HTML body, and importance. Requires MAIL_MANAGE_ENABLED=true.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"to_recipients": "alice@contoso.com", "subject": "Follow-up", "body": "Hi Alice..."}, Comment: "create a simple plain-text draft"},
+		},
+		SeeDocs: []string{"concepts#mail-gating"},
 		Handler: wrapWrite("mail.create_draft", "write", tools.NewHandleCreateDraft(rc, c.timeout, c.provenancePropertyID)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -439,9 +466,11 @@ func buildCreateDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite fun
 // buildCreateReplyDraftVerb constructs the create_reply_draft Verb (MailManageEnabled-gated).
 func buildCreateReplyDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "create_reply_draft",
-		Summary: "create a reply draft to an existing message preserving threading headers",
-		Handler: wrapWrite("mail.create_reply_draft", "write", tools.NewHandleCreateReplyDraft(rc, c.timeout, c.provenancePropertyID)),
+		Name:        "create_reply_draft",
+		Summary:     "create a reply draft to an existing message preserving threading headers",
+		Description: "Creates a reply draft for an existing message, preserving all email threading headers (References, In-Reply-To). The original message is quoted automatically. Use reply_all=true to reply to all original recipients. Requires MAIL_MANAGE_ENABLED=true.",
+		SeeDocs:     []string{"concepts#mail-gating"},
+		Handler:     wrapWrite("mail.create_reply_draft", "write", tools.NewHandleCreateReplyDraft(rc, c.timeout, c.provenancePropertyID)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -469,9 +498,11 @@ func buildCreateReplyDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrit
 // buildCreateForwardDraftVerb constructs the create_forward_draft Verb (MailManageEnabled-gated).
 func buildCreateForwardDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "create_forward_draft",
-		Summary: "create a forward draft of an existing message with new recipients",
-		Handler: wrapWrite("mail.create_forward_draft", "write", tools.NewHandleCreateForwardDraft(rc, c.timeout, c.provenancePropertyID)),
+		Name:        "create_forward_draft",
+		Summary:     "create a forward draft of an existing message with new recipients",
+		Description: "Creates a forward draft for an existing message with the original message quoted. Supply the new To recipients and an optional forward comment. Requires MAIL_MANAGE_ENABLED=true.",
+		SeeDocs:     []string{"concepts#mail-gating"},
+		Handler:     wrapWrite("mail.create_forward_draft", "write", tools.NewHandleCreateForwardDraft(rc, c.timeout, c.provenancePropertyID)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -499,9 +530,11 @@ func buildCreateForwardDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWr
 // buildUpdateDraftVerb constructs the update_draft Verb (MailManageEnabled-gated).
 func buildUpdateDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "update_draft",
-		Summary: "update fields of an existing draft (PATCH semantics; non-draft messages rejected)",
-		Handler: wrapWrite("mail.update_draft", "write", tools.NewHandleUpdateDraft(rc, c.timeout)),
+		Name:        "update_draft",
+		Summary:     "update draft fields (PATCH semantics; non-draft messages rejected)",
+		Description: "Updates fields of an existing draft using PATCH semantics: only supplied fields are changed. Attempting to update a non-draft message returns an error. Supports recipients, subject, body, content type, and importance. Requires MAIL_MANAGE_ENABLED=true.",
+		SeeDocs:     []string{"concepts#mail-gating"},
+		Handler:     wrapWrite("mail.update_draft", "write", tools.NewHandleUpdateDraft(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -545,9 +578,11 @@ func buildUpdateDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite fun
 // buildDeleteDraftVerb constructs the delete_draft Verb (MailManageEnabled-gated).
 func buildDeleteDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
-		Name:    "delete_draft",
-		Summary: "permanently delete a draft message (irreversible; non-draft messages rejected)",
-		Handler: wrapWrite("mail.delete_draft", "delete", tools.NewHandleDeleteDraft(rc, c.timeout)),
+		Name:        "delete_draft",
+		Summary:     "permanently delete a draft message (irreversible; non-draft messages rejected)",
+		Description: "Permanently deletes a draft message. This operation is irreversible. Attempting to delete a non-draft message returns an error as a safety guard. Requires MAIL_MANAGE_ENABLED=true.",
+		SeeDocs:     []string{"concepts#mail-gating"},
+		Handler:     wrapWrite("mail.delete_draft", "delete", tools.NewHandleDeleteDraft(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),

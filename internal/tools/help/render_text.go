@@ -2,6 +2,7 @@
 package help
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/mark3labs/mcp-go/mcp"
@@ -37,7 +38,8 @@ func renderText(verbs []tools.Verb) *mcp.CallToolResult {
 	return mcp.NewToolResultText(b.String())
 }
 
-// formatVerbText formats a single Verb as a numbered plain-text entry.
+// formatVerbText formats a single Verb as a numbered plain-text entry,
+// including Description, Examples, and SeeDocs when present (CR-0065).
 //
 // Parameters:
 //   - v: the Verb to format.
@@ -53,6 +55,11 @@ func formatVerbText(v tools.Verb, n int) string {
 	if v.Summary != "" {
 		b.WriteString("   ")
 		b.WriteString(v.Summary)
+		b.WriteString("\n")
+	}
+	if v.Description != "" {
+		b.WriteString("   ")
+		b.WriteString(v.Description)
 		b.WriteString("\n")
 	}
 	params := verbParameters(v)
@@ -80,7 +87,43 @@ func formatVerbText(v tools.Verb, n int) string {
 			b.WriteString("\n")
 		}
 	}
+	if len(v.Examples) > 0 {
+		b.WriteString("   Examples:\n")
+		for _, ex := range v.Examples {
+			if ex.Comment != "" {
+				b.WriteString("     # ")
+				b.WriteString(ex.Comment)
+				b.WriteString("\n")
+			}
+			b.WriteString("     {operation: \"")
+			b.WriteString(v.Name)
+			b.WriteString("\"")
+			for k, val := range ex.Args {
+				b.WriteString(", ")
+				b.WriteString(k)
+				b.WriteString(": ")
+				b.WriteString(formatArgValue(val))
+			}
+			b.WriteString("}\n")
+		}
+	}
+	if len(v.SeeDocs) > 0 {
+		b.WriteString("   See docs: ")
+		b.WriteString(strings.Join(v.SeeDocs, ", "))
+		b.WriteString("\n")
+	}
 	return b.String()
+}
+
+// formatArgValue formats a single example argument value for plain-text output.
+// Strings are quoted; booleans, numbers, and other types use fmt's %v.
+func formatArgValue(v any) string {
+	switch t := v.(type) {
+	case string:
+		return fmt.Sprintf("%q", t)
+	default:
+		return fmt.Sprintf("%v", t)
+	}
 }
 
 // formatInt converts a small positive integer to a decimal string without
