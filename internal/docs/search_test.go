@@ -70,3 +70,30 @@ func TestSearch_EmptyQueryReturnsNil(t *testing.T) {
 		t.Fatalf("expected nil results for empty query, got %v", results)
 	}
 }
+
+// TestSearchDocs_AutoDefaultAnchor verifies that searching for "auto-default"
+// returns a result from the troubleshooting document whose snippet contains the
+// "Auto-default account" heading text, satisfying CR-0064 AC-6 and
+// docs/troubleshooting.md anchor auto-default-account.
+func TestSearchDocs_AutoDefaultAnchor(t *testing.T) {
+	t.Parallel()
+
+	results, err := docs.Search("auto-default")
+	if err != nil {
+		t.Fatalf("Search('auto-default') error: %v", err)
+	}
+	if len(results) == 0 {
+		t.Fatal("Search('auto-default') returned no results")
+	}
+
+	var found bool
+	for _, r := range results {
+		if r.Slug == "troubleshooting" && strings.Contains(r.Snippet, "Auto-default account") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected a result from slug 'troubleshooting' with snippet containing 'Auto-default account', got: %+v", results)
+	}
+}

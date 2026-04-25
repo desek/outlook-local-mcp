@@ -462,6 +462,35 @@ Complete the authentication flow interactively when prompted (browser, device co
 - **Verify:** Calling `{tool: "account", args: {operation: "login", label: "<label>"}}` again on the same (now connected) account returns an error stating the account is already connected.
 - **Fail:** If the account does not return to the authenticated state or the already-connected guard does not trigger.
 
+### Step 29a -- Durable account removal (skip if single-account mode)
+
+> **Multi-account only.** If single-account mode, mark this step **SKIP**.
+
+This step verifies that `account.remove` is durable across server restart when `accounts.json` contains an entry for the removed label (CR-0064 AC-4).
+
+1. Call `{tool: "account", args: {operation: "list"}}` and record the full set of registered account labels.
+2. Pick any non-default account that has a persisted `accounts.json` entry (for example the attendee account from Step 1). Record its label as `<remove-target>`.
+3. Call `{tool: "account", args: {operation: "remove", label: "<remove-target>"}}`.
+   - **Pass:** Response is plain text confirming removal including the label and "Token cache cleared."
+   - **Verify:** A subsequent `{tool: "account", args: {operation: "list"}}` does not include `<remove-target>`.
+4. **Restart the server** (stop and start the `outlook-local-mcp` process).
+5. After restart, call `{tool: "account", args: {operation: "list"}}` again.
+   - **Pass:** `<remove-target>` is absent from the account list.
+   - **Fail:** If `<remove-target>` reappears, `accounts.json` was not rewritten correctly.
+6. **Restore:** Call `{tool: "account", args: {operation: "add", label: "<remove-target>", ...}}` with the original `client_id`, `tenant_id`, and `auth_method` to restore the attendee account for subsequent steps. Complete the authentication flow when prompted.
+
+### Step 29b -- Default reappearance when accounts.json loses cfg coverage (informational)
+
+> **Informational only.** Do not run this step in automated test suites; it requires a server restart and leaves the default account in a potentially unauthenticated state. Record as **SKIP** unless specifically testing CR-0064 AC-5.
+
+When `accounts.json` contains the only entry whose `client_id` and `tenant_id` match the env config (`OUTLOOK_MCP_CLIENT_ID`, `OUTLOOK_MCP_TENANT_ID`), removing that entry removes the gating signal. The implicit "default" reappears at the next server start. This is expected behavior: the env-only single-account UX is preserved.
+
+To verify AC-5 manually:
+1. Ensure `accounts.json` contains exactly one entry whose identity matches the env config.
+2. Run `{tool: "account", args: {operation: "remove", label: "<that entry>"}}`.
+3. Restart the server.
+4. Call `{tool: "account", args: {operation: "list"}}` and verify "default" is present.
+
 ### Step 30 -- Mail operations (skip if mail disabled)
 
 If `config.features.mail_enabled` from Step 0c is `false`, **skip** Steps 30 through 36 and record them as SKIP.
@@ -593,6 +622,7 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 27   | Force refresh token (text)        | PASS/FAIL      | e.g., "label + expiry in plain text"                     |
 | 28   | Log out non-default account       | PASS/FAIL/SKIP | e.g., "only default authenticated" or "logged out"       |
 | 29   | Log back in non-default account   | PASS/FAIL/SKIP | e.g., "only default authenticated" or "re-authenticated" |
+| 29a  | Durable account removal           | PASS/FAIL/SKIP | e.g., "single-account mode" or "label absent after restart" |
 | 30a  | Discover mail verbs (help)        | PASS/FAIL/SKIP | e.g., "mail disabled" or "all verbs listed"              |
 | 30b  | Mail list is_read filter          | PASS/FAIL/SKIP | e.g., "unread filter honored"                            |
 | 30c  | Mail list flag_status filter      | PASS/FAIL/SKIP | e.g., "flagged filter honored"                           |

@@ -260,6 +260,35 @@ Permanently removes the account from the registry and clears its keychain cache.
 
 ---
 
+## Auto-default account {#auto-default-account}
+
+### Ghost-default scenario
+
+On startup, the server registers an implicit "default" account from the env config (`OUTLOOK_MCP_CLIENT_ID`, `OUTLOOK_MCP_TENANT_ID`, `OUTLOOK_MCP_AUTH_METHOD`) when no entry in `accounts.json` already covers that identity. If the keychain or file token cache has been cleared for that identity, `account_list` shows a disconnected `default` entry. The first tool call that falls through to "default" will trigger an authentication prompt (device-code or browser), which may be unexpected in a multi-account setup.
+
+**Remedy:** Add an entry to `accounts.json` whose `client_id` and `tenant_id` match the env config, or use `account_remove default` to remove the ghost entry for the current session.
+
+### Persistent-removal semantics
+
+`account_remove` is durable across restarts when `accounts.json` contains an entry for the removed label. After removal, the server rewrites `accounts.json` without that entry. The removed account does not return on the next start.
+
+When `accounts.json` has no entry for the label (for example, the implicit "default" created from env config without any `accounts.json`), the in-memory removal still succeeds for the current session, but the entry reappears at the next start because `main.go` re-registers it from the env config.
+
+### accounts.json gating rule
+
+The implicit "default" is skipped at startup when either of these is true:
+
+- `accounts.json` contains an entry whose `client_id` and `tenant_id` match the env config, regardless of that entry's label.
+- `accounts.json` contains any entry with the literal label `"default"`.
+
+When neither is true (for example, `accounts.json` is absent or empty), the implicit "default" is registered so that single-account env-only setups continue to work without authoring a config file.
+
+### Removing a cfg-identity-covering entry causes default to reappear
+
+If `accounts.json` has a single entry whose `client_id` and `tenant_id` match the env config, removing that entry causes the implicit "default" to reappear at the next start. This is intentional: removing the entry from `accounts.json` removes the gating signal, so `main.go` falls back to the implicit default. To suppress the implicit default permanently, keep an `accounts.json` entry that covers the cfg identity under any label.
+
+---
+
 ## In-server documentation access
 
 The server embeds this guide and other user-facing documentation. The LLM can access it directly without leaving the session:

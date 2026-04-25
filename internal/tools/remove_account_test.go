@@ -253,6 +253,135 @@ func TestRemoveAccount_AllowsDisconnected(t *testing.T) {
 	}
 }
 
+// TestRemoveAccount_RewritesAccountsJson verifies that account_remove
+// rewrites accounts.json on successful removal, filtering out the removed label
+// while preserving other entries (CR-0064 Phase 2).
+func TestRemoveAccount_RewritesAccountsJson(t *testing.T) {
+	registry := auth.NewAccountRegistry()
+	if err := registry.Add(&auth.AccountEntry{Label: "foo"}); err != nil {
+		t.Fatalf("registry.Add: %v", err)
+	}
+	if err := registry.Add(&auth.AccountEntry{Label: "bar"}); err != nil {
+		t.Fatalf("registry.Add: %v", err)
+	}
+
+	accountsPath := filepath.Join(t.TempDir(), "accounts.json")
+	if err := auth.SaveAccounts(accountsPath, []auth.AccountConfig{
+		{Label: "foo", ClientID: "c1", TenantID: "t1", AuthMethod: "browser"},
+		{Label: "bar", ClientID: "c2", TenantID: "t2", AuthMethod: "browser"},
+	}); err != nil {
+		t.Fatalf("SaveAccounts: %v", err)
+	}
+
+	handler := HandleRemoveAccount(registry, accountsPath)
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"label": "foo"}
+
+	result, err := handler(context.Background(), request)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error result: %v", result)
+	}
+
+	accounts, err := auth.LoadAccounts(accountsPath)
+	if err != nil {
+		t.Fatalf("LoadAccounts: %v", err)
+	}
+	if len(accounts) != 1 || accounts[0].Label != "bar" {
+		t.Errorf("expected accounts.json to contain only 'bar', got %+v", accounts)
+	}
+}
+
+// TestRemoveAccount_ImplicitDefault_NoFileWrite verifies that removing the
+// implicit "default" account when accounts.json has no entry for "default"
+// succeeds in-memory without creating or modifying accounts.json (CR-0064 Phase 2).
+func TestRemoveAccount_ImplicitDefault_NoFileWrite(t *testing.T) {
+	registry := auth.NewAccountRegistry()
+	if err := registry.Add(&auth.AccountEntry{Label: "default"}); err != nil {
+		t.Fatalf("registry.Add: %v", err)
+	}
+
+	// accounts.json does not exist: use a path whose parent directory does not exist.
+	accountsPath := filepath.Join(t.TempDir(), "subdir", "accounts.json")
+
+	handler := HandleRemoveAccount(registry, accountsPath)
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"label": "default"}
+
+	result, err := handler(context.Background(), request)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error result removing implicit default: %v", result)
+	}
+
+	// accounts.json must not have been created.
+	if _, statErr := os.Stat(accountsPath); !os.IsNotExist(statErr) {
+		t.Error("accounts.json must not be created when removing an implicit default with no matching file entry")
+	}
+}
+
+// TestRemoveAccount_AtomicWrite_NoPartialFileOnError verifies that the original
+// accounts.json content is preserved when the accounts directory is read-only,
+// preventing temp-file creation (CR-0064 Phase 2, NFR-1).
+// The handler must still succeed for the in-memory registry removal; the
+// write failure is logged as a warning, not returned as a tool error.
+func TestRemoveAccount_AtomicWrite_NoPartialFileOnError(t *testing.T) {
+	dir := t.TempDir()
+	accountsPath := filepath.Join(dir, "accounts.json")
+
+	original := []auth.AccountConfig{
+		{Label: "alpha", ClientID: "c1", TenantID: "t1", AuthMethod: "browser"},
+		{Label: "beta", ClientID: "c2", TenantID: "t2", AuthMethod: "browser"},
+	}
+	if err := auth.SaveAccounts(accountsPath, original); err != nil {
+		t.Fatalf("SaveAccounts: %v", err)
+	}
+
+	// Make the directory read-only so temp-file creation fails.
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatalf("Chmod: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(dir, 0o700) }) //nolint:errcheck // cleanup
+
+	registry := auth.NewAccountRegistry()
+	if err := registry.Add(&auth.AccountEntry{Label: "alpha"}); err != nil {
+		t.Fatalf("registry.Add: %v", err)
+	}
+	if err := registry.Add(&auth.AccountEntry{Label: "beta"}); err != nil {
+		t.Fatalf("registry.Add: %v", err)
+	}
+
+	handler := HandleRemoveAccount(registry, accountsPath)
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"label": "alpha"}
+
+	result, err := handler(context.Background(), request)
+	if err != nil {
+		t.Fatalf("handler error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected error result: %v", result)
+	}
+
+	// Restore dir permissions to read the file.
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatalf("Chmod restore: %v", err)
+	}
+
+	// Original file content must be intact (no partial write due to atomic write).
+	accounts, err := auth.LoadAccounts(accountsPath)
+	if err != nil {
+		t.Fatalf("LoadAccounts: %v", err)
+	}
+	if len(accounts) != 2 {
+		t.Errorf("expected 2 accounts (original content preserved), got %d: %+v", len(accounts), accounts)
+	}
+}
+
 // TestRemoveAccount_LastAccountCleanState verifies that removing the last
 // non-default account leaves accounts.json as a valid file with an empty
 // accounts array (CR-0056 FR-45).
