@@ -256,11 +256,13 @@ Forces a silent token refresh (`ForceRefresh=true`). Returns the new token expir
 {tool: "account", args: {operation: "remove", label: "work"}}
 ```
 
-Permanently removes the account from the registry and clears its keychain cache. Use `account.logout` instead when you want to disconnect without deleting the configuration. The `default` account cannot be removed.
+Permanently removes the account from the registry, clears its keychain cache, and rewrites `accounts.json` (atomic temp-file + rename) without the removed entry so the removal survives a restart (see CR-0064). When `accounts.json` has no entry for the label (for example the implicit `default` created from env config), the in-memory removal still succeeds for the current session but the entry reappears at the next start. Use `account.logout` instead when you want to disconnect without deleting the configuration. See [Auto-default account](#auto-default-account) for the implicit-default gating rule.
 
 ---
 
 ## Auto-default account {#auto-default-account}
+
+The implicit `default` account registration is conditional on `accounts.json` contents, and `account.remove` is persistent across restart (see CR-0064).
 
 ### Ghost-default scenario
 
