@@ -98,11 +98,11 @@ flowchart LR
 6. The `system` aggregate tool **MUST** expose a `get_docs` verb that accepts `slug` (required), optional `section` (heading anchor), and optional `output` (`text` default, `raw`), returning the document or the requested section.
 7. The new verbs **MUST** conform to project conventions per CR-0060 and CLAUDE.md: registered in the `system` domain verb registry (`internal/tools/dispatch_registry.go` + `internal/tools/help/`), text-tier default output (CR-0051), per-verb annotation semantics documented in `system`'s `operation="help"` output, and **no** new entries in `extension/manifest.json` (the four aggregate tools already cover the surface). The conservative aggregate annotations on `system` (CR-0052/CR-0060) **MUST** remain unchanged since the new verbs are read-only, idempotent, non-destructive, and local.
 8. A new `docs/troubleshooting.md` **MUST** be authored covering at minimum: authentication failures, token refresh, Keychain locked / unavailable, multi-account resolution, Graph 429 throttling, `InefficientFilter` errors, `MailEnabled`/`MailManageEnabled` disabled-tool behaviour, `ReadOnly` mode, log file location, and the `account_*` lifecycle.
-9. Known error classes returned by tool handlers **MUST** include a `see` field in the error payload pointing to the relevant `doc://` URI when one exists.
+9. For every error class enumerated in `internal/graph/errors.go` that has a corresponding troubleshooting section in `docs/troubleshooting.md`, the error payload returned by tool handlers **MUST** include a `see` field whose value is the `doc://outlook-local-mcp/troubleshooting#{anchor}` URI of that section. A build-time test **MUST** fail if any such mapping is missing or points to an unresolved anchor.
 10. The embedded bundle **MUST** be limited to user-facing documentation (`README.md`, `QUICKSTART.md`, `docs/troubleshooting.md`). Engineering documentation — Change Requests under `docs/cr/**`, the reference spec at `docs/reference/outlook-local-mcp-spec.md`, research notes under `docs/research/**`, and `CHANGELOG.md` — **MUST NOT** be embedded, exposed as MCP resources, or returned by any `system.*_docs` verb. A test **MUST** fail the build if any path under those directories is added to the bundle.
 11. The `system.status` verb output **MUST** include a `docs` section listing the base resource URI (`doc://outlook-local-mcp/`) and the slug of the troubleshooting document so the LLM can discover the surface from a single known entry point.
 12. The documentation bundle **MUST** be regenerated at build time (not manually copied) via a `make docs-bundle` target that refreshes the embedded index and verifies every referenced slug resolves.
-13. `README.md` **MUST** be refactored to target a human audience: project pitch, screenshots/quotes where useful, install/quick-start pointer, supported features, link to `QUICKSTART.md`, link to `llms.txt` for LLM consumers, contributing/license. Deep configuration reference, troubleshooting walls, and CR-derived implementation detail **MUST** move out of `README.md` into the dedicated docs (`QUICKSTART.md`, `docs/troubleshooting.md`, `docs/reference/outlook-local-mcp-spec.md`) so the front page stays scannable.
+13. `README.md` **MUST** be refactored to target a human audience and **MUST** contain, at minimum, the following sections: project pitch, install/quick-start pointer, supported feature list, link to `QUICKSTART.md`, link to `llms.txt` for LLM consumers, and contributing/license sections. Deep configuration reference, troubleshooting content, and CR-derived implementation detail **MUST NOT** appear in `README.md` and **MUST** instead live in `QUICKSTART.md`, `docs/troubleshooting.md`, or `docs/reference/outlook-local-mcp-spec.md`.
 14. A `/llms.txt` file **MUST** be added at the repository root following the AnswerDotAI `llms.txt` standard (https://llmstxt.org). Structure:
     * Required `# outlook-local-mcp` H1 header.
     * Blockquote summary describing the server in one sentence.
@@ -114,7 +114,7 @@ flowchart LR
 ### Non-Functional Requirements
 
 1. The added binary size from the embedded bundle **MUST** remain under 2 MiB uncompressed.
-2. `docs_search` **MUST** return results in under 100 ms for the full bundle on commodity hardware.
+2. `system.search_docs` **MUST** return results in under 100 ms for the full bundle on commodity hardware.
 3. The new docs verbs **MUST** be read-only and per-verb-documented as `ReadOnly=true`, `OpenWorld=false`, `Idempotent=true`, `Destructive=false` in `system`'s help output (CR-0052/CR-0060). Aggregate `system` annotations are unaffected because they are already conservative across its existing verbs.
 4. The bundle **MUST NOT** include any file containing secrets, test credentials, or the `.env` / token cache; a lint step in `make docs-bundle` **MUST** fail the build if flagged patterns are present.
 5. Documentation content **MUST** be versioned with the binary: `status` **MUST** expose a `docs.version` field equal to the build version so stale-doc drift is diagnosable.
@@ -204,6 +204,7 @@ flowchart LR
         C1[troubleshooting.md authored] --> C2[error see: hints wired]
         C2 --> C3[status docs section]
         C3 --> C4[README refactor + llms.txt generated]
+        C4 --> C5[update docs/prompts/mcp-tool-crud-test.md]
     end
     P1 --> P2 --> P3
 ```
@@ -411,7 +412,7 @@ make ci
 
 **Likelihood:** medium
 **Impact:** medium
-**Mitigation:** `docs_search` returns snippets (not full docs) by default; `docs_get` supports `section` slicing; tool descriptions explicitly instruct the LLM to prefer search-then-section-fetch over full-document retrieval, consistent with the body-escalation pattern already established in CLAUDE.md.
+**Mitigation:** `system.search_docs` returns snippets (not full docs) by default; `system.get_docs` supports `section` slicing; tool descriptions explicitly instruct the LLM to prefer search-then-section-fetch over full-document retrieval, consistent with the body-escalation pattern already established in CLAUDE.md.
 
 ## Dependencies
 
@@ -421,7 +422,7 @@ make ci
 ## Estimated Effort
 
 * Phase 1 (bundle + catalog + search): ~1.5 days.
-* Phase 2 (resources + `docs_*` tools + annotations + tests): ~1.5 days.
+* Phase 2 (resources + `system.list_docs` / `search_docs` / `get_docs` verbs + annotations + tests): ~1.5 days.
 * Phase 3 (troubleshooting.md authoring + error hint wiring + status integration + README refactor + llms.txt generator): ~1.5 days.
 * **Total:** ~4.5 developer-days.
 
@@ -431,8 +432,8 @@ Chosen approach: "embedded bundle + MCP resources + three new `system` verbs (`l
 
 ## Related Items
 
-* Complements CR-0051 (response tiering) — `docs_*` tools honour the same text-default discipline.
-* Complements CR-0052 (tool annotations) — three new tools require full annotation coverage.
+* Complements CR-0051 (response tiering) — the new `system.list_docs` / `search_docs` / `get_docs` verbs honour the same text-default discipline.
+* Complements CR-0052 (tool annotations) — three new verbs require per-verb annotation coverage on the `system` aggregate tool.
 * Complements CR-0058 (mail management error envelopes) — extends the envelope with `see`.
 * Builds on CR-0060 (domain-aggregated tools with verb operations) — new functionality is added as verbs on `system` rather than as new top-level tools.
 * Informed by memory `2026-04-20-graph-inefficientfilter-mail-fixes.md`.
@@ -450,3 +451,29 @@ Troubleshooting topics to cover in `docs/troubleshooting.md` (non-exhaustive):
 * Mail tool enablement flags `MailEnabled` / `MailManageEnabled` (CR-0058).
 * Log file locations and how to read sanitised logs (CR-0002, CR-0023).
 * Audit log interpretation (CR-0015).
+
+<!--
+## CR Review Summary (Agent 2)
+
+Findings: 7
+- F1: NFR-2 referenced legacy tool name `docs_search`; now `system.search_docs`.
+- F2: Risk 4 referenced legacy `docs_search` / `docs_get`; now `system.search_docs` / `system.get_docs`.
+- F3: Estimated Effort Phase 2 referenced `docs_*` tools; now lists `system.*_docs` verbs.
+- F4: Related Items called the new verbs "tools" (contradicts CR-0060); reworded as verbs on `system`.
+- F5: FR-9 was ambiguous ("when one exists"); reworded with testable allowlist + build-time test.
+- F6: Implementation Approach Phase 3 omitted `docs/prompts/mcp-tool-crud-test.md`; added node C5 to Mermaid.
+- F7: FR-13 contained vague filler ("where useful"); restated as a MUST-contain section list with a MUST NOT exclusion clause.
+
+Fixes applied: 7 (all findings addressed by direct edits).
+Unresolvable items: none.
+
+CLAUDE.md compliance check:
+- Tool naming convention (CR-0060 verb dispatch): OK -- adds verbs to `system`, no new top-level tool, manifest.json untouched.
+- 5 MCP annotations: OK -- aggregate annotations preserved; per-verb hints documented in `system.help`.
+- Three-tier output: OK -- `get_docs` honours text default + raw; `list_docs`/`search_docs` text default.
+- CRUD test coverage: OK -- `docs/prompts/mcp-tool-crud-test.md` listed in Affected Components, Quality Standards checklist, and now in Implementation Approach Mermaid.
+- Small-isolated-files: OK -- `internal/docs/` package + per-verb handler files.
+
+Every Functional Requirement maps to >=1 AC; every AC maps to >=1 Test Strategy entry; Affected Components matches files referenced in Implementation Approach phases; Mermaid diagrams updated to match.
+-->
+
