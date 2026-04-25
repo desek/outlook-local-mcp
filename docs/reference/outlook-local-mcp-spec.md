@@ -1,5 +1,7 @@
 # Technical Specification: Outlook Local MCP Server in Go
 
+> **Status note:** This document describes the original tool-per-operation surface that predates CR-0060. As of v0.6.0 the server exposes four aggregate domain tools (`calendar`, `mail`, `account`, `system`) dispatched by an `operation` verb. See CR-0060 and the README "Tool Invocation Shape" section for the current surface. The verb-level semantics described below remain accurate; only the registration shape changed.
+
 **The server authenticates as the user via device code flow using a well-known Microsoft first-party client ID, manages calendar data through the Microsoft Graph API v1.0, and exposes up to twenty tools (five read-only calendar, six write, four read-only mail (opt-in), three account management, one diagnostic, plus conditional complete_auth) over MCP stdio transport.** No custom Entra ID app registration is required. This specification covers every component (authentication, token persistence, logging, tool schemas, error handling, and configuration) with exact Go types and API calls sufficient to write the complete implementation.
 
 ---

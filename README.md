@@ -55,7 +55,46 @@ Call any domain tool with `operation: "help"` to get full documentation for ever
 {tool: "mail",     args: {operation: "help", verb: "search_messages"}}
 ```
 
-**Migration:** If you have scripts or integrations that call the old-style tool names, update them to use the aggregate `{tool, operation}` shape. See the [validation report](docs/cr/CR-0060-validation-report.md) for the full verb inventory.
+**Migration:** If you have scripts or integrations that call the old-style tool names, update them to use the aggregate `{tool, operation}` shape. The complete mapping from pre-v0.6.0 tool names to the new `{tool, operation}` pairs is below; see CR-0060 and the [validation report](docs/cr/CR-0060-validation-report.md) for context.
+
+| Pre-v0.6.0 tool name | v0.6.0 invocation |
+|---|---|
+| `calendar_list` | `{tool: "calendar", args: {operation: "list_calendars"}}` |
+| `calendar_list_events` | `{tool: "calendar", args: {operation: "list_events"}}` |
+| `calendar_get_event` | `{tool: "calendar", args: {operation: "get_event"}}` |
+| `calendar_search_events` | `{tool: "calendar", args: {operation: "search_events"}}` |
+| `calendar_create_event` | `{tool: "calendar", args: {operation: "create_event"}}` |
+| `calendar_update_event` | `{tool: "calendar", args: {operation: "update_event"}}` |
+| `calendar_delete_event` | `{tool: "calendar", args: {operation: "delete_event"}}` |
+| `calendar_respond_event` | `{tool: "calendar", args: {operation: "respond_event"}}` |
+| `calendar_reschedule_event` | `{tool: "calendar", args: {operation: "reschedule_event"}}` |
+| `calendar_create_meeting` | `{tool: "calendar", args: {operation: "create_meeting"}}` |
+| `calendar_update_meeting` | `{tool: "calendar", args: {operation: "update_meeting"}}` |
+| `calendar_cancel_meeting` | `{tool: "calendar", args: {operation: "cancel_meeting"}}` |
+| `calendar_reschedule_meeting` | `{tool: "calendar", args: {operation: "reschedule_meeting"}}` |
+| `calendar_get_free_busy` | `{tool: "calendar", args: {operation: "get_free_busy"}}` |
+| `mail_list_folders` | `{tool: "mail", args: {operation: "list_folders"}}` |
+| `mail_list_messages` | `{tool: "mail", args: {operation: "list_messages"}}` |
+| `mail_get_message` | `{tool: "mail", args: {operation: "get_message"}}` |
+| `mail_search_messages` | `{tool: "mail", args: {operation: "search_messages"}}` |
+| `mail_get_conversation` | `{tool: "mail", args: {operation: "get_conversation"}}` |
+| `mail_list_attachments` | `{tool: "mail", args: {operation: "list_attachments"}}` |
+| `mail_get_attachment` | `{tool: "mail", args: {operation: "get_attachment"}}` |
+| `mail_create_draft` | `{tool: "mail", args: {operation: "create_draft"}}` |
+| `mail_create_reply_draft` | `{tool: "mail", args: {operation: "create_reply_draft"}}` |
+| `mail_create_forward_draft` | `{tool: "mail", args: {operation: "create_forward_draft"}}` |
+| `mail_update_draft` | `{tool: "mail", args: {operation: "update_draft"}}` |
+| `mail_delete_draft` | `{tool: "mail", args: {operation: "delete_draft"}}` |
+| `account_add` | `{tool: "account", args: {operation: "add"}}` |
+| `account_remove` | `{tool: "account", args: {operation: "remove"}}` |
+| `account_list` | `{tool: "account", args: {operation: "list"}}` |
+| `account_login` | `{tool: "account", args: {operation: "login"}}` |
+| `account_logout` | `{tool: "account", args: {operation: "logout"}}` |
+| `account_refresh` | `{tool: "account", args: {operation: "refresh"}}` |
+| `status` | `{tool: "system", args: {operation: "status"}}` |
+| `complete_auth` | `{tool: "system", args: {operation: "complete_auth"}}` |
+
+Each domain tool also accepts `operation: "help"` (with an optional `verb` argument) to introspect the registered verbs and their parameters at runtime. Tool reference sections below describe each verb in detail; the section headings retain the legacy tool-name form (`calendar_list_events`, etc.) for searchability, but every verb is invoked through the aggregate `{tool, operation}` shape shown above.
 
 ## Features
 
@@ -299,9 +338,9 @@ All configuration is via environment variables prefixed with `OUTLOOK_MCP_`.
 | `AUDIT_LOG_ENABLED` | `true` | Enable audit logging |
 | `AUDIT_LOG_PATH` | *(empty = stderr)* | Audit log file path |
 | `READ_ONLY` | `false` | Disable write/delete tools |
-| `MAIL_ENABLED` | `false` | Enable read-only mail access. Adds `Mail.Read` OAuth scope and registers 6 mail read tools (`mail_list_folders`, `mail_list_messages`, `mail_search_messages`, `mail_get_message`, `mail_get_conversation`, `mail_get_attachment`). See CR-0043, CR-0058 |
-| `MAIL_MANAGE_ENABLED` | `false` | Enable mail draft management. Implies `MAIL_ENABLED=true`. Adds `Mail.ReadWrite` OAuth scope (supersedes `Mail.Read`) and registers 5 draft tools (`mail_create_draft`, `mail_create_reply_draft`, `mail_create_forward_draft`, `mail_update_draft`, `mail_delete_draft`). `Mail.Send` is never requested. See CR-0058 |
-| `MAX_ATTACHMENT_SIZE_BYTES` | `10485760` (10 MB) | Maximum attachment size (in bytes) that `mail_get_attachment` will download. Oversized attachments return an error to avoid memory pressure. See CR-0058 |
+| `MAIL_ENABLED` | `false` | Enable read-only mail access. Adds `Mail.Read` OAuth scope and registers the read verbs `list_folders`, `list_messages`, `search_messages`, `get_message`, `get_conversation`, `list_attachments`, and `get_attachment` on the `mail` tool. See CR-0043, CR-0058, CR-0060 |
+| `MAIL_MANAGE_ENABLED` | `false` | Enable mail draft management. Implies `MAIL_ENABLED=true`. Adds `Mail.ReadWrite` OAuth scope (supersedes `Mail.Read`) and registers the draft verbs `create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, and `delete_draft` on the `mail` tool. `Mail.Send` is never requested. See CR-0058, CR-0060 |
+| `MAX_ATTACHMENT_SIZE_BYTES` | `10485760` (10 MB) | Maximum attachment size (in bytes) that the `mail` tool's `get_attachment` verb will download. Oversized attachments return an error to avoid memory pressure. See CR-0058 |
 | `OTEL_ENABLED` | `false` | Enable OpenTelemetry metrics and tracing |
 | `OTEL_ENDPOINT` | *(empty = localhost:4317)* | OTLP gRPC endpoint |
 | `PROVENANCE_TAG` | `com.github.desek.outlook-local-mcp.created` | Name for the provenance extended property stamped on MCP-created events. Set to empty string to disable provenance tagging entirely. See CR-0040 |
