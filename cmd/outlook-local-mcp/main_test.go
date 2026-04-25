@@ -43,6 +43,54 @@ func (m *mockTokenCredential) GetToken(ctx context.Context, _ policy.TokenReques
 	}, nil
 }
 
+// TestStartup_SkipsImplicitDefault_WhenAccountsJsonCoversCfg verifies that
+// shouldAddImplicitDefault returns false when accounts.json contains an entry
+// whose client_id and tenant_id match the env cfg, even under a different label.
+func TestStartup_SkipsImplicitDefault_WhenAccountsJsonCoversCfg(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "accounts.json")
+
+	const cfgClientID = "cfg-client-id"
+	const cfgTenantID = "cfg-tenant-id"
+
+	content := `{"accounts":[{"label":"primary","client_id":"cfg-client-id","tenant_id":"cfg-tenant-id","auth_method":"browser"}]}`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if shouldAddImplicitDefault(path, cfgClientID, cfgTenantID) {
+		t.Error("shouldAddImplicitDefault returned true; want false when accounts.json covers cfg identity")
+	}
+}
+
+// TestStartup_SkipsImplicitDefault_WhenDefaultLabelInAccountsJson verifies that
+// shouldAddImplicitDefault returns false when accounts.json already contains an
+// entry with the literal label "default", regardless of client_id/tenant_id.
+func TestStartup_SkipsImplicitDefault_WhenDefaultLabelInAccountsJson(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "accounts.json")
+
+	content := `{"accounts":[{"label":"default","client_id":"other-client","tenant_id":"other-tenant","auth_method":"browser"}]}`
+	if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	if shouldAddImplicitDefault(path, "cfg-client-id", "cfg-tenant-id") {
+		t.Error("shouldAddImplicitDefault returned true; want false when accounts.json has explicit default label")
+	}
+}
+
+// TestStartup_AddsImplicitDefault_WhenAccountsJsonEmpty verifies that
+// shouldAddImplicitDefault returns true when accounts.json does not exist,
+// preserving the single-account env-only configuration UX.
+func TestStartup_AddsImplicitDefault_WhenAccountsJsonEmpty(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "nonexistent", "accounts.json")
+
+	if !shouldAddImplicitDefault(path, "cfg-client-id", "cfg-tenant-id") {
+		t.Error("shouldAddImplicitDefault returned false; want true when accounts.json is absent")
+	}
+}
+
 // TestStartupTokenProbe_CompletesWithin5Seconds verifies that the startup
 // token probe completes within the 5-second bound, does not trigger
 // interactive authentication, and calls markPreAuthenticated on success.

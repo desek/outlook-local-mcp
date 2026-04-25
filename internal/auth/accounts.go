@@ -177,6 +177,31 @@ func RemoveAccountConfig(path string, label string) error {
 	return SaveAccounts(path, filtered)
 }
 
+// FindByIdentity searches accounts for the first entry whose ClientID and
+// TenantID both match the supplied arguments. It is used by main.go at startup
+// to determine whether the env-cfg identity is already covered by a named entry
+// in accounts.json, so that the implicit "default" registration can be skipped.
+//
+// Parameters:
+//   - accounts: the account configurations to search.
+//   - clientID: the OAuth 2.0 client ID to match.
+//   - tenantID: the Entra ID tenant identifier to match.
+//
+// Returns the first matching AccountConfig and true, or (AccountConfig{}, false)
+// when no match is found. Empty clientID or tenantID arguments always return
+// (AccountConfig{}, false) to prevent spurious matches against zero-value fields.
+func FindByIdentity(accounts []AccountConfig, clientID, tenantID string) (AccountConfig, bool) {
+	if clientID == "" || tenantID == "" {
+		return AccountConfig{}, false
+	}
+	for _, a := range accounts {
+		if a.ClientID == clientID && a.TenantID == tenantID {
+			return a, true
+		}
+	}
+	return AccountConfig{}, false
+}
+
 // UpdateAccountUPN sets the UPN field for the account identified by label in
 // the persistent accounts file. The file is loaded, the matching entry's UPN
 // is replaced, and the file is saved atomically. If the label is not found,

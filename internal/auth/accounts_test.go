@@ -186,6 +186,69 @@ func TestUpdateAccountUPN_NotFound(t *testing.T) {
 	}
 }
 
+// TestFindByIdentity_Match verifies that FindByIdentity returns the first entry
+// whose ClientID and TenantID both match the supplied arguments.
+func TestFindByIdentity_Match(t *testing.T) {
+	accounts := []AccountConfig{
+		{Label: "other", ClientID: "aaa", TenantID: "tenant-x", AuthMethod: "browser"},
+		{Label: "work", ClientID: "cid-1", TenantID: "tid-1", AuthMethod: "browser"},
+	}
+
+	got, ok := FindByIdentity(accounts, "cid-1", "tid-1")
+	if !ok {
+		t.Fatal("FindByIdentity returned false, want true")
+	}
+	if got.Label != "work" {
+		t.Errorf("Label = %q, want %q", got.Label, "work")
+	}
+}
+
+// TestFindByIdentity_NoMatch verifies that FindByIdentity returns (zero, false)
+// when no entry matches the supplied clientID and tenantID.
+func TestFindByIdentity_NoMatch(t *testing.T) {
+	accounts := []AccountConfig{
+		{Label: "work", ClientID: "cid-1", TenantID: "tid-1", AuthMethod: "browser"},
+	}
+
+	got, ok := FindByIdentity(accounts, "cid-99", "tid-99")
+	if ok {
+		t.Fatalf("FindByIdentity returned true for non-matching identity, entry = %+v", got)
+	}
+	if got != (AccountConfig{}) {
+		t.Errorf("FindByIdentity returned non-zero entry on no-match: %+v", got)
+	}
+}
+
+// TestFindByIdentity_EmptyArgs verifies that FindByIdentity returns (zero, false)
+// when either clientID or tenantID is empty, preventing spurious matches.
+func TestFindByIdentity_EmptyArgs(t *testing.T) {
+	accounts := []AccountConfig{
+		{Label: "work", ClientID: "cid-1", TenantID: "tid-1", AuthMethod: "browser"},
+	}
+
+	tests := []struct {
+		name     string
+		clientID string
+		tenantID string
+	}{
+		{"empty clientID", "", "tid-1"},
+		{"empty tenantID", "cid-1", ""},
+		{"both empty", "", ""},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := FindByIdentity(accounts, tc.clientID, tc.tenantID)
+			if ok {
+				t.Fatalf("FindByIdentity returned true for empty arg case %q, entry = %+v", tc.name, got)
+			}
+			if got != (AccountConfig{}) {
+				t.Errorf("FindByIdentity returned non-zero entry: %+v", got)
+			}
+		})
+	}
+}
+
 // TestRemoveAccountConfig_NotFound verifies that RemoveAccountConfig returns
 // no error and leaves the file unchanged when the label is not found.
 func TestRemoveAccountConfig_NotFound(t *testing.T) {
