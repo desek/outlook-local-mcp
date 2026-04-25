@@ -173,7 +173,7 @@ flowchart TD
 * `internal/tools/dispatch_registry.go`: `Verb` struct extended with three new fields and a new `Example` type.
 * `internal/tools/help/` package: `render_text.go`, `render_summary.go`, and `render_raw.go` updated to emit the new fields.
 * All four domain registry construction sites (`internal/tools/calendar/...`, `internal/tools/mail/...`, `internal/tools/account/...`, `internal/tools/system/...`) updated to populate `Description`, and `Examples`/`SeeDocs` where applicable.
-* `internal/tools/dispatch_route.go`: top-level description builder may use `Description` rather than `Summary` for richer per-domain descriptions.
+* `internal/tools/dispatch_route.go`: top-level description builder **MUST** use `Description` rather than `Summary` for richer per-domain descriptions.
 * Repository-root `README.md`: trimmed to landing page form.
 * Repository-root `QUICKSTART.md`: reduced to a single-link pointer to `docs/quickstart.md` (preserves root-level discoverability for humans and convention-driven tools while keeping the canonical bytes in the embedded bundle).
 * `AGENTS.md`: new "Documentation governance" section.
@@ -222,7 +222,7 @@ End users (humans browsing the repository) gain a single discoverable entry poin
 
 ### Technical Impact
 
-Internal package layout changes: `internal/docs/` becomes a pure consumer of `docs.Bundle`. The `Verb` struct gains three exported fields, all backwards-compatible (zero-value `Description` is permitted by tests only during migration; the final state requires non-empty `Description` per requirement 9). The embed declaration moves from `internal/docs/embed.go` to `docs/embed.go`. The build graph is unchanged: `cmd/outlook-local-mcp/main.go` does not import the docs package directly. Test coverage increases by approximately ten new assertions across the new drift-prevention tests.
+Internal package layout changes: `internal/docs/` becomes a pure consumer of `docs.Bundle`. The `Verb` struct gains three exported fields, all backwards-compatible. The final state **MUST** have a non-empty `Description` for every verb per requirement 9; `TestEveryVerbHasDescription` enforces this from the moment the test lands. The embed declaration moves from `internal/docs/embed.go` to `docs/embed.go`. The build graph is unchanged: `cmd/outlook-local-mcp/main.go` does not import the docs package directly. Test coverage increases by approximately ten new assertions across the new drift-prevention tests.
 
 ### Business Impact
 
@@ -266,6 +266,7 @@ The implementation is sequenced in five phases. Each phase is independently merg
 
 * Add a "Documentation governance" section to `AGENTS.md` that records the source-of-truth rules: which content lives in code, which in markdown, which is embedded, which is repo-only, and the placement decision tree for new content.
 * Update `extension/manifest.json` tool descriptions to align with the new registry `Description` values where they differ.
+* Update `docs/prompts/mcp-tool-crud-test.md` to reference the new top-level slug paths (`readme`, `quickstart`, `concepts`, `troubleshooting`) and to exercise the new `concepts` slug in the docs intent step. Verify `scripts/crud-test.sh` and `docs/bench/crud-runs.csv` headers remain consistent with the unchanged four-domain surface.
 * Update `.deepwiki` and any other path references.
 
 ### Implementation Flow
@@ -328,7 +329,7 @@ flowchart LR
 
 | Test File | Test Name | Reason for Removal |
 |-----------|-----------|-------------------|
-| `internal/docs/embed.go` (file) | n/a | File deleted; embed declaration moves to `docs/embed.go`. The `Bundle` symbol may be re-exported from `internal/docs` for one release cycle if migration cost demands, but is preferred to be removed in this CR. |
+| `internal/docs/embed.go` (file) | n/a | File **MUST** be deleted in this CR; the embed declaration moves to `docs/embed.go` and consumers import `docs.Bundle` directly. No transitional re-export is permitted. |
 | `internal/docs/files/` (directory) | n/a | Directory deleted; canonical files live at `docs/`. |
 
 ## Acceptance Criteria
@@ -641,3 +642,15 @@ Per-tool reference is structured data: a name, a list of parameters with types a
 ### Why `docs/` is the embed package
 
 Go's `//go:embed` directive can only reach files in or below the package directory. Three options exist for keeping the canonical files visible to humans on GitHub: (a) put markdown at the repo root, (b) generate a copy from `docs/` into a hidden directory, or (c) make `docs/` itself a package. Option (a) clutters the root with files that compete with `README.md`; option (b) requires a generator and a drift check; option (c) is the most idiomatic and is the pattern used by several established Go projects (for example `kubernetes/website` exposes both human-facing and machine-readable views of the same markdown). Option (c) is therefore chosen.
+
+<!--
+CR Review Summary (2026-04-25)
+Findings: 3
+  1. Ambiguous "may use Description rather than Summary" in Affected Components (line ~176).
+  2. Contradiction between FR-4 / Phase 1 (delete internal/docs/embed.go) and Tests-to-Remove note that allowed transitional re-export of Bundle for one release cycle.
+  3. Phase 5 did not explicitly include the required update to docs/prompts/mcp-tool-crud-test.md per CLAUDE.md harness-maintenance rule (it was only listed in Affected Components and Tests-to-Modify).
+  Minor: Technical Impact paragraph used "permitted by tests only during migration" wording inconsistent with FR-9.
+Fixes applied: 4 edits (tightened "may"->"MUST"; removed transitional re-export language; added explicit crud-test prompt step to Phase 5; clarified Technical Impact wording to align with FR-9).
+Unresolvable items: none. Coverage of FRs by ACs verified; ACs covered by Test Strategy entries; Mermaid diagrams consistent; CLAUDE.md compliance satisfied.
+-->
+
