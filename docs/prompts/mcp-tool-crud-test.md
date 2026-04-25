@@ -277,17 +277,17 @@ Call `{tool: "calendar", args: {operation: "list_events", date: "<test date>"}}`
 
 ### Step 19 -- Verify Teams meeting details
 
-Call `{tool: "calendar", args: {operation: "get_event", event_id: "<saved Teams event ID>", output: "raw"}}`.
+Call `{tool: "calendar", args: {operation: "get_event", event_id: "<saved Teams event ID>"}}` (default `text` output).
 
 - **Primary evidence (Pass requires all):**
-  - `onlineMeeting.joinUrl` is a non-empty string (this is the observable proof Graph provisioned a Teams meeting; `isOnlineMeeting` is only the input flag).
-  - `body.content` contains a Teams join link (look for `teams.microsoft.com` or the `joinUrl` value).
-  - `isOnlineMeeting` is `true` (sanity check on echoed input flag).
+  - The text output indicates the event is an online meeting (e.g., a Teams join URL line, an `Online meeting:` field, or a Teams link in the body preview). This is the observable proof Graph provisioned a Teams meeting.
+  - The body preview or an explicit join URL field references `teams.microsoft.com` or a Teams join link.
 - **Single-account mode, also verify:**
-  - `attendees` array contains exactly one entry whose email matches the authenticated account's own UPN.
+  - The attendee section lists exactly one attendee whose email matches the authenticated account's own UPN.
 - **Multi-account mode, also verify:**
-  - `attendees` array contains at least one entry with the external attendee email.
-- **Fail:** If `onlineMeeting.joinUrl` is empty or absent, Teams promotion did not happen; report the failure (commonly caused by calling `create_event` instead of `create_meeting`, or omitting attendees).
+  - The attendee section lists at least one entry with the external attendee email.
+- **Escalate only if needed:** If text output does not surface a join URL or attendee detail, re-call with `output: "raw"` to inspect `onlineMeeting.joinUrl` and `attendees` directly. Note the escalation in the report.
+- **Fail:** If no Teams join URL is observable in text or raw output, Teams promotion did not happen; report the failure (commonly caused by calling `create_event` instead of `create_meeting`, or omitting attendees).
 
 ### Step 20 -- Verify invitation on attendee calendar
 
@@ -312,9 +312,10 @@ Call `{tool: "calendar", args: {operation: "respond_event", account: "<attendee 
 
 > **Multi-account only.** If single-account mode, mark this step **SKIP**.
 
-Call `{tool: "calendar", args: {operation: "get_event", event_id: "<saved Teams event ID>", output: "raw"}}`.
+Call `{tool: "calendar", args: {operation: "get_event", event_id: "<saved Teams event ID>"}}` (default `text` output).
 
-- **Verify:** The `attendees` array contains an entry for the attendee email with `status.response` equal to `tentativelyAccepted`.
+- **Verify:** The attendee section shows the attendee email with a tentative response status.
+- **Escalate only if needed:** If the response status is not visible in text, re-call with `output: "raw"` and check `attendees[].status.response == "tentativelyAccepted"`. Note the escalation in the report.
 - **Fail:** If the attendee's response status has not updated.
 
 ### Step 22a -- Update meeting (meeting verb)

@@ -106,6 +106,7 @@ func RegisterDomainTool(s *mcpserver.MCPServer, cfg DomainToolConfig) VerbRegist
 			mcp.Enum(enumNames...),
 		),
 	)
+	toolOpts = append(toolOpts, aggregateSchemaOptions(cfg.Verbs)...)
 
 	tool := mcp.NewTool(cfg.Domain, toolOpts...)
 
