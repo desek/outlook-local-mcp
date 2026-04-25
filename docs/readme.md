@@ -18,7 +18,7 @@ go install github.com/desek/outlook-local-mcp/cmd/outlook-local-mcp@latest
 
 Download the `.mcpb` file from the [latest release](https://github.com/desek/outlook-local-mcp/releases/latest) and open it in Claude Desktop via **Settings > Extensions > Install from file**.
 
-For full setup instructions including Claude Desktop and Claude Code configuration, see [QUICKSTART.md](QUICKSTART.md).
+For full setup instructions including Claude Desktop and Claude Code configuration, see [quickstart.md](quickstart.md).
 
 ## Features
 
@@ -53,7 +53,7 @@ Call any domain with `operation: "help"` to list its verbs and parameters:
 
 ## In-server documentation access
 
-The server embeds its own documentation (README, QUICKSTART, and the Troubleshooting Guide). The LLM can search and retrieve it directly:
+The server embeds its own documentation as four user-facing files: `readme`, `quickstart`, `concepts`, and `troubleshooting` (see `docs/embed.go`). The LLM can search and retrieve them directly:
 
 ```
 {tool: "system", args: {operation: "list_docs"}}
