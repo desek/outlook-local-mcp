@@ -237,7 +237,8 @@ func restoreOne(
 		defer cancel()
 
 		_, tokenErr := cred.GetToken(ctx, policy.TokenRequestOptions{
-			Scopes: scopes,
+			Scopes:    scopes,
+			EnableCAE: true,
 		})
 
 		if tokenErr == nil {

@@ -427,7 +427,7 @@ Call `{tool: "calendar", args: {operation: "get_event", event_id: "<saved Teams 
 
 Read the **log file path** recorded in Step 0c. Inspect the log entries emitted during the test (from Step 1 onward).
 
-- **Verify:** Every tool call has a `DEBUG`-level "tool called" entry and an `INFO`-level (or `ERROR` for Steps 15, 23, 25) "tool completed" entry.
+- **Verify:** Every tool call has a `DEBUG`-level entry at the start of the operation and an `INFO`-level (or `ERROR` for Steps 15, 23, 25) "tool completed" entry. The DEBUG entry may be the generic `"tool called"` (read verbs and `create_event`, `create_meeting`, `update_event`) or a domain-specific message (`"rescheduling event"`, `"deleting event"`, `"responding to event"`, `"cancelling event"`); both forms satisfy this check.
 - **Verify:** The `calendar.create_event` audit entry includes the event ID.
 - **Verify:** The `calendar.delete_event` audit entry includes the event ID and confirms deletion.
 - **Verify:** The `calendar.reschedule_event` audit entry includes the event ID.
@@ -538,7 +538,7 @@ Call `{tool: "mail", args: {operation: "create_draft", to: "<own UPN>", subject:
 
 ### Step 32 -- Update draft
 
-Call `{tool: "mail", args: {operation: "update_draft", id: "<draft ID>", subject: "CRUD test draft (updated)"}}`.
+Call `{tool: "mail", args: {operation: "update_draft", message_id: "<draft ID>", subject: "CRUD test draft (updated)"}}`.
 
 - **Verify:** Response is plain text confirming the update.
 - **Verify:** A subsequent `{tool: "mail", args: {operation: "get_message", id: "<draft ID>"}}` call shows the updated subject.
@@ -546,7 +546,7 @@ Call `{tool: "mail", args: {operation: "update_draft", id: "<draft ID>", subject
 
 ### Step 33 -- Create reply draft
 
-Call `{tool: "mail", args: {operation: "create_reply_draft", id: "<draft ID>", comment: "Replying to my own draft."}}`.
+Call `{tool: "mail", args: {operation: "create_reply_draft", message_id: "<draft ID>", comment: "Replying to my own draft."}}`. **Note:** `create_reply_draft` cannot reply to a draft message (Microsoft Graph constraint); the call is expected to return an error indicating the source must be a received or sent message. Fall back to using a recent Inbox message ID for this step.
 
 If the server rejects replying to a draft, instead pick the most recent message from `{tool: "mail", args: {operation: "list_messages", folder: "Inbox"}}` and reply to it. Record the reply draft ID as **reply draft ID**.
 
@@ -555,9 +555,9 @@ If the server rejects replying to a draft, instead pick the most recent message 
 
 ### Step 34 -- Delete reply draft and original draft
 
-Call `{tool: "mail", args: {operation: "delete_draft", id: "<reply draft ID>"}}` (if created).
+Call `{tool: "mail", args: {operation: "delete_draft", message_id: "<reply draft ID>"}}` (if created).
 
-Then call `{tool: "mail", args: {operation: "delete_draft", id: "<draft ID>"}}`.
+Then call `{tool: "mail", args: {operation: "delete_draft", message_id: "<draft ID>"}}`.
 
 - **Verify:** Both calls return plain text delete confirmations.
 - **Verify:** A subsequent `{tool: "mail", args: {operation: "get_message", id: "<draft ID>"}}` returns an error (message no longer exists).
