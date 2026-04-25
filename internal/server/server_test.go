@@ -220,9 +220,8 @@ func TestRegisterTools_ReadOnly_False_AllWriteToolsPass(t *testing.T) {
 	}
 }
 
-// TestRegisterTools_AccountManagementToolsRegistered verifies that the three
-// account management tools (add_account, list_accounts, remove_account) are
-// registered and callable through the server.
+// TestRegisterTools_AccountManagementToolsRegistered verifies that the account
+// aggregate tool is registered and the list verb is callable through the server.
 func TestRegisterTools_AccountManagementToolsRegistered(t *testing.T) {
 	s := mcpserver.NewMCPServer("test-server", "0.0.1",
 		mcpserver.WithToolCapabilities(false),
@@ -240,8 +239,8 @@ func TestRegisterTools_AccountManagementToolsRegistered(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), testConfig(), nil)
 
-	// list_accounts should return a valid JSON response.
-	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"account_list","arguments":{}}}`
+	// account list verb should return a valid response.
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"account","arguments":{"operation":"list"}}}`
 	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
 	rpcResp, ok := resp.(mcp.JSONRPCResponse)
@@ -253,23 +252,23 @@ func TestRegisterTools_AccountManagementToolsRegistered(t *testing.T) {
 		t.Fatalf("expected *CallToolResult, got %T", rpcResp.Result)
 	}
 	if result.IsError {
-		t.Errorf("list_accounts should not return an error, got: %v", result.Content)
+		t.Errorf("account list verb should not return an error, got: %v", result.Content)
 	}
 	if len(result.Content) == 0 {
-		t.Fatal("expected non-empty content from list_accounts")
+		t.Fatal("expected non-empty content from account list verb")
 	}
 	tc, ok := result.Content[0].(mcp.TextContent)
 	if !ok {
 		t.Fatalf("expected TextContent, got %T", result.Content[0])
 	}
 	if !strings.Contains(tc.Text, "default") {
-		t.Errorf("list_accounts output %q should contain 'default' account", tc.Text)
+		t.Errorf("account list output %q should contain 'default' account", tc.Text)
 	}
 }
 
-// TestRegisterTools_ListAccounts_WorksInReadOnlyMode verifies that
-// list_accounts is accessible even when readOnly is true, since it is
-// inherently read-only and not gated by ReadOnlyGuard.
+// TestRegisterTools_ListAccounts_WorksInReadOnlyMode verifies that the account
+// list verb is accessible even when readOnly is true, since it is inherently
+// read-only and not gated by ReadOnlyGuard.
 func TestRegisterTools_ListAccounts_WorksInReadOnlyMode(t *testing.T) {
 	s := mcpserver.NewMCPServer("test-server", "0.0.1",
 		mcpserver.WithToolCapabilities(false),
@@ -287,7 +286,7 @@ func TestRegisterTools_ListAccounts_WorksInReadOnlyMode(t *testing.T) {
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, true, identityMW, testRegistry(), testConfig(), nil)
 
-	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"account_list","arguments":{}}}`
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"account","arguments":{"operation":"list"}}}`
 	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
 	rpcResp, ok := resp.(mcp.JSONRPCResponse)
@@ -302,15 +301,16 @@ func TestRegisterTools_ListAccounts_WorksInReadOnlyMode(t *testing.T) {
 		if len(result.Content) > 0 {
 			if tc, ok := result.Content[0].(mcp.TextContent); ok {
 				if strings.Contains(tc.Text, "read-only mode") {
-					t.Error("list_accounts should not be blocked by read-only guard")
+					t.Error("account list verb should not be blocked by read-only guard")
 				}
 			}
 		}
 	}
 }
 
-// TestRegisterTools_RemoveAccount_ToolRegistered verifies that remove_account
-// is registered and responds (even if the removal fails due to missing label).
+// TestRegisterTools_RemoveAccount_ToolRegistered verifies that the account
+// remove verb is registered and responds (even if the removal fails due to a
+// missing label).
 func TestRegisterTools_RemoveAccount_ToolRegistered(t *testing.T) {
 	s := mcpserver.NewMCPServer("test-server", "0.0.1",
 		mcpserver.WithToolCapabilities(false),
@@ -330,7 +330,7 @@ func TestRegisterTools_RemoveAccount_ToolRegistered(t *testing.T) {
 
 	// Attempt to remove "nonexistent" — should return an error result (not a
 	// panic or unknown tool error).
-	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"account_remove","arguments":{"label":"nonexistent"}}}`
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"account","arguments":{"operation":"remove","label":"nonexistent"}}}`
 	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
 	rpcResp, ok := resp.(mcp.JSONRPCResponse)
@@ -341,8 +341,8 @@ func TestRegisterTools_RemoveAccount_ToolRegistered(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected *CallToolResult, got %T", rpcResp.Result)
 	}
-	// Expect an error because "nonexistent" doesn't exist, but the tool
-	// itself must be registered and reachable.
+	// Expect an error because "nonexistent" doesn't exist, but the verb
+	// must be registered and reachable.
 	if !result.IsError {
 		t.Error("expected IsError=true for removing nonexistent account")
 	}
@@ -416,8 +416,8 @@ func TestRegisterTools_DefaultAccountAtStartup(t *testing.T) {
 	// Must not panic and tools must be callable.
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, registry, testConfig(), nil)
 
-	// Verify list_accounts returns the default account.
-	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"account_list","arguments":{}}}`
+	// Verify account list verb returns the default account.
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"account","arguments":{"operation":"list"}}}`
 	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
 
 	rpcResp, ok := resp.(mcp.JSONRPCResponse)
@@ -429,14 +429,14 @@ func TestRegisterTools_DefaultAccountAtStartup(t *testing.T) {
 		t.Fatalf("expected *CallToolResult, got %T", rpcResp.Result)
 	}
 	if result.IsError {
-		t.Errorf("list_accounts should not return error, got: %v", result.Content)
+		t.Errorf("account list verb should not return error, got: %v", result.Content)
 	}
 	tc, ok := result.Content[0].(mcp.TextContent)
 	if !ok {
 		t.Fatalf("expected TextContent, got %T", result.Content[0])
 	}
 	if !strings.Contains(tc.Text, "default") {
-		t.Errorf("list_accounts output %q should contain 'default'", tc.Text)
+		t.Errorf("account list output %q should contain 'default'", tc.Text)
 	}
 }
 
@@ -670,8 +670,8 @@ func TestRegisterTools_MailEnabled(t *testing.T) {
 		}
 	}
 
-	// Verify total count: 21 base + 7 mail (read-only) = 28.
-	const expectedTotal = 28
+	// Verify total count: 16 base (14 calendar + 1 account aggregate + 1 system aggregate) + 7 mail = 23.
+	const expectedTotal = 23
 	if got := len(registered); got != expectedTotal {
 		t.Errorf("expected %d tools with mail enabled, got %d", expectedTotal, got)
 	}

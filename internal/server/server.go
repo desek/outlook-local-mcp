@@ -97,19 +97,31 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	s.AddTool(tools.NewUpdateMeetingTool(), wrapWrite("calendar_update_meeting", "write", tools.HandleUpdateEvent(retryCfg, timeout, cfg.DefaultTimezone)))
 	s.AddTool(tools.NewRescheduleMeetingTool(), wrapWrite("calendar_reschedule_meeting", "write", tools.HandleRescheduleEvent(retryCfg, timeout, cfg.DefaultTimezone)))
 
-	// CR-0025: Account management tools. These do NOT go through
-	// AccountResolver (they manage the registry) or ReadOnlyGuard (they are
-	// not calendar operations). list_accounts is inherently read-only.
-	s.AddTool(tools.NewAddAccountTool(), authMW(observability.WithObservability("account_add", m, t, audit.AuditWrap("account_add", "write", tools.HandleAddAccount(registry, cfg)))))
-	s.AddTool(tools.NewListAccountsTool(), authMW(observability.WithObservability("account_list", m, t, audit.AuditWrap("account_list", "read", tools.HandleListAccounts(registry)))))
-	s.AddTool(tools.NewRemoveAccountTool(), authMW(observability.WithObservability("account_remove", m, t, audit.AuditWrap("account_remove", "write", tools.HandleRemoveAccount(registry, cfg.AccountsPath)))))
-
-	// CR-0056: Account lifecycle tools (login, logout, refresh). Same pattern as
-	// other account management tools: authMW -> WithObservability -> AuditWrap.
-	// They manage the registry directly and do NOT use AccountResolver.
-	s.AddTool(tools.NewLoginAccountTool(), authMW(observability.WithObservability("account_login", m, t, audit.AuditWrap("account_login", "write", tools.HandleLoginAccount(registry, cfg)))))
-	s.AddTool(tools.NewLogoutAccountTool(), authMW(observability.WithObservability("account_logout", m, t, audit.AuditWrap("account_logout", "write", tools.HandleLogoutAccount(registry)))))
-	s.AddTool(tools.NewRefreshAccountTool(), authMW(observability.WithObservability("account_refresh", m, t, audit.AuditWrap("account_refresh", "write", tools.HandleRefreshAccount(registry, cfg)))))
+	// CR-0060 Phase 3b: account domain aggregate tool. Replaces the individual
+	// account_add, account_list, account_remove, account_login, account_logout,
+	// and account_refresh registrations with a single "account" tool dispatched
+	// by operation verb. Each verb's handler is pre-wrapped with authMW,
+	// observability, and audit middleware inside buildAccountVerbs using the
+	// fully-qualified identity "account.<verb>" per FR-13/FR-14.
+	//
+	// The accRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *accRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	accVerbs, accRegistry := buildAccountVerbs(accountVerbsConfig{
+		registry: registry,
+		cfg:      cfg,
+		m:        m,
+		tracer:   t,
+		authMW:   authMW,
+	})
+	populatedAcc := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+		Domain:          "account",
+		Intro:           "Account management for Microsoft accounts connected to the Outlook MCP server.",
+		Verbs:           accVerbs,
+		ToolAnnotations: accountToolAnnotations(),
+	})
+	*accRegistry = populatedAcc
 
 	// CR-0060 Phase 3a: system domain aggregate tool. Replaces the individual
 	// status and complete_auth tool registrations with a single "system" tool
@@ -163,9 +175,9 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		s.AddTool(tools.NewDeleteDraftTool(), wrapWrite("mail_delete_draft", "delete", tools.NewHandleDeleteDraft(retryCfg, timeout)))
 	}
 
-	// Tool count: 14 calendar + 6 account + 1 system aggregate (plus mail when enabled).
-	// complete_auth is a verb within system, not a separate registered tool.
-	toolCount := 21
+	// Tool count: 14 calendar + 1 account aggregate + 1 system aggregate (plus mail when enabled).
+	// complete_auth is a verb within system; account verbs are within account.
+	toolCount := 16
 	if cfg.MailEnabled {
 		toolCount += 6
 	}

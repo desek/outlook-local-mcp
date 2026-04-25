@@ -157,28 +157,8 @@
       "description": "Delete a mail draft by ID. Only messages in the Drafts folder may be deleted through this tool. Requires Mail.ReadWrite."
     },
     {
-      "name": "account_add",
-      "description": "Add and authenticate a new Microsoft account with isolated token cache and auth record."
-    },
-    {
-      "name": "account_list",
-      "description": "List all registered accounts and their authentication status."
-    },
-    {
-      "name": "account_remove",
-      "description": "Remove a registered account. The default account cannot be removed."
-    },
-    {
-      "name": "account_login",
-      "description": "Re-authenticate an existing disconnected account using its persisted auth method, client ID, and tenant ID."
-    },
-    {
-      "name": "account_logout",
-      "description": "Disconnect an account without removing it from the registry. Clears the cached token and Graph client; the account configuration is preserved."
-    },
-    {
-      "name": "account_refresh",
-      "description": "Force a token refresh for an authenticated account. Returns the new token expiry time on success."
+      "name": "account",
+      "description": "Account management for Microsoft accounts. Required operation: help (detailed docs), add (add and authenticate a new account), remove (remove an account and clear tokens), list (list all accounts with state), login (re-authenticate a disconnected account), logout (disconnect without removing), refresh (force token refresh)."
     },
     {
       "name": "system",

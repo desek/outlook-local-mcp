@@ -24,9 +24,9 @@ type manifestDoc struct {
 	Tools []manifestTool `json:"tools"`
 }
 
-// TestManifest_NewTools verifies that the three CR-0056 account lifecycle
-// tools (account_login, account_logout, account_refresh) are present in the
-// extension manifest so Claude Desktop can discover them (AC-16).
+// TestManifest_NewTools verifies that the CR-0060 Phase 3b account aggregate
+// tool is present in the extension manifest, replacing the individual
+// account_login, account_logout, and account_refresh entries (AC-12).
 func TestManifest_NewTools(t *testing.T) {
 	data, err := os.ReadFile("manifest.json")
 	if err != nil {
@@ -37,7 +37,12 @@ func TestManifest_NewTools(t *testing.T) {
 		t.Fatalf("unmarshal manifest.json: %v", err)
 	}
 
-	required := []string{"account_login", "account_logout", "account_refresh"}
+	// After CR-0060 Phase 3b the individual account_* tools are replaced by the
+	// single "account" aggregate tool. Verify it is present.
+	required := []string{"account"}
+	// Verify no old individual account_* names remain.
+	deprecated := []string{"account_login", "account_logout", "account_refresh", "account_add", "account_remove", "account_list"}
+
 	present := make(map[string]bool, len(m.Tools))
 	for _, tool := range m.Tools {
 		present[tool.Name] = true
@@ -45,6 +50,11 @@ func TestManifest_NewTools(t *testing.T) {
 	for _, name := range required {
 		if !present[name] {
 			t.Errorf("manifest.json tools[] missing required entry %q", name)
+		}
+	}
+	for _, name := range deprecated {
+		if present[name] {
+			t.Errorf("manifest.json tools[] should not contain deprecated entry %q (replaced by 'account' aggregate)", name)
 		}
 	}
 }
