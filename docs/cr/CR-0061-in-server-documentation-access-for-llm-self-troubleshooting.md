@@ -1,6 +1,6 @@
 ---
 name: in-server-documentation-access-for-llm-self-troubleshooting
-description: Expose project documentation (README, QUICKSTART, troubleshooting guide, tool reference, CR catalog) through MCP resources and `system` domain verbs (`list_docs`, `search_docs`, `get_docs`) so the LLM can autonomously retrieve authoritative help when tool calls fail or user questions reference setup, permissions, or known issues.
+description: Expose user-facing project documentation (README, QUICKSTART, troubleshooting guide) through MCP resources and `system` domain verbs (`list_docs`, `search_docs`, `get_docs`) so the LLM can autonomously retrieve authoritative help when tool calls fail or user questions reference setup, permissions, or known issues. Engineering documentation (CRs, reference spec, research notes, changelog) is intentionally not embedded.
 id: "CR-0061"
 status: "proposed"
 date: 2026-04-20
@@ -57,8 +57,8 @@ flowchart LR
 
 Introduce an **in-server documentation surface** with three coordinated pieces:
 
-1. **Embedded documentation bundle.** A curated subset of Markdown files is embedded into the binary via Go `embed.FS`. The bundle includes a new `docs/troubleshooting.md`, the existing `QUICKSTART.md`, `README.md`, `CHANGELOG.md`, `docs/reference/outlook-local-mcp-spec.md`, `docs/research/authentication-channels.md`, and a generated index of all CRs (title + one-line summary) plus full text for a maintainer-curated shortlist of CRs tagged `llm-relevant: true` in their frontmatter.
-2. **MCP Resources.** Each embedded document is exposed as an MCP resource with URI scheme `doc://outlook-local-mcp/{slug}` (e.g., `doc://outlook-local-mcp/troubleshooting`, `doc://outlook-local-mcp/quickstart`, `doc://outlook-local-mcp/cr/CR-0058`). Resources are discoverable via the standard `resources/list` method and fetchable via `resources/read`.
+1. **Embedded documentation bundle.** A curated set of **user-facing** Markdown files is embedded into the binary via Go `embed.FS`. The bundle is intentionally limited to: `README.md`, `QUICKSTART.md`, and a new `docs/troubleshooting.md`. **Engineering documentation is explicitly excluded** from the bundle: Change Requests (`docs/cr/**`), the reference specification (`docs/reference/outlook-local-mcp-spec.md`), research notes (`docs/research/**`), and `CHANGELOG.md` are **not** embedded and are **not** exposed via the in-server surface. They remain available in the source repository for contributors and via `llms.txt` for off-repo LLM clients.
+2. **MCP Resources.** Each embedded document is exposed as an MCP resource with URI scheme `doc://outlook-local-mcp/{slug}` (e.g., `doc://outlook-local-mcp/readme`, `doc://outlook-local-mcp/quickstart`, `doc://outlook-local-mcp/troubleshooting`). Resources are discoverable via the standard `resources/list` method and fetchable via `resources/read`.
 3. **Three new verbs on the `system` aggregate tool.** Per CR-0060, server-level meta verbs live on `system`. These give the LLM a deterministic search/fetch path independent of client-side resource support:
    * `system.list_docs` — returns the catalog of available docs (slug, title, one-line summary, tags).
    * `system.search_docs` — case-insensitive keyword search across the bundle; returns ranked snippets with slug + line range.
@@ -78,12 +78,10 @@ flowchart LR
     L -->|docs_search / resources/read| S
     S -->|markdown| L
     L -->|grounded remediation| U
-    subgraph Bundle[embed.FS]
-        T[troubleshooting.md]
-        Q[QUICKSTART.md]
+    subgraph Bundle[embed.FS - user-facing only]
         R[README.md]
-        C[CR catalog]
-        X[reference spec]
+        Q[QUICKSTART.md]
+        T[troubleshooting.md]
     end
     S --- Bundle
 ```
@@ -101,7 +99,7 @@ flowchart LR
 7. The new verbs **MUST** conform to project conventions per CR-0060 and CLAUDE.md: registered in the `system` domain verb registry (`internal/tools/dispatch_registry.go` + `internal/tools/help/`), text-tier default output (CR-0051), per-verb annotation semantics documented in `system`'s `operation="help"` output, and **no** new entries in `extension/manifest.json` (the four aggregate tools already cover the surface). The conservative aggregate annotations on `system` (CR-0052/CR-0060) **MUST** remain unchanged since the new verbs are read-only, idempotent, non-destructive, and local.
 8. A new `docs/troubleshooting.md` **MUST** be authored covering at minimum: authentication failures, token refresh, Keychain locked / unavailable, multi-account resolution, Graph 429 throttling, `InefficientFilter` errors, `MailEnabled`/`MailManageEnabled` disabled-tool behaviour, `ReadOnly` mode, log file location, and the `account_*` lifecycle.
 9. Known error classes returned by tool handlers **MUST** include a `see` field in the error payload pointing to the relevant `doc://` URI when one exists.
-10. The CR frontmatter schema **MUST** be extended with an optional `llm-relevant: true|false` boolean; the build-time bundling step **MUST** include the full text of any CR marked `llm-relevant: true` and include all other CRs as index entries only (id, title, status, one-line summary).
+10. The embedded bundle **MUST** be limited to user-facing documentation (`README.md`, `QUICKSTART.md`, `docs/troubleshooting.md`). Engineering documentation — Change Requests under `docs/cr/**`, the reference spec at `docs/reference/outlook-local-mcp-spec.md`, research notes under `docs/research/**`, and `CHANGELOG.md` — **MUST NOT** be embedded, exposed as MCP resources, or returned by any `system.*_docs` verb. A test **MUST** fail the build if any path under those directories is added to the bundle.
 11. The `system.status` verb output **MUST** include a `docs` section listing the base resource URI (`doc://outlook-local-mcp/`) and the slug of the troubleshooting document so the LLM can discover the surface from a single known entry point.
 12. The documentation bundle **MUST** be regenerated at build time (not manually copied) via a `make docs-bundle` target that refreshes the embedded index and verifies every referenced slug resolves.
 13. `README.md` **MUST** be refactored to target a human audience: project pitch, screenshots/quotes where useful, install/quick-start pointer, supported features, link to `QUICKSTART.md`, link to `llms.txt` for LLM consumers, contributing/license. Deep configuration reference, troubleshooting walls, and CR-derived implementation detail **MUST** move out of `README.md` into the dedicated docs (`QUICKSTART.md`, `docs/troubleshooting.md`, `docs/reference/outlook-local-mcp-spec.md`) so the front page stays scannable.
@@ -132,7 +130,6 @@ flowchart LR
 * `internal/graph/errors.go` (add `see` field mapping for known error classes).
 * `extension/manifest.json` (no change — the four aggregate tools are unchanged).
 * `docs/troubleshooting.md` (new).
-* `docs/cr/*.md` frontmatter (add optional `llm-relevant` field).
 * `README.md` (refactored for a human audience; deep content moved into `QUICKSTART.md` / `docs/troubleshooting.md` / `docs/reference/outlook-local-mcp-spec.md`).
 * `llms.txt` (new, repository root, generated by `make docs-bundle`).
 * `internal/docs/llmstxt.go` (new generator that emits `llms.txt` from the same catalog used for the embed bundle).
@@ -157,7 +154,7 @@ flowchart LR
 * Semantic/vector search over the bundle — substring + token ranking is sufficient for a ≤2 MiB corpus; vector indexing deferred to a future CR.
 * Live documentation fetched from GitHub or a remote CDN — the bundle is embedded to preserve offline operation.
 * Localization of documentation — English only in this CR.
-* Rewriting existing CRs for LLM consumption — only the curated shortlist is included in full; the rest remain index-only.
+* Embedding any engineering documentation (CRs, reference spec, research notes, changelog) — these are deliberately excluded from the in-server surface. Off-repo LLM clients can reach them through the absolute GitHub links in `llms.txt`.
 * Generating `llms-ctx.txt` / `llms-ctx-full.txt` expanded context files — the standard's `llms_txt2ctx` step is deferred; downstream LLM clients can run it themselves if needed.
 * Rewriting `QUICKSTART.md`, `CHANGELOG.md`, or other existing docs beyond what the README refactor displaces into them.
 * Interactive "wizard" remediation flows — the LLM drives remediation using the retrieved text; no new elicitation UI is added.
@@ -305,14 +302,16 @@ Then the generated catalog file lists every embedded slug
   And no bundled file matches the secret-pattern denylist
 ```
 
-### AC-7: `llm-relevant` CRs are included in full
+### AC-7: Engineering docs are excluded from the bundle
 
 ```gherkin
-Given a CR's frontmatter contains `llm-relevant: true`
+Given the embedded documentation bundle
 When the bundle is built
-Then that CR's full text is embedded
-  And its slug is `cr/CR-XXXX`
-  And CRs without that flag appear only in the index with id, title, status, and summary
+Then it contains only `readme`, `quickstart`, and `troubleshooting`
+  And no path under `docs/cr/`, `docs/reference/`, or `docs/research/` is embedded
+  And `CHANGELOG.md` is not embedded
+  And the `system.list_docs` verb returns exactly those three slugs
+  And the build fails if a test detects any engineering-doc path in the bundle
 ```
 
 ### AC-8: README targets humans, llms.txt targets LLMs
@@ -400,7 +399,7 @@ make ci
 
 **Likelihood:** medium
 **Impact:** medium
-**Mitigation:** hard 2 MiB budget enforced by `TestBundleSizeUnder2MiB`; CRs default to index-only and require an explicit `llm-relevant: true` opt-in to include full text.
+**Mitigation:** hard 2 MiB budget enforced by `TestBundleSizeUnder2MiB`; the bundle is restricted to three user-facing files (`README.md`, `QUICKSTART.md`, `docs/troubleshooting.md`) — engineering docs (CRs, reference spec, research notes, changelog) are excluded by an explicit allowlist and a build-time test that fails if any disallowed path is added.
 
 ### Risk 3: Secrets or internal notes accidentally embedded
 
