@@ -16,11 +16,11 @@ source-commit: 631f27f
 
 ## Change Summary
 
-The server currently exposes 26 individually registered MCP tools. This CR consolidates them into four domain tools — `calendar`, `mail`, `account`, and `system` — each dispatched by a required `operation` (verb) parameter. Every domain tool **MUST** also support an `operation="help"` verb that returns detailed documentation for every operation it supports, while its top-level description lists all operations in minimal form.
+The server currently exposes up to 32 individually registered MCP tools (14 calendar + 11 mail + 6 account + 1 system, plus the conditional `complete_auth` system tool when `auth=auth_code`). This CR consolidates them into four domain tools — `calendar`, `mail`, `account`, and `system` — each dispatched by a required `operation` (verb) parameter. Every domain tool **MUST** also support an `operation="help"` verb that returns detailed documentation for every operation it supports, while its top-level description lists all operations in minimal form.
 
 ## Motivation and Background
 
-The MCP tool catalogue has grown from 14 calendar tools, 4 mail tools, 6 account tools, and 2 system tools to a 26-tool surface that pressures LLM context windows, inflates tool-picker UI lists, and fragments related operations (e.g. `calendar_create_event` vs. `calendar_create_meeting`). Each tool's full schema is loaded into the LLM's context even when unused; across 26 tools this consumes thousands of tokens before the user has asked anything. Aggregating to four domain tools with an intentionally terse top-level description and an on-demand `help` verb lets the LLM discover operations lazily, keeping cold-start tool descriptions compact while still allowing any operation to be invoked.
+The MCP tool catalogue has grown from 14 calendar tools, 11 mail tools, 6 account tools, and 1–2 system tools to a 32-tool surface that pressures LLM context windows, inflates tool-picker UI lists, and fragments related operations (e.g. `calendar_create_event` vs. `calendar_create_meeting`). Each tool's full schema is loaded into the LLM's context even when unused; across 32 tools this consumes thousands of tokens before the user has asked anything. Aggregating to four domain tools with an intentionally terse top-level description and an on-demand `help` verb lets the LLM discover operations lazily, keeping cold-start tool descriptions compact while still allowing any operation to be invoked.
 
 ## Change Drivers
 
@@ -32,12 +32,12 @@ The MCP tool catalogue has grown from 14 calendar tools, 4 mail tools, 6 account
 
 ## Current State
 
-The server registers 26 distinct MCP tools in `internal/server/server.go`, each with its own file in `internal/tools/`, its own `mcp.NewTool(...)` definition, its own entry in `extension/manifest.json`, its own annotation test, and its own middleware wiring (`wrap`/`wrapWrite`, `WithObservability`, `AuditWrap`). The current tool inventory is:
+The server registers up to 32 distinct MCP tools in `internal/server/server.go`, each with its own file in `internal/tools/`, its own `mcp.NewTool(...)` definition, its own entry in `extension/manifest.json`, its own annotation test, and its own middleware wiring (`wrap`/`wrapWrite`, `WithObservability`, `AuditWrap`). The current tool inventory (per CR-0056 and CR-0058) is:
 
 * **calendar (14):** `calendar_list`, `calendar_list_events`, `calendar_get_event`, `calendar_search_events`, `calendar_create_event`, `calendar_update_event`, `calendar_delete_event`, `calendar_respond_event`, `calendar_reschedule_event`, `calendar_create_meeting`, `calendar_update_meeting`, `calendar_cancel_meeting`, `calendar_reschedule_meeting`, `calendar_get_free_busy`.
-* **mail (4):** `mail_list_folders`, `mail_list_messages`, `mail_get_message`, `mail_search_messages`.
+* **mail (11):** read — `mail_list_folders`, `mail_list_messages`, `mail_get_message`, `mail_search_messages` (always registered when mail is enabled), plus `mail_get_conversation`, `mail_list_attachments`, `mail_get_attachment` (when `MailEnabled`); draft management — `mail_create_draft`, `mail_create_reply_draft`, `mail_create_forward_draft`, `mail_update_draft`, `mail_delete_draft` (when `MailManageEnabled`).
 * **account (6):** `account_add`, `account_remove`, `account_list`, `account_login`, `account_logout`, `account_refresh`.
-* **system (2):** `status`, `complete_auth`.
+* **system (1, plus 1 conditional):** `status` (always); `complete_auth` (only when `auth=auth_code`).
 
 Tool naming follows CR-0050's `{domain}_{operation}[_{resource}]` convention. Annotations follow CR-0052. Response tiering follows CR-0051's `output=text|summary|raw` contract on read tools.
 
@@ -45,30 +45,30 @@ Tool naming follows CR-0050's `{domain}_{operation}[_{resource}]` convention. An
 
 ```mermaid
 flowchart TD
-    Client[LLM Client] -->|sees 26 tool schemas| Server[MCP Server]
+    Client[LLM Client] -->|sees up to 32 tool schemas| Server[MCP Server]
     Server --> C1[calendar_list]
     Server --> C2[calendar_list_events]
     Server --> C3[...12 more calendar tools]
     Server --> M1[mail_list_folders]
-    Server --> M2[...3 more mail tools]
+    Server --> M2[...10 more mail tools]
     Server --> A1[account_add]
     Server --> A2[...5 more account tools]
     Server --> S1[status]
-    Server --> S2[complete_auth]
+    Server --> S2[complete_auth conditional]
 ```
 
 ## Proposed Change
 
-Replace the 26-tool surface with four aggregate domain tools. Each domain tool **MUST** accept a required `operation` string parameter selecting a verb; all other parameters are operation-specific and validated per verb. The top-level tool description **MUST** enumerate every supported operation with a one-line (≤80 char) summary. A `help` operation **MUST** return rich, per-operation documentation (purpose, parameters, return shape, examples, output tiering notes).
+Replace the up-to-32-tool surface with four aggregate domain tools. Each domain tool **MUST** accept a required `operation` string parameter selecting a verb; all other parameters are operation-specific and validated per verb. The top-level tool description **MUST** enumerate every supported operation with a one-line (≤80 char) summary. A `help` operation **MUST** return rich, per-operation documentation (purpose, parameters, return shape, examples, output tiering notes).
 
 ### Tool Inventory (After)
 
 | Domain Tool | Operations |
 |-------------|-----------|
 | `calendar` | `help`, `list_calendars`, `list_events`, `get_event`, `search_events`, `create_event`, `update_event`, `delete_event`, `respond_event`, `reschedule_event`, `create_meeting`, `update_meeting`, `cancel_meeting`, `reschedule_meeting`, `get_free_busy` |
-| `mail` | `help`, `list_folders`, `list_messages`, `get_message`, `search_messages` |
+| `mail` | `help`, `list_folders`, `list_messages`, `get_message`, `search_messages`, `get_conversation` (gated by `MailEnabled`), `list_attachments` (gated by `MailEnabled`), `get_attachment` (gated by `MailEnabled`), `create_draft` (gated by `MailManageEnabled`), `create_reply_draft` (gated by `MailManageEnabled`), `create_forward_draft` (gated by `MailManageEnabled`), `update_draft` (gated by `MailManageEnabled`), `delete_draft` (gated by `MailManageEnabled`) |
 | `account` | `help`, `add`, `remove`, `list`, `login`, `logout`, `refresh` |
-| `system` | `help`, `status`, `complete_auth` |
+| `system` | `help`, `status`, `complete_auth` (only registered when `auth=auth_code`) |
 
 Verb names **MUST** be self-explanatory English verbs (or verb phrases) that require no prefix — `create_event`, not `calendar_create_event`, because the domain is implicit in the tool name.
 
@@ -81,11 +81,11 @@ flowchart TD
     Server --> Mail[mail]
     Server --> Acc[account]
     Server --> Sys[system]
-    Cal -->|operation=help| HelpC[detailed docs for 14 verbs]
+    Cal -->|operation=help| HelpC[detailed docs for 14 verbs + help]
     Cal -->|operation=list_events| Dispatch1[existing handler]
-    Mail -->|operation=help| HelpM[detailed docs for 4 verbs]
-    Acc -->|operation=help| HelpA[detailed docs for 6 verbs]
-    Sys -->|operation=help| HelpS[detailed docs for 2 verbs]
+    Mail -->|operation=help| HelpM[detailed docs for up to 11 verbs + help]
+    Acc -->|operation=help| HelpA[detailed docs for 6 verbs + help]
+    Sys -->|operation=help| HelpS[detailed docs for 1-2 verbs + help]
 ```
 
 ### Tool Description Shape (Minimal, Top-Level)
@@ -98,10 +98,10 @@ Example for `calendar`:
 
 `operation="help"` **MUST**:
 
-* accept an optional `verb` parameter — when omitted, return docs for every operation; when set, return docs only for the named verb.
-* return a `text` response by default (CR-0051 tier 1) and a structured JSON response when `output="raw"` or `output="summary"`.
-* document for every verb: purpose, required parameters, optional parameters, return shape per `output` tier, side effects, error conditions, and at least one example invocation.
-* **MUST NOT** call Microsoft Graph (open-world hint: `false` for the `help` verb dispatch path).
+* **MUST** accept an optional `verb` parameter; when omitted, the verb **MUST** return docs for every operation; when set, the verb **MUST** return docs only for the named verb and **MUST** return a structured error if the named verb is not registered for the domain.
+* **MUST** honour the CR-0051 three-tier output contract: `output=text` (default) returns CLI-like text, `output=summary` returns a compact JSON object containing only `{name, summary}` per verb (the explicitly chosen summary field set), and `output=raw` returns the full structured JSON payload defined in this CR.
+* **MUST** document for every verb: purpose, required parameters, optional parameters, return shape per `output` tier, side effects, error conditions, and at least one example invocation.
+* **MUST NOT** call Microsoft Graph and **MUST NOT** trigger any external network I/O.
 
 ## Requirements
 
@@ -132,13 +132,15 @@ Example for `calendar`:
 
 ## Affected Components
 
-* `internal/server/server.go` — tool registration is rewritten; 26 `RegisterTool` blocks collapse to 4 domain registrations plus a dispatch layer.
-* `internal/tools/` — each existing handler is kept but exposed through a new domain dispatcher (e.g. `internal/tools/calendar/dispatch.go`). Handlers themselves **MUST** remain pure and reusable.
-* `internal/tools/help/` (new) — centralised help-rendering helper: takes a verb registry and emits text / JSON docs.
-* `extension/manifest.json` — shrinks from 26 entries to 4.
+* `internal/server/server.go` — tool registration is rewritten; up to 32 `RegisterTool` blocks collapse to 4 domain registrations plus a dispatch layer.
+* `internal/tools/dispatch.go` (new) — single dispatcher that owns the `Verb` registry type and `RegisterDomainTool` helper. Per CLAUDE.md's small-isolated-files principle, related helpers (registry type, enum builder, description composer, dispatcher) **MUST** live in their own files (e.g., `dispatch_registry.go`, `dispatch_describe.go`, `dispatch_route.go`).
+* `internal/tools/` — each existing handler file is kept and exposed through the new dispatcher. Handlers themselves **MUST** remain pure and reusable and **MUST NOT** be moved into per-domain subpackages in this CR.
+* `internal/tools/help/` (new) — centralised help-rendering helper: takes a verb registry and emits text, summary, and raw JSON docs as separate small files (`render.go`, `render_text.go`, `render_summary.go`, `render_raw.go`).
+* `extension/manifest.json` — shrinks from up to 32 entries to 4.
 * `internal/tools/tool_annotations_test.go` — rewritten to cover four aggregate tools and per-verb documented semantics.
 * `internal/tools/tool_description_test.go` — updated to assert that every verb appears in the top-level description.
 * `docs/prompts/mcp-tool-crud-test.md` — updated per CLAUDE.md tool-testing instructions.
+* `docs/cr/CR-0060-validation-report.md` (new) — captures the cold-start schema-size measurement required by NFR-1 and AC-8.
 * `README.md` / user-facing docs — updated examples.
 
 ## Scope Boundaries
@@ -197,7 +199,13 @@ Migrate each domain in sequence: `system` (smallest, 2 verbs) → `account` (6) 
 
 ### Phase 4 — Tests, docs, manifest finalisation
 
-Rewrite annotation + description tests. Update `docs/prompts/mcp-tool-crud-test.md`. Update `README.md` and `extension/manifest.json`. Measure and record cold-start schema size.
+Implementers **MUST**:
+
+1. Rewrite `internal/tools/tool_annotations_test.go` and `internal/tools/tool_description_test.go` to cover the four aggregate tools.
+2. Update `docs/prompts/mcp-tool-crud-test.md` so every CRUD step uses the `{tool, operation}` invocation shape and exercises every verb at least once (including `help`).
+3. Update `README.md` and the user-facing docs with the new invocation shape.
+4. Update `extension/manifest.json` so its `tools` array contains exactly the four aggregate entries.
+5. Measure cold-start schema size for the pre- and post-CR surfaces and write `docs/cr/CR-0060-validation-report.md` recording both byte counts and the percentage reduction.
 
 ### Implementation Flow
 
@@ -226,6 +234,11 @@ flowchart LR
 | `internal/tools/tool_description_test.go` | `TestTopLevelDescription_ListsAllVerbs` | Each domain tool description names every verb | registered tools | Assertion passes for 4 domains |
 | `internal/tools/tool_annotations_test.go` | `TestAggregateAnnotations_Conservative` | Aggregate annotations use most conservative verb | calendar registry | `readOnlyHint=false`, `destructiveHint=true` |
 | `internal/server/server_integration_test.go` | `TestServer_RegistersFourTools` | Server exposes exactly 4 tools | boot sequence | Tool count == 4 |
+| `internal/tools/dispatch_test.go` | `TestDispatch_UnknownParameter` | Unknown parameter for a known verb is rejected | known verb + extra `bogus_param` | Error names parameter and verb |
+| `internal/tools/dispatch_test.go` | `TestDispatch_ObservabilityAttributes` | Each invocation tags `mcp.tool` and `mcp.operation` | recorded test exporter | Span carries both attributes |
+| `internal/tools/dispatch_test.go` | `TestDispatch_AuditFullyQualifiedName` | Audit log uses `{domain}.{operation}` | stub audit sink | Recorded entry equals `calendar.delete_event` |
+| `internal/tools/help/render_test.go` | `TestRenderHelp_SummaryTier` | `output="summary"` returns `{name, summary}` per verb | full registry | JSON matches summary field set |
+| `internal/tools/help/render_test.go` | `TestRenderHelp_UnknownVerb` | Unknown `verb` argument errors out | registry + `verb="bogus"` | Structured error |
 
 ### Tests to Modify
 
@@ -320,7 +333,39 @@ Then the total byte count is at least 60% smaller than the pre-CR baseline
   And the baseline and new size are recorded in CR-0060-validation-report.md
 ```
 
-### AC-9: Manifest and tests updated
+### AC-9: Aggregate annotations are conservative
+
+```gherkin
+Given the calendar domain hosts both read-only and destructive verbs
+When an MCP client inspects the annotations of tool "calendar"
+Then readOnlyHint is false
+  And destructiveHint is true
+  And idempotentHint is false
+  And openWorldHint is true
+  And the per-verb semantics are documented in the help output
+```
+
+### AC-10: Unknown verb parameters rejected
+
+```gherkin
+Given the server is running
+When the client calls tool "calendar" with {"operation": "delete_event", "event_id": "abc", "bogus_param": 1}
+Then the response is a structured error
+  And the error names "bogus_param"
+  And the error names the verb "delete_event"
+```
+
+### AC-11: Observability attributes recorded per verb
+
+```gherkin
+Given the server is running with OpenTelemetry enabled
+When the client calls tool "mail" with {"operation": "list_messages"}
+Then the emitted span carries attribute mcp.tool="mail"
+  And the emitted span carries attribute mcp.operation="list_messages"
+  And the metric counters are tagged with the same attributes
+```
+
+### AC-12: Manifest and tests updated
 
 ```gherkin
 Given implementation is complete
@@ -426,3 +471,22 @@ Chosen approach: "four domain tools with a required `operation` verb and a self-
 * CR-0052 — MCP tool annotations
 * CR-0054 — Split event/meeting tools
 * CR-0058 — Complete mail management
+
+<!--
+## CR Review Summary (2026-04-25)
+
+Findings: 8
+
+Fixes applied:
+1. Updated stale tool inventory (26 → up to 32) in Change Summary, Motivation, Current State, mermaid diagram, and Proposed Change to align with CR-0056 + CR-0058 reality (14 calendar + 11 mail + 6 account + 1–2 system).
+2. Expanded the `mail` and `system` verb tables with the missing verbs (`get_conversation`, attachments, draft management, conditional `complete_auth`) and noted feature-flag gating.
+3. Tightened the help-verb contract: each bullet now uses MUST/MUST NOT, and the verb explicitly honours the CR-0051 three-tier output model with an explicit summary field set, removing ambiguity about `summary` vs `raw`.
+4. Added Affected Components entries for `internal/tools/dispatch.go`, `internal/tools/help/` file split, and `docs/cr/CR-0060-validation-report.md` so AC-8's referenced artifact is in scope.
+5. Reinforced the small-isolated-files principle (CLAUDE.md) by listing per-responsibility files for the dispatcher and help renderer.
+6. Rewrote Phase 4 as numbered MUST steps including the explicit `mcp-tool-crud-test.md` update and validation-report generation.
+7. Added missing acceptance criteria for previously uncovered functional requirements: AC-9 (FR-9 conservative annotations), AC-10 (FR-12 unknown parameter rejection), AC-11 (FR-14 observability attributes); renumbered the manifest AC to AC-12.
+8. Added Test Strategy entries covering AC-10, AC-11, audit-log identity (FR-13), help summary tier, and unknown-verb arg, so every AC has at least one test.
+
+Unresolvable items: none. All contradictions and ambiguities resolved within the CR. The pre-CR baseline byte count for AC-8 will be measured during implementation and recorded in `docs/cr/CR-0060-validation-report.md`.
+-->
+
