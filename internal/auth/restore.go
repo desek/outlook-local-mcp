@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -139,13 +140,16 @@ func RestoreAccounts(
 
 // restoreOne restores a single account from its persisted configuration.
 // It creates the credential via the provided CredentialFactory, attempts
-// silent token acquisition (except for device_code accounts), creates a
-// Graph client on success, and registers the account in the registry.
+// silent token acquisition, creates a Graph client on success, and registers
+// the account in the registry.
 //
-// For device_code accounts, silent token acquisition is skipped entirely
-// because DeviceCodeCredential.GetToken triggers the device code callback
+// For device_code accounts, silent token acquisition is attempted only when
+// a non-empty auth record file exists at authRecordPath. Without a prior auth
+// record, DeviceCodeCredential.GetToken triggers the device code callback
 // (printing to stderr) when no cached token exists, causing spurious output
-// and startup delays. These accounts are registered with Client=nil and
+// and startup delays. When the auth record exists the credential can silently
+// refresh from the file cache, enabling headless restores (CR-0064 Phase 3).
+// Accounts that fail silent auth are registered with Client=nil and
 // Authenticated=false, deferring re-authentication to the first tool call.
 //
 // If the account label is already present in the registry (for example, the
@@ -217,13 +221,17 @@ func restoreOne(
 		entry.Email = acct.UPN
 	}
 
-	// Skip silent token acquisition for device_code accounts. Without a
-	// cached token, DeviceCodeCredential.GetToken triggers the device code
+	// For device_code accounts, attempt silent token acquisition only when
+	// an auth record file already exists and is non-empty. Without a prior
+	// auth record, DeviceCodeCredential.GetToken triggers the device code
 	// callback (printing to stderr) and then times out — wasting 5 seconds
 	// per account and producing spurious output that confuses Claude Desktop.
-	// These accounts are registered with Client=nil and Authenticated=false;
-	// the auth middleware handles re-authentication on first tool call.
-	if acct.AuthMethod != "device_code" {
+	// When the auth record exists, the credential can satisfy the request from
+	// its file cache without starting an interactive flow, matching the
+	// behavior of browser/auth_code accounts.
+	attemptSilent := acct.AuthMethod != "device_code" || authRecordExists(authRecordPath)
+
+	if attemptSilent {
 		// Attempt silent token acquisition with a bounded timeout.
 		ctx, cancel := context.WithTimeout(context.Background(), silentAuthTimeout)
 		defer cancel()
@@ -247,7 +255,7 @@ func restoreOne(
 				"error", tokenErr)
 		}
 	} else {
-		logger.Info("device_code account skipped silent auth, re-authentication deferred to first use")
+		logger.Info("device_code account skipped silent auth (no auth record), re-authentication deferred to first use")
 	}
 
 	if regErr := registry.Add(entry); regErr != nil {
@@ -262,6 +270,19 @@ func restoreOne(
 
 	logger.Info("account restored, re-authentication required on first use")
 	return false
+}
+
+// authRecordExists reports whether the file at path exists and is non-empty.
+// An empty file is treated as non-existent because a valid auth record always
+// contains JSON content. This helper gates the silent-first attempt in
+// restoreOne for device_code accounts: if no auth record has been written yet,
+// DeviceCodeCredential.GetToken would trigger the device code callback.
+func authRecordExists(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fi.Size() > 0
 }
 
 // AuthRecordDir extracts the directory path from an auth record file path.

@@ -14,12 +14,19 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"time"
 
+	"github.com/Azure/azure-sdk-for-go/sdk/azcore/policy"
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/config"
 	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// silentLoginTimeout is the maximum duration for a silent token acquisition
+// attempt inside handleLoginAccount. This keeps the fast path bounded so
+// non-interactive callers (e.g. claude -p) do not stall on a network call.
+const silentLoginTimeout = 5 * time.Second
 
 // NewLoginAccountTool creates the MCP tool definition for account_login. The
 // tool accepts a required "label" parameter identifying a previously registered
@@ -53,10 +60,11 @@ func NewLoginAccountTool() mcp.Tool {
 // HandleLoginAccount creates a tool handler that re-authenticates an existing
 // disconnected account. The handler looks up the entry by label, rejects
 // already-connected accounts, constructs a credential from the persisted
-// client_id / tenant_id / auth_method, runs the same inline authentication
-// flow used by add_account, builds a fresh Graph client, and updates the
-// registry entry atomically via registry.Update. On success it refreshes the
-// UPN from /me and persists it to accounts.json.
+// client_id / tenant_id / auth_method, attempts silent token acquisition first
+// (CR-0064 Phase 3), and falls back to the same inline authentication flow used
+// by add_account only when silent acquisition fails. It then builds a fresh
+// Graph client and updates the registry entry atomically via registry.Update.
+// On success it refreshes the UPN from /me and persists it to accounts.json.
 //
 // Parameters:
 //   - registry: the account registry holding the target entry.
@@ -127,14 +135,38 @@ func handleLoginAccount(s *addAccountState, registry *auth.AccountRegistry, cfg 
 			return mcp.NewToolResultError(fmt.Sprintf("failed to set up credential for account %q: %s", label, err.Error())), nil
 		}
 
-		authErr := s.authenticateInline(ctx, cred, authenticator, authRecordPath, authMethod, cacheName, clientID, tenantID, label, logger)
-		if authErr != nil {
-			var dcErr *DeviceCodeFallbackError
-			if errors.As(authErr, &dcErr) {
-				return mcp.NewToolResultText(dcErr.Message), nil
+		// Attempt silent token acquisition before falling back to interactive
+		// authentication. This allows headless callers (e.g. claude -p) to
+		// reconnect accounts that have a valid file-cache token without
+		// triggering a browser or device-code flow (CR-0064 Phase 3).
+		// The nil guard ensures test fixtures that inject a nil credential
+		// (which rely on a mock authenticate function) still work correctly.
+		silentSucceeded := false
+		if cred != nil {
+			silentCtx, silentCancel := context.WithTimeout(ctx, silentLoginTimeout)
+			_, silentErr := cred.GetToken(silentCtx, policy.TokenRequestOptions{
+				Scopes:    s.scopes,
+				EnableCAE: true,
+			})
+			silentCancel()
+			silentSucceeded = silentErr == nil
+		}
+
+		if !silentSucceeded {
+			logger.Debug("silent token acquisition failed, falling back to interactive auth",
+				"label", label)
+
+			authErr := s.authenticateInline(ctx, cred, authenticator, authRecordPath, authMethod, cacheName, clientID, tenantID, label, logger)
+			if authErr != nil {
+				var dcErr *DeviceCodeFallbackError
+				if errors.As(authErr, &dcErr) {
+					return mcp.NewToolResultText(dcErr.Message), nil
+				}
+				logger.Error("authentication failed during account_login", "label", label, "error", authErr.Error())
+				return mcp.NewToolResultError(fmt.Sprintf("failed to authenticate account %q: %s", label, authErr.Error())), nil
 			}
-			logger.Error("authentication failed during account_login", "label", label, "error", authErr.Error())
-			return mcp.NewToolResultError(fmt.Sprintf("failed to authenticate account %q: %s", label, authErr.Error())), nil
+		} else {
+			logger.Debug("silent token acquisition succeeded, skipping interactive auth", "label", label)
 		}
 
 		client, err := graphClientFactory(cred)
@@ -170,11 +202,16 @@ func handleLoginAccount(s *addAccountState, registry *auth.AccountRegistry, cfg 
 			upn = refreshed.Email
 		}
 
+		message := fmt.Sprintf("Account %q re-authenticated successfully.", label)
+		if silentSucceeded {
+			message = fmt.Sprintf("Account %q reconnected via cache (silent refresh).", label)
+		}
+
 		result := map[string]any{
 			"logged_in": true,
 			"label":     label,
 			"upn":       upn,
-			"message":   fmt.Sprintf("Account %q re-authenticated successfully.", label),
+			"message":   message,
 		}
 		data, err := json.Marshal(result)
 		if err != nil {

@@ -2,7 +2,7 @@
 name: conditional-implicit-default-account-registration
 description: Make the implicit "default" account registration conditional on accounts.json contents and persist account_remove to accounts.json so removal survives restart.
 id: "CR-0064"
-status: "completed"
+status: "amended"
 date: 2026-04-25
 completed-date: 2026-04-25
 requestor: Daniel Grenemark
@@ -16,6 +16,8 @@ source-commit: 1b2c27e
 # Conditional Implicit Default Account Registration
 
 ## Change Summary
+
+**Amendment (Phase 3, 2026-04-25):** Added silent-first authentication for headless test runs. `restoreOne` in `internal/auth/restore.go` now attempts silent token acquisition for device_code accounts when a non-empty auth record exists. `handleLoginAccount` in `internal/tools/login_account.go` now attempts silent token acquisition before falling back to interactive auth. `docs/prompts/mcp-tool-crud-test.md` adds a Non-interactive mode section that prevents `claude -p` from triggering interactive flows. See Phase 3 amendment sections below.
 
 Today `cmd/outlook-local-mcp/main.go` unconditionally registers an in-memory "default" `AccountEntry` from the top-level env config (`OUTLOOK_MCP_CLIENT_ID`, `OUTLOOK_MCP_TENANT_ID`, `OUTLOOK_MCP_AUTH_METHOD`) on every server start, regardless of whether `accounts.json` already covers that identity. This makes `account_remove "default"` non-persistent (the entry reappears at next start), creates an unauthenticated ghost entry that prompts for device-code on first tool call, and duplicates state when an `accounts.json` entry would already produce the same credential. This CR makes the implicit default conditional on `accounts.json` contents and persists `account_remove` to `accounts.json`. There is no feature toggle: the new behavior is the only behavior, and backwards compatibility with the unconditional-registration path is explicitly dropped.
 
@@ -91,6 +93,9 @@ flowchart TD
 3. `internal/auth/accounts.go` **MUST** export `FindByIdentity(accounts []Account, clientID, tenantID string) (Account, bool)` returning the first matching entry and a presence flag. Empty `clientID` or `tenantID` arguments **MUST** return `(Account{}, false)`.
 4. `HandleRemoveAccount` **MUST** rewrite `accounts.json` on successful removal: load the existing file, filter out the removed label, and save. When the file does not exist or contains no matching entry, removal **MUST** still succeed and **MUST NOT** create an empty file.
 5. Documentation in `docs/troubleshooting.md` **MUST** describe the ghost-default scenario and the new persistent-removal behavior under a heading whose anchor is `auto-default-account`.
+6. *(Phase 3)* `restoreOne` **MUST** attempt silent token acquisition for device_code accounts when a non-empty auth record file exists at `authRecordPath`. When no auth record file exists, the existing skip behavior **MUST** be preserved.
+7. *(Phase 3)* `handleLoginAccount` **MUST** attempt silent `cred.GetToken` with a 5-second bounded timeout before invoking `authenticateInline`. On silent success the handler **MUST** skip `authenticateInline` and return a message containing `"silent refresh"`. On silent failure the handler **MUST** fall through to the existing interactive path.
+8. *(Phase 3)* `docs/prompts/mcp-tool-crud-test.md` **MUST** include a Non-interactive mode preamble that prohibits calling `account.login`, marks Steps 28 and 29 unconditionally SKIP in non-interactive mode, and specifies the benign-read recovery path for disconnected accounts in Step 1.
 
 ### Non-Functional Requirements
 
@@ -164,6 +169,27 @@ Implement in two phases.
 * Update `docs/prompts/mcp-tool-crud-test.md` to add a step that runs `account_remove`, restarts the server, and asserts that the removed label does not return when `accounts.json` covers the cfg identity (and that "default" returns when it does not, by design).
 * Add tests per the Test Strategy table.
 
+### Phase 3: Silent-first authentication for headless test runs (amendment 2026-04-25)
+
+Root cause: `account.list` reports device_code accounts as `disconnected` after restart even when a valid file-cache token exists, because `restoreOne` skipped silent auth unconditionally for device_code accounts. The LLM then calls `account.login`, which always starts an interactive flow that hangs `claude -p`.
+
+Two changes fix this:
+
+**A1. `internal/auth/restore.go` — conditional silent restore for device_code accounts**
+
+* Add `func authRecordExists(path string) bool` — returns true only when the file exists and is non-empty.
+* In `restoreOne`, replace the unconditional `device_code` skip with a gate: attempt silent `cred.GetToken` when `authRecordExists(authRecordPath)` is true. When the file does not exist, preserve the existing skip (no spurious device-code prompt at startup for fresh accounts). When silent succeeds, set `entry.Authenticated=true` and create the Graph client.
+
+**A2. `internal/tools/login_account.go` — silent-first login**
+
+* Before calling `s.authenticateInline`, attempt `cred.GetToken` with a 5-second bounded context. If silent succeeds, skip `authenticateInline` entirely and proceed to graph client creation and registry update. Return message `"Account %q reconnected via cache (silent refresh)."` so callers can distinguish silent from interactive reconnect. On silent failure, fall through to the existing interactive path.
+
+**B. `docs/prompts/mcp-tool-crud-test.md` — non-interactive mode rules**
+
+* Add a "Non-interactive mode" preamble after Prerequisites: the runner MUST NOT call `account.login`; Steps 28 and 29 are unconditionally SKIP in non-interactive mode.
+* Update Step 1: if an account shows `disconnected`, attempt a benign read instead of `account.login`; if the read succeeds the account was silently reconnected.
+* Update Steps 28 and 29: add explicit non-interactive SKIP notes.
+
 ### Implementation Flow
 
 ```mermaid
@@ -195,6 +221,10 @@ flowchart LR
 | `internal/tools/remove_account_test.go` | `TestRemoveAccount_ImplicitDefault_NoFileWrite` | Removing implicit default when accounts.json has no default entry leaves file untouched | label=default not in file | file unchanged |
 | `internal/tools/remove_account_test.go` | `TestRemoveAccount_AtomicWrite_NoPartialFileOnError` | Simulated write error leaves original file intact | injected fs error | original content preserved |
 | `internal/docs/search_test.go` | `TestSearchDocs_AutoDefaultAnchor` | `search_docs` query "auto-default" returns the troubleshooting heading whose anchor is `auto-default-account` | query string | result entry with anchor `auto-default-account` |
+| `internal/auth/restore_test.go` | `TestRestoreOne_DeviceCode_SilentSucceedsWhenAuthRecordExists` | device_code account with non-empty auth record is fully restored (Phase 3) | successCredential + auth record file | entry.Authenticated=true, GraphClientFactory called once |
+| `internal/auth/restore_test.go` | `TestRestoreOne_DeviceCode_SkipsSilentWhenNoAuthRecord` | device_code account without auth record skips GetToken entirely (Phase 3) | countingGetTokenCredential + no file | GetToken calls=0, entry.Authenticated=false |
+| `internal/tools/login_account_test.go` | `TestHandleLoginAccount_SilentSucceeds_SkipsInteractive` | silent token success skips authenticateInline, message contains "silent refresh" (Phase 3) | loginSuccessCred | authCalls=0, message contains "silent refresh" |
+| `internal/tools/login_account_test.go` | `TestHandleLoginAccount_SilentFails_FallsBackToInteractive` | silent token failure triggers interactive fallback (Phase 3) | loginFailCred | authCalls=1, message does not contain "silent refresh" |
 
 ### Tests to Modify
 
@@ -263,6 +293,54 @@ Given the embedded troubleshooting document
 When the LLM calls system.search_docs with query "auto-default"
 Then the result includes a heading whose anchor is "auto-default-account"
   And the section explains the persistent-removal semantics and the accounts.json gating rule
+```
+
+### AC-7: device_code account with cached auth record is silently restored at startup (Phase 3)
+
+```gherkin
+Given a device_code account whose auth record file exists and is non-empty
+  And the token file cache contains a valid token
+When the server starts
+Then account_list shows the account as authenticated
+  And no device-code prompt appears in stderr or logs
+```
+
+### AC-8: device_code account without auth record still skips silent auth (Phase 3)
+
+```gherkin
+Given a device_code account whose auth record file does not exist
+When the server starts
+Then GetToken is NOT called during restore
+  And the account is registered with Authenticated=false for deferred re-authentication
+```
+
+### AC-9: account.login silently reconnects when cache is warm (Phase 3)
+
+```gherkin
+Given a disconnected account whose credential file cache contains a valid token
+When the user (or LLM) calls account.login for that account
+Then the handler succeeds without calling authenticateInline
+  And the response message contains "silent refresh"
+  And the account is shown as authenticated in account.list
+```
+
+### AC-10: account.login falls back to interactive when cache is cold (Phase 3)
+
+```gherkin
+Given a disconnected account whose credential file cache has no valid token
+When the user calls account.login for that account
+Then the handler calls authenticateInline (interactive flow)
+  And the response message does NOT contain "silent refresh"
+```
+
+### AC-11: mcp-tool-crud-test prohibits account.login in non-interactive mode (Phase 3)
+
+```gherkin
+Given the CRUD test prompt
+When running under claude -p
+Then the Non-interactive mode preamble is visible before Step 0
+  And Steps 28 and 29 are marked SKIP with a non-interactive note
+  And Step 1 specifies the benign-read recovery path for disconnected accounts
 ```
 
 ## Quality Standards Compliance

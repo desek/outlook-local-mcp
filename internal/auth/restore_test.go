@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
@@ -415,6 +416,43 @@ func TestAuthRecordDir(t *testing.T) {
 	}
 }
 
+// successCredential implements azcore.TokenCredential and always returns a
+// valid (non-expiring) access token. It is used to simulate a device_code
+// account whose token file cache is warm, allowing silent restore.
+type successCredential struct{}
+
+// GetToken returns a non-expiring mock token without any network call.
+func (s *successCredential) GetToken(_ context.Context, _ policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	return azcore.AccessToken{Token: "mock-token"}, nil
+}
+
+// countingGetTokenCredential wraps a TokenCredential and records how many
+// times GetToken is called. Tests use this to assert whether silent auth was
+// attempted.
+type countingGetTokenCredential struct {
+	inner azcore.TokenCredential
+	calls atomic.Int32
+}
+
+// GetToken delegates to the inner credential and increments the call counter.
+func (c *countingGetTokenCredential) GetToken(ctx context.Context, opts policy.TokenRequestOptions) (azcore.AccessToken, error) {
+	c.calls.Add(1)
+	return c.inner.GetToken(ctx, opts)
+}
+
+// fakeCredentialFactoryWith returns a CredentialFactory that produces the
+// given credential rather than &mockCredential{}. This allows tests to inject
+// a successCredential or a countingGetTokenCredential.
+func fakeCredentialFactoryWith(cred azcore.TokenCredential) CredentialFactory {
+	return func(label, _, _, _, cacheNameBase, authRecordDir, _ string) (
+		azcore.TokenCredential, Authenticator, string, string, error,
+	) {
+		cacheName := cacheNameBase + "-" + label
+		authRecordPath := filepath.Join(authRecordDir, label+"_auth_record.json")
+		return cred, &restoreMockAuthenticator{}, authRecordPath, cacheName, nil
+	}
+}
+
 // TestRestoreAccounts_PopulatesEmailFromUPN verifies the AC-2 contract: at
 // startup, RestoreAccounts copies the persisted UPN into AccountEntry.Email
 // without issuing any Graph API call. This is the CR-0056 behavior that
@@ -459,5 +497,114 @@ func TestRestoreAccounts_PopulatesEmailFromUPN(t *testing.T) {
 	// that no Graph /me call occurred during restore.
 	if calls := factoryCalls.Load(); calls != 0 {
 		t.Errorf("GraphClientFactory called %d times, want 0 (no Graph API call permitted during restore)", calls)
+	}
+}
+
+// TestRestoreOne_DeviceCode_SilentSucceedsWhenAuthRecordExists verifies
+// CR-0064 Phase 3: a device_code account is fully restored (Authenticated=true,
+// non-nil Client) when a non-empty auth record file exists at startup.
+//
+// The test writes a minimal auth record file so authRecordExists returns true,
+// then uses successCredential so GetToken returns immediately. It expects the
+// graph client factory to be invoked exactly once.
+func TestRestoreOne_DeviceCode_SilentSucceedsWhenAuthRecordExists(t *testing.T) {
+	dir := t.TempDir()
+	accountsPath := filepath.Join(dir, "accounts.json")
+
+	accounts := []AccountConfig{
+		{Label: "dc-warm", ClientID: "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", TenantID: "common", AuthMethod: "device_code"},
+	}
+	if err := SaveAccounts(accountsPath, accounts); err != nil {
+		t.Fatalf("SaveAccounts: %v", err)
+	}
+
+	// Write a non-empty auth record file so authRecordExists returns true.
+	// The file path produced by fakeCredentialFactoryWith is:
+	//   dir/<label>_auth_record.json
+	authRecordPath := filepath.Join(dir, "dc-warm_auth_record.json")
+	if err := os.WriteFile(authRecordPath, []byte(`{"mock":"record"}`), 0o600); err != nil {
+		t.Fatalf("WriteFile auth record: %v", err)
+	}
+
+	cred := &successCredential{}
+	factory := fakeCredentialFactoryWith(cred)
+
+	registry := NewAccountRegistry()
+	var graphCalls atomic.Int32
+
+	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, factory, countingGraphClientFactory(&graphCalls), []string{"Calendars.ReadWrite"}, "")
+
+	if total != 1 {
+		t.Errorf("total = %d, want 1", total)
+	}
+	if restored != 1 {
+		t.Errorf("restored = %d, want 1 (silent succeeded with auth record present)", restored)
+	}
+
+	entry, ok := registry.Get("dc-warm")
+	if !ok {
+		t.Fatal("account 'dc-warm' not found in registry")
+	}
+	if !entry.Authenticated {
+		t.Error("expected entry.Authenticated = true (silent token succeeded)")
+	}
+	if entry.Client == nil {
+		t.Error("expected non-nil Client after silent restore")
+	}
+
+	if calls := graphCalls.Load(); calls != 1 {
+		t.Errorf("GraphClientFactory called %d times, want 1", calls)
+	}
+}
+
+// TestRestoreOne_DeviceCode_SkipsSilentWhenNoAuthRecord verifies CR-0064
+// Phase 3: a device_code account with no auth record file on disk skips
+// silent token acquisition entirely. GetToken must not be called, and the
+// account is registered with Client=nil for deferred re-authentication.
+func TestRestoreOne_DeviceCode_SkipsSilentWhenNoAuthRecord(t *testing.T) {
+	dir := t.TempDir()
+	accountsPath := filepath.Join(dir, "accounts.json")
+
+	accounts := []AccountConfig{
+		{Label: "dc-cold", ClientID: "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", TenantID: "common", AuthMethod: "device_code"},
+	}
+	if err := SaveAccounts(accountsPath, accounts); err != nil {
+		t.Fatalf("SaveAccounts: %v", err)
+	}
+
+	// No auth record file exists — authRecordExists must return false.
+	inner := &successCredential{}
+	counting := &countingGetTokenCredential{inner: inner}
+	factory := fakeCredentialFactoryWith(counting)
+
+	registry := NewAccountRegistry()
+	var graphCalls atomic.Int32
+
+	restored, total := RestoreAccounts(accountsPath, "test-cache", dir, registry, factory, countingGraphClientFactory(&graphCalls), []string{"Calendars.ReadWrite"}, "")
+
+	if total != 1 {
+		t.Errorf("total = %d, want 1", total)
+	}
+	if restored != 0 {
+		t.Errorf("restored = %d, want 0 (no auth record, GetToken skipped)", restored)
+	}
+
+	entry, ok := registry.Get("dc-cold")
+	if !ok {
+		t.Fatal("account 'dc-cold' not found in registry")
+	}
+	if entry.Authenticated {
+		t.Error("expected entry.Authenticated = false (silent skipped)")
+	}
+	if entry.Client != nil {
+		t.Error("expected nil Client when silent skipped")
+	}
+
+	// GetToken must not have been called when there is no auth record.
+	if calls := counting.calls.Load(); calls != 0 {
+		t.Errorf("GetToken called %d times, want 0 (no auth record present)", calls)
+	}
+	if calls := graphCalls.Load(); calls != 0 {
+		t.Errorf("GraphClientFactory called %d times, want 0", calls)
 	}
 }

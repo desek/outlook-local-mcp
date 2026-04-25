@@ -15,6 +15,15 @@ Step-by-step instruction for Claude Code to exercise the MCP tools through a com
 - At least one account is authenticated (verify with `{tool: "account", args: {operation: "list"}}`).
 - The server **must** be configured with `LOG_LEVEL=debug` and file logging enabled (`LOG_FILE` set). Both are verified in Step 0.
 
+## Non-interactive mode (CR-0064 Phase 3)
+
+When this test runs under `claude -p` or any other non-interactive caller, the following rules apply:
+
+- **MUST NOT call `account.login` for any reason.** The device-code and browser flows require a human at the keyboard and will hang a non-interactive runner indefinitely.
+- **Cached tokens are a hard precondition.** Before starting, ensure all accounts whose steps you intend to execute have a valid file-cache token (run the server interactively at least once to warm the cache).
+- **If an account shows `disconnected` in Step 1:** attempt one benign read with that account (e.g., `{tool: "mail", args: {operation: "list_folders", account: "<label>"}}`). If the read succeeds the account was silently reconnected via the Phase 3 path. If the read returns an auth error, mark all steps that depend on that account **SKIP** and continue with any remaining authenticated accounts.
+- **Steps 28 and 29 (logout/login round-trip) are unconditionally SKIP in non-interactive mode.** See those steps for the explicit note.
+
 ## Instructions
 
 Follow every step sequentially. Use the **default account** (omit `account` param) unless the user specifies otherwise. Omit the `output` parameter for all read operations (the default is `text`) unless a step specifies otherwise.
@@ -96,6 +105,7 @@ Call `{tool: "account", args: {operation: "list"}}`.
 - **Record:** The number of accounts and their labels for the environment report.
 - **Record:** If **two or more** accounts show authenticated status, set **multi-account mode** to `true`. Record the first authenticated account that is NOT the default as the **attendee account label**.
 - If only one account is authenticated, set **multi-account mode** to `false`.
+- **If any required account shows `disconnected` in non-interactive mode:** attempt one benign read with that account (e.g., `{tool: "mail", args: {operation: "list_folders", account: "<label>"}}`). If the read succeeds, the account was silently reconnected (CR-0064 Phase 3) — treat it as authenticated and continue. If the read returns an auth error, do NOT call `account.login`; mark all steps depending on that account **SKIP**.
 - **Fail:** If no accounts are returned or none are authenticated.
 
 ### Step 2 -- List calendars
@@ -442,6 +452,8 @@ Call `{tool: "account", args: {operation: "refresh", label: "<default account la
 
 ### Step 28 -- Log out of account
 
+> **Non-interactive mode:** Mark Steps 28 and 29 unconditionally **SKIP**. The login step requires interactive user input (browser or device code) and will hang a non-interactive runner. Do not attempt even if cached tokens appear valid.
+
 > **Note:** This test requires at least one non-default account in addition to the default account, or `account login` in Step 29 must be used to restore access before further tests. If only one account is registered, mark Steps 28 and 29 **SKIP** to avoid leaving the test environment unauthenticated.
 
 Pick a **non-default authenticated account** from Step 1's list (the **attendee account label** in multi-account mode). Call `{tool: "account", args: {operation: "logout", label: "<non-default account label>"}}`.
@@ -452,6 +464,8 @@ Pick a **non-default authenticated account** from Step 1's list (the **attendee 
 - **Fail:** If the account is removed, still shown as authenticated, or if the disconnected-account error is missing.
 
 ### Step 29 -- Log back in to account
+
+> **Non-interactive mode:** Mark this step unconditionally **SKIP** (see Step 28 note above).
 
 Call `{tool: "account", args: {operation: "login", label: "<label from Step 28>"}}`.
 
