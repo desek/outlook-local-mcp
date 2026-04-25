@@ -6,6 +6,7 @@
 * Use `deepwiki` MCP for knowledge about specific package implementations details when needed.
 * Use the file `.deepwiki` as a repository for relevant DeepWiki repositories.
 * Continuously keep the `.gitignore` accurate to not bloat the repository.
+* `CHANGELOG.md` is managed by release-please and **MUST NOT** be manually updated.
 
 ## Project Structure
 

@@ -150,6 +150,31 @@ All environment variables are prefixed with `OUTLOOK_MCP_`:
 | `LOG_FILE` | *(empty = disabled)* | Log file path for persistent file output |
 | `ACCOUNTS_PATH` | `~/.outlook-local-mcp/accounts.json` | Path to the persistent accounts file for multi-account support (see CR-0032) |
 
+## Getting help in-session
+
+The server embeds its own documentation so the LLM can look up answers without leaving the conversation.
+
+List available documents:
+
+```
+{tool: "system", args: {operation: "list_docs"}}
+```
+
+Search across all embedded docs:
+
+```
+{tool: "system", args: {operation: "search_docs", query: "token refresh"}}
+```
+
+Fetch a document or a specific section by heading anchor:
+
+```
+{tool: "system", args: {operation: "get_docs", slug: "troubleshooting"}}
+{tool: "system", args: {operation: "get_docs", slug: "troubleshooting", section: "keychain-locked"}}
+```
+
+The embedded bundle contains `readme`, `quickstart`, and `troubleshooting`. Each document is also exposed as an MCP resource at `doc://outlook-local-mcp/{slug}` for clients that support `resources/list` and `resources/read`. Run `system.status` to discover the base URI and the troubleshooting slug. See CR-0061 for implementation details.
+
 ## Further Reading
 
 See [README.md](README.md) for the full reference documentation.
