@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0](https://github.com/desek/outlook-local-mcp/compare/v0.3.0...v0.4.0) (2026-04-26)
+
+
+### Features
+
+* **auth:** make implicit default account registration conditional on `accounts.json` contents (CR-0064) ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+* **auth:** persist `account.remove` to `accounts.json` via atomic rewrite (CR-0064) ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+* **auth:** silent-first authentication in account restore and `account.login` for headless runs (CR-0064) ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+* **build:** add `make crud-test` headless lifecycle harness with per-run metrics in `docs/bench/crud-runs.csv` ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+* **docs:** expose embedded documentation bundle via `system.list_docs`, `system.search_docs`, `system.get_docs` and `doc://outlook-local-mcp/{slug}` MCP resources (CR-0061) ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+* **docs:** make `docs/` the embed package and reduce the bundle to four canonical slugs (`readme`, `quickstart`, `concepts`, `troubleshooting`) (CR-0065) ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+* **graph:** add `see` doc-hint field to known Graph error envelopes (CR-0061) ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+* in-server docs surface, conditional default account, registry-driven tool reference ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+* **system:** include docs surface in `system.status` output (CR-0061) ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+* **tools:** aggregate domain tools with verb dispatch (CR-0060) ([#20](https://github.com/desek/outlook-local-mcp/issues/20)) ([778dd3e](https://github.com/desek/outlook-local-mcp/commit/778dd3ebbe4884e1e9cfccb40852314ac80cf774))
+* **tools:** extend `Verb` registry with `Description`, `Examples`, and `SeeDocs`; render in all `help` tiers (CR-0065) ([daf5a23](https://github.com/desek/outlook-local-mcp/commit/daf5a23965500c4041be277adeef9790c100862c))
+
 ## [0.3.0](https://github.com/desek/outlook-local-mcp/compare/v0.2.1...v0.3.0) (2026-04-20)
 
 
