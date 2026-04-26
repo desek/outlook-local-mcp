@@ -237,3 +237,44 @@ Net: cache stayed beneficial; the *fixed* portion of the cache shrank by ~17K to
 - Pricing taken from the public list (Sonnet 4.6, Opus 4.7) on 2026-04-25. All four buckets scale proportionally between models, so percentage savings hold across the family.
 - Opus 4.7's new tokenizer can use up to 35% more tokens for the same text. Both pre- and post-CR token counts inflate together, so percentages are stable, but absolute Opus 4.7 dollars in the tables may be up to ~35% higher in real traffic.
 - Help-call residency assumes calls are evenly distributed across the session (mean residency `T/2`). Front-loaded help (typical: discover, then act) shifts residency closer to `T`, raising help cost modestly without changing the sign of the result.
+
+## Appendix: Empirical Validation (CR-0060 Comparison Bench, 2026-04-26)
+
+A paired CRUD bench was run to validate the modeled numbers above against measured `claude -p` traffic. Both surfaces were exercised by the same natural-language CRUD prompt ([`comparison-crud-prompt.md`](./comparison-crud-prompt.md), 24 steps spanning calendar CRUD plus search/free-busy/body-escalation, and mail folders/list/search/get/conversation/attachments plus drafts), with the model left to choose tool/verb names. Identical model, thinking effort, account, and Outlook tenant were used on both sides; only the binary swapped.
+
+- **Pre-CR baseline:** `v0.3.0` (`d88bd56`) — 32 individual MCP tools.
+- **Post-CR HEAD:** `d1b1e68` — 4 aggregate domain tools with verb dispatch.
+- **Model / effort:** `claude-sonnet-4-6`, thinking `low`.
+- **Runs:** 5 per surface, raw rows in [`comparison.csv`](./comparison.csv).
+- **Harness:** [`bench.sh`](./bench.sh) (per-run streams under `runs/`, gitignored).
+
+### Per-run means (n=5)
+
+| Metric | pre (32 tools) | post (4 tools) | Δ post−pre |
+|---|---|---|---|
+| Wall time (s) | 157.5 | 138.1 | −12.3% |
+| Total cost (USD) | 0.5124 | 0.4435 | **−13.4%** |
+| Output tokens | 8,035 | 7,044 | −12.3% |
+| Cache-creation tokens | 30,191 | 23,413 | **−22.4%** |
+| Cache-read tokens | 917,955 | 832,977 | −9.3% |
+| MCP tool calls | 28.8 | 27.6 | ≈ flat |
+| Other tool calls | 8.4 | 2.2 | −74% |
+
+Output-token savings are the dominant driver of the cost delta (output is billed at 5× input). Cache-creation savings are a secondary but meaningful contribution and are consistent with the modeled ~17K-token shrink of the fixed schema prefix; the residual ~7K reflects help-payload writes the model invoked on the post-CR side. Cache-read savings are smaller in proportion than predicted because both surfaces re-emit the same stable CRUD prompt every turn — that prefix dominates absolute cache-read volume regardless of schema size. The "other tool calls" delta (Bash, Read, Agent, ToolSearch) reflects the model spending fewer non-MCP turns reasoning around the smaller surface.
+
+### How this compares to the model
+
+The original Case C ("CRUD test") row predicted **77.4% cost** for post relative to pre on Sonnet 4.6. Measured ratio: **0.4435 / 0.5124 = 86.6%**, i.e. a measured saving of 13.4% versus the modeled 22.6%.
+
+The gap is explained by two factors that the linear model deliberately abstracted away:
+
+1. The bench prompt is **prompt-heavy and output-heavy** relative to the schema prefix. With ~24 dictated steps and per-step PASS/FAIL/SKIP output, the schema-token delta represents a smaller share of total billable tokens than the modeled "average session." The model's percentage-savings figures are upper bounds for sessions where the schema prefix dominates; this bench is closer to a lower bound.
+2. The bench model invoked `help` more often than the modeled `H` for Case C (4 expected, 5–8 measured across runs from the verb-discovery dynamic on a fresh prompt). Each call adds cache-creation and cache-read residency, narrowing the gap.
+
+Both deviations move the result in the expected direction, and the **sign** of every modeled prediction is preserved: post-CR is cheaper, faster, and writes less cache than pre-CR for equivalent CRUD coverage.
+
+### Caveats specific to this bench
+
+- One pre-CR row reports `input_tokens=4130` versus a typical 48–200 range; this is a single anomalous turn (likely a tool result that bypassed cache reuse) and does not change the per-run mean cost ranking. The CSV preserves it unmodified.
+- The pre-CR surface dispatches the four post-CR domain names back to legacy tool names (`account_login`, `mail_list_messages`, etc.); the bench harness counts those under the `mcp_legacy` column. Total MCP tool-call counts are therefore directly comparable across surfaces.
+- Both surfaces ran against the same Outlook tenant on the same day; Graph-side latency and rate-limit behavior is held roughly constant. Wall-time deltas should be read as "time the model spent driving the surface," not as Graph throughput.

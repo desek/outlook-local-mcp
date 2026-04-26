@@ -47,3 +47,8 @@ TEST-REPORT*.md
 
 # CRUD bench per-run artifacts (CSV is checked in)
 docs/bench/runs/
+
+# CR-0060 bench scratch space
+/bin/
+/.worktrees/
+docs/research/cr-0060-token-economics/runs/
