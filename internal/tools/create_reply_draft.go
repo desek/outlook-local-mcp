@@ -10,11 +10,11 @@ package tools
 
 import (
 	"context"
-	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
@@ -85,7 +85,7 @@ func NewCreateReplyDraftTool() mcp.Tool {
 // and optionally PATCH /me/messages/{draftID} for provenance.
 func NewHandleCreateReplyDraft(retryCfg graph.RetryConfig, timeout time.Duration, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "mail_create_reply_draft")
+		logger := logging.Logger(ctx)
 
 		client, err := GraphClient(ctx)
 		if err != nil {

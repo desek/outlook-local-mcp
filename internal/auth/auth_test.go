@@ -451,7 +451,7 @@ func TestAuthenticate_UsesAuthenticator(t *testing.T) {
 func TestSetupCredentialForAccount_AuthCodeMethod(t *testing.T) {
 	dir := t.TempDir()
 	cred, auth, recordPath, cacheName, err := SetupCredentialForAccount(
-		"work", "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", "common", "auth_code", "test-cache", dir,
+		"work", "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", "common", "auth_code", "test-cache", dir, "file",
 	)
 	if err != nil {
 		t.Fatalf("SetupCredentialForAccount() error: %v", err)
@@ -477,7 +477,7 @@ func TestSetupCredentialForAccount_AuthCodeMethod(t *testing.T) {
 func TestSetupCredentialForAccount_BrowserMethod(t *testing.T) {
 	dir := t.TempDir()
 	cred, auth, recordPath, cacheName, err := SetupCredentialForAccount(
-		"work", "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", "common", "browser", "test-cache", dir,
+		"work", "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", "common", "browser", "test-cache", dir, "",
 	)
 	if err != nil {
 		t.Fatalf("SetupCredentialForAccount() error: %v", err)
@@ -502,7 +502,7 @@ func TestSetupCredentialForAccount_BrowserMethod(t *testing.T) {
 func TestSetupCredentialForAccount_DeviceCodeMethod(t *testing.T) {
 	dir := t.TempDir()
 	cred, auth, _, _, err := SetupCredentialForAccount(
-		"personal", "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", "common", "device_code", "test-cache", dir,
+		"personal", "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", "common", "device_code", "test-cache", dir, "",
 	)
 	if err != nil {
 		t.Fatalf("SetupCredentialForAccount() error: %v", err)
@@ -522,7 +522,7 @@ func TestSetupCredentialForAccount_DeviceCodeMethod(t *testing.T) {
 func TestSetupCredentialForAccount_NoHardcodedDefaults(t *testing.T) {
 	dir := t.TempDir()
 	_, _, _, _, err := SetupCredentialForAccount(
-		"test", "", "", "", "base", dir,
+		"test", "", "", "", "base", dir, "",
 	)
 	if err == nil {
 		t.Error("expected error when clientID, tenantID, authMethod are empty (no hardcoded fallbacks)")
@@ -534,7 +534,7 @@ func TestSetupCredentialForAccount_NoHardcodedDefaults(t *testing.T) {
 func TestSetupCredentialForAccount_InvalidMethod(t *testing.T) {
 	dir := t.TempDir()
 	_, _, _, _, err := SetupCredentialForAccount(
-		"test", "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", "common", "invalid", "base", dir,
+		"test", "dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3", "common", "invalid", "base", dir, "",
 	)
 	if err == nil {
 		t.Error("expected error for invalid auth method")

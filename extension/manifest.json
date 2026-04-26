@@ -66,7 +66,7 @@
     },
     {
       "name": "system",
-      "description": "System diagnostics and authentication utilities. Required operation: help (detailed docs), status (server health, accounts, config), complete_auth (finish auth_code flow — only when auth=auth_code)."
+      "description": "System diagnostics, authentication utilities, and embedded documentation access. Required operation: help (detailed docs), status (server health, accounts, config), complete_auth (finish auth_code flow — only when auth=auth_code), list_docs (list embedded documentation slugs), search_docs (keyword search across embedded docs), get_docs (fetch full content or a section by slug and anchor)."
     }
   ],
   "compatibility": {

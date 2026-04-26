@@ -162,7 +162,7 @@ func TestEmitAuditLog_JSONFormat(t *testing.T) {
 	entry := AuditEntry{
 		Audit:         true,
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
-		ToolName:      "calendar_list_events",
+		ToolName:      "calendar.list_events",
 		OperationType: "read",
 		Parameters:    map[string]string{"calendar_id": "cal-1"},
 		Outcome:       "success",
@@ -177,8 +177,8 @@ func TestEmitAuditLog_JSONFormat(t *testing.T) {
 	if !parsed.Audit {
 		t.Error("parsed.Audit = false, want true")
 	}
-	if parsed.ToolName != "calendar_list_events" {
-		t.Errorf("parsed.ToolName = %q, want %q", parsed.ToolName, "calendar_list_events")
+	if parsed.ToolName != "calendar.list_events" {
+		t.Errorf("parsed.ToolName = %q, want %q", parsed.ToolName, "calendar.list_events")
 	}
 	if parsed.OperationType != "read" {
 		t.Errorf("parsed.OperationType = %q, want %q", parsed.OperationType, "read")
@@ -209,7 +209,7 @@ func TestEmitAuditLog_FileOutput(t *testing.T) {
 	entry := AuditEntry{
 		Audit:         true,
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
-		ToolName:      "calendar_get_event",
+		ToolName:      "calendar.get_event",
 		OperationType: "read",
 		Parameters:    map[string]string{},
 		Outcome:       "success",
@@ -221,7 +221,7 @@ func TestEmitAuditLog_FileOutput(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read audit file: %v", err)
 	}
-	if !strings.Contains(string(data), `"tool_name":"calendar_get_event"`) {
+	if !strings.Contains(string(data), `"tool_name":"calendar.get_event"`) {
 		t.Errorf("audit file does not contain expected entry: %s", string(data))
 	}
 }
@@ -235,7 +235,7 @@ func TestEmitAuditLog_StderrFallback(t *testing.T) {
 	entry := AuditEntry{
 		Audit:         true,
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
-		ToolName:      "calendar_search_events",
+		ToolName:      "calendar.search_events",
 		OperationType: "read",
 		Parameters:    map[string]string{},
 		Outcome:       "success",
@@ -256,7 +256,7 @@ func TestEmitAuditLog_Disabled(t *testing.T) {
 
 	entry := AuditEntry{
 		Audit:    true,
-		ToolName: "calendar_list",
+		ToolName: "calendar.list",
 	}
 	EmitAuditLog(entry)
 
@@ -275,7 +275,7 @@ func TestEmitAuditLog_AppendOnly(t *testing.T) {
 		EmitAuditLog(AuditEntry{
 			Audit:         true,
 			Timestamp:     time.Now().UTC().Format(time.RFC3339),
-			ToolName:      "calendar_list_events",
+			ToolName:      "calendar.list_events",
 			OperationType: "read",
 			Parameters:    map[string]string{},
 			Outcome:       "success",
@@ -313,7 +313,7 @@ func TestEmitAuditLog_FlushAfterWrite(t *testing.T) {
 	EmitAuditLog(AuditEntry{
 		Audit:         true,
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
-		ToolName:      "calendar_create_event",
+		ToolName:      "calendar.create_event",
 		OperationType: "write",
 		Parameters:    map[string]string{},
 		Outcome:       "success",
@@ -325,7 +325,7 @@ func TestEmitAuditLog_FlushAfterWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read audit file: %v", err)
 	}
-	if !strings.Contains(string(data), `"tool_name":"calendar_create_event"`) {
+	if !strings.Contains(string(data), `"tool_name":"calendar.create_event"`) {
 		t.Error("audit entry was not flushed to disk")
 	}
 }
@@ -339,7 +339,7 @@ func TestAuditWrap_Success(t *testing.T) {
 	handler := func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return &mcp.CallToolResult{Content: []mcp.Content{mcp.TextContent{Text: "ok"}}}, nil
 	}
-	wrapped := AuditWrap("calendar_list", "read", handler)
+	wrapped := AuditWrap("calendar.list", "read", handler)
 
 	result, err := wrapped(context.Background(), mcp.CallToolRequest{})
 	if err != nil {
@@ -356,8 +356,8 @@ func TestAuditWrap_Success(t *testing.T) {
 	if entry.Outcome != "success" {
 		t.Errorf("Outcome = %q, want %q", entry.Outcome, "success")
 	}
-	if entry.ToolName != "calendar_list" {
-		t.Errorf("ToolName = %q, want %q", entry.ToolName, "calendar_list")
+	if entry.ToolName != "calendar.list" {
+		t.Errorf("ToolName = %q, want %q", entry.ToolName, "calendar.list")
 	}
 	if entry.OperationType != "read" {
 		t.Errorf("OperationType = %q, want %q", entry.OperationType, "read")
@@ -373,7 +373,7 @@ func TestAuditWrap_ToolError(t *testing.T) {
 	handler := func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return mcp.NewToolResultError("something went wrong"), nil
 	}
-	wrapped := AuditWrap("calendar_create_event", "write", handler)
+	wrapped := AuditWrap("calendar.create_event", "write", handler)
 
 	result, err := wrapped(context.Background(), mcp.CallToolRequest{})
 	if err != nil {
@@ -433,7 +433,7 @@ func TestAuditWrap_DurationMeasured(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 		return &mcp.CallToolResult{}, nil
 	}
-	wrapped := AuditWrap("calendar_get_event", "read", handler)
+	wrapped := AuditWrap("calendar.get_event", "read", handler)
 
 	_, _ = wrapped(context.Background(), mcp.CallToolRequest{})
 
@@ -455,7 +455,7 @@ func TestAuditWrap_EventIDExtracted(t *testing.T) {
 	handler := func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return &mcp.CallToolResult{}, nil
 	}
-	wrapped := AuditWrap("calendar_get_event", "read", handler)
+	wrapped := AuditWrap("calendar.get_event", "read", handler)
 
 	req := mcp.CallToolRequest{}
 	req.Params.Arguments = map[string]any{"event_id": "evt-123"}
@@ -480,7 +480,7 @@ func TestAuditWrap_CalendarIDExtracted(t *testing.T) {
 	handler := func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return &mcp.CallToolResult{}, nil
 	}
-	wrapped := AuditWrap("calendar_list_events", "read", handler)
+	wrapped := AuditWrap("calendar.list_events", "read", handler)
 
 	req := mcp.CallToolRequest{}
 	req.Params.Arguments = map[string]any{"calendar_id": "cal-456"}
@@ -508,7 +508,7 @@ func TestAuditWrap_PassesResultThrough(t *testing.T) {
 	handler := func(_ context.Context, _ mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		return wantResult, nil
 	}
-	wrapped := AuditWrap("calendar_list", "read", handler)
+	wrapped := AuditWrap("calendar.list", "read", handler)
 
 	gotResult, gotErr := wrapped(context.Background(), mcp.CallToolRequest{})
 	if gotErr != nil {
@@ -592,12 +592,12 @@ func TestOperationTypeClassification(t *testing.T) {
 		toolName string
 		opType   string
 	}{
-		{"calendar_list", "read"},
-		{"calendar_list_events", "read"},
-		{"calendar_get_event", "read"},
-		{"calendar_search_events", "read"},
+		{"calendar.list", "read"},
+		{"calendar.list_events", "read"},
+		{"calendar.get_event", "read"},
+		{"calendar.search_events", "read"},
 		{"calendar_get_free_busy", "read"},
-		{"calendar_create_event", "write"},
+		{"calendar.create_event", "write"},
 		{"calendar_update_event", "write"},
 		{"calendar_delete_event", "delete"},
 		{"calendar_cancel_meeting", "delete"},
@@ -637,7 +637,7 @@ func TestAuditEntryAuditField(t *testing.T) {
 	EmitAuditLog(AuditEntry{
 		Audit:         true,
 		Timestamp:     time.Now().UTC().Format(time.RFC3339),
-		ToolName:      "calendar_list",
+		ToolName:      "calendar.list",
 		OperationType: "read",
 		Parameters:    map[string]string{},
 		Outcome:       "success",

@@ -3,6 +3,7 @@ package tools_test
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -396,7 +397,7 @@ func TestStatus_BackwardCompatTopLevel(t *testing.T) {
 
 	resp := callStatus(t, testConfig(), registry, time.Now())
 
-	requiredFields := []string{"version", "timezone", "accounts", "server_uptime_seconds"}
+	requiredFields := []string{"version", "timezone", "accounts", "server_uptime_seconds", "docs"}
 	for _, field := range requiredFields {
 		if _, exists := resp[field]; !exists {
 			t.Errorf("missing top-level field %q", field)
@@ -417,5 +418,70 @@ func TestStatus_ZeroAccounts(t *testing.T) {
 	}
 	if len(accounts) != 0 {
 		t.Errorf("expected 0 accounts, got %d", len(accounts))
+	}
+}
+
+// TestStatus_DocsSection verifies that the status response includes a docs
+// section with the correct base URI, troubleshooting slug, and version
+// (CR-0061 AC-5).
+func TestStatus_DocsSection(t *testing.T) {
+	registry := auth.NewAccountRegistry()
+	_ = registry.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+
+	cfg := testConfig()
+	resp := callStatus(t, cfg, registry, time.Now())
+
+	docsObj, ok := resp["docs"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected docs object in response, got %T", resp["docs"])
+	}
+
+	if docsObj["base_uri"] != "doc://outlook-local-mcp/" {
+		t.Errorf("base_uri = %v, want %q", docsObj["base_uri"], "doc://outlook-local-mcp/")
+	}
+	if docsObj["troubleshooting_slug"] != "troubleshooting" {
+		t.Errorf("troubleshooting_slug = %v, want %q", docsObj["troubleshooting_slug"], "troubleshooting")
+	}
+	if docsObj["version"] != cfg.Version {
+		t.Errorf("docs.version = %v, want %q", docsObj["version"], cfg.Version)
+	}
+}
+
+// TestStatus_Text verifies that the text-mode status output is plain text
+// (not JSON), includes the server version, timezone, uptime, accounts, and
+// features, and does NOT include the full configuration detail.
+func TestStatus_Text(t *testing.T) {
+	registry := auth.NewAccountRegistry()
+	_ = registry.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+
+	cfg := testConfig()
+	handler := tools.HandleStatus(cfg, registry, time.Now().Add(-1*time.Hour))
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"output": "text"}
+	result, err := handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("expected success result, got error")
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("expected non-empty content")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	text := tc.Text
+
+	for _, want := range []string{"outlook-local-mcp", cfg.Version, cfg.DefaultTimezone, "Accounts:", "Features:"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text output missing %q; got:\n%s", want, text)
+		}
+	}
+
+	// Full config detail must NOT appear in text mode.
+	if strings.Contains(text, cfg.ClientID) {
+		t.Errorf("text output should not contain client_id %q", cfg.ClientID)
 	}
 }

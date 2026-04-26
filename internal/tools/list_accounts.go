@@ -10,9 +10,9 @@ package tools
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -58,7 +58,7 @@ func NewListAccountsTool() mcp.Tool {
 // whose email has not yet been fetched.
 func HandleListAccounts(registry *auth.AccountRegistry) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "account_list")
+		logger := logging.Logger(ctx)
 		logger.Debug("tool called")
 
 		// Validate output mode.

@@ -10,10 +10,10 @@ package tools
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"strings"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -65,7 +65,7 @@ func NewRemoveAccountTool() mcp.Tool {
 // accounts file on success.
 func HandleRemoveAccount(registry *auth.AccountRegistry, accountsPath string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "account_remove")
+		logger := logging.Logger(ctx)
 
 		label, err := request.RequireString("label")
 		if err != nil {

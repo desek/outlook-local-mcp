@@ -23,6 +23,7 @@ import (
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/config"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/google/uuid"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
@@ -78,7 +79,9 @@ type addAccountState struct {
 	// setupCredential creates per-account credentials (token credential,
 	// authenticator, auth record path, cache name). Defaults to
 	// auth.SetupCredentialForAccount in production; tests inject a mock.
-	setupCredential func(label, clientID, tenantID, authMethod, cacheName, authRecordDir string) (
+	// The tokenStorage parameter is forwarded from cfg.TokenStorage so that
+	// per-account credentials honour the same storage backend as the default.
+	setupCredential func(label, clientID, tenantID, authMethod, cacheName, authRecordDir, tokenStorage string) (
 		azcore.TokenCredential, auth.Authenticator, string, string, error)
 
 	// authenticate performs authentication and persists the auth record.
@@ -217,7 +220,7 @@ func HandleAddAccount(registry *auth.AccountRegistry, cfg config.Config) func(ct
 // addAccountState for elicitation and authentication.
 func (s *addAccountState) handleAddAccount(registry *auth.AccountRegistry, cfg config.Config) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "account_add")
+		logger := logging.Logger(ctx)
 
 		label, err := request.RequireString("label")
 		if err != nil {
@@ -278,7 +281,7 @@ func (s *addAccountState) handleAddAccount(registry *auth.AccountRegistry, cfg c
 
 		// Create per-account credential via the injectable factory.
 		cred, authenticator, authRecordPath, cacheName, err := s.setupCredential(
-			label, clientID, tenantID, authMethod, cfg.CacheName, authRecordDir,
+			label, clientID, tenantID, authMethod, cfg.CacheName, authRecordDir, cfg.TokenStorage,
 		)
 		if err != nil {
 			logger.Error("credential setup failed", "label", label, "error", err.Error())

@@ -375,14 +375,18 @@ func deviceCodeUserPrompt(ctx context.Context, msg azidentity.DeviceCodeMessage)
 //     label is appended as "{cacheNameBase}-{label}".
 //   - authRecordDir: the directory where auth record files are stored. The
 //     per-account file is named "{label}_auth_record.json" within this directory.
+//   - tokenStorage: the token storage backend ("auto", "keychain", or "file"),
+//     forwarded from the top-level server configuration so that per-account
+//     credentials honour the same storage preference as the default credential.
+//     An empty string falls through to the "auto" behaviour in InitCache.
 //
 // Returns the credential as azcore.TokenCredential, the Authenticator interface,
 // the full auth record path, and the cache name. Returns an error if the auth
 // method is unsupported or credential construction fails.
 //
-// Side effects: initializes the OS keychain token cache, reads the auth record
-// from disk if present.
-func SetupCredentialForAccount(label, clientID, tenantID, authMethod, cacheNameBase, authRecordDir string) (azcore.TokenCredential, Authenticator, string, string, error) {
+// Side effects: initializes the token cache (OS keychain or file-based
+// depending on tokenStorage), reads the auth record from disk if present.
+func SetupCredentialForAccount(label, clientID, tenantID, authMethod, cacheNameBase, authRecordDir, tokenStorage string) (azcore.TokenCredential, Authenticator, string, string, error) {
 	cacheName := cacheNameBase + "-" + label
 	authRecordPath := filepath.Join(authRecordDir, label+"_auth_record.json")
 
@@ -392,6 +396,7 @@ func SetupCredentialForAccount(label, clientID, tenantID, authMethod, cacheNameB
 		AuthRecordPath: authRecordPath,
 		CacheName:      cacheName,
 		AuthMethod:     authMethod,
+		TokenStorage:   tokenStorage,
 	}
 
 	cred, auth, err := SetupCredential(cfg)

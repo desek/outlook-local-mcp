@@ -1,14 +1,17 @@
 package server
 
 import (
+	"context"
 	"log/slog"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/config"
+	"github.com/desek/outlook-local-mcp/internal/docs"
 	"github.com/desek/outlook-local-mcp/internal/graph"
 	"github.com/desek/outlook-local-mcp/internal/observability"
 	"github.com/desek/outlook-local-mcp/internal/tools"
+	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -176,4 +179,51 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	toolCount := 4
 
 	slog.Info("tool registration complete", "tools", toolCount)
+}
+
+// RegisterResources registers each embedded documentation document as an MCP
+// resource on the server with URI scheme doc://outlook-local-mcp/{slug}, MIME
+// type text/markdown, and a human-readable name and description derived from
+// the embedded catalog.
+//
+// Resources are discoverable via the standard resources/list method and
+// fetchable via resources/read. The handler reads the document from the
+// embedded bundle at call time using [docs.ReadSlug].
+//
+// Parameters:
+//   - s: the MCP server instance on which resources are registered.
+//
+// Side effects: registers one resource per catalog entry; logs a completion
+// message on success and a warning on catalog failure (broken build).
+func RegisterResources(s *mcpserver.MCPServer) {
+	catalog, err := docs.Catalog()
+	if err != nil {
+		slog.Warn("docs: catalog unavailable; resources not registered", "error", err)
+		return
+	}
+
+	for _, entry := range catalog {
+		slug := entry.Slug
+		uri := "doc://outlook-local-mcp/" + slug
+		resource := mcp.NewResource(uri, entry.Title,
+			mcp.WithResourceDescription(entry.Summary),
+			mcp.WithMIMEType("text/markdown"),
+		)
+		handler := func(ctx context.Context, req mcp.ReadResourceRequest) ([]mcp.ResourceContents, error) {
+			data, readErr := docs.ReadSlug(slug)
+			if readErr != nil {
+				return nil, readErr
+			}
+			return []mcp.ResourceContents{
+				mcp.TextResourceContents{
+					URI:      req.Params.URI,
+					MIMEType: "text/markdown",
+					Text:     string(data),
+				},
+			}, nil
+		}
+		s.AddResource(resource, handler)
+	}
+
+	slog.Info("resource registration complete", "resources", len(catalog))
 }

@@ -101,23 +101,29 @@ func main() {
 	}
 	slog.Info("graph client initialized", "scopes", scopes)
 
-	// Step 7b: Create account registry and register the startup credential
-	// as the "default" account entry.
+	// Step 7b: Create account registry. Conditionally register the startup
+	// credential as the implicit "default" account entry. The implicit default
+	// is skipped when accounts.json already covers the cfg identity (same
+	// client_id + tenant_id) or already contains an explicit "default" label.
+	// This prevents ghost entries and duplicate state in multi-account setups
+	// (CR-0064).
 	registry := auth.NewAccountRegistry()
-	if err := registry.Add(&auth.AccountEntry{
-		Label:          "default",
-		ClientID:       cfg.ClientID,
-		TenantID:       cfg.TenantID,
-		AuthMethod:     cfg.AuthMethod,
-		Credential:     cred,
-		Authenticator:  authenticator,
-		Client:         graphClient,
-		AuthRecordPath: cfg.AuthRecordPath,
-		CacheName:      cfg.CacheName,
-		Authenticated:  true,
-	}); err != nil {
-		slog.Error("default account registration failed", "error", err)
-		os.Exit(1)
+	if shouldAddImplicitDefault(cfg.AccountsPath, cfg.ClientID, cfg.TenantID) {
+		if err := registry.Add(&auth.AccountEntry{
+			Label:          "default",
+			ClientID:       cfg.ClientID,
+			TenantID:       cfg.TenantID,
+			AuthMethod:     cfg.AuthMethod,
+			Credential:     cred,
+			Authenticator:  authenticator,
+			Client:         graphClient,
+			AuthRecordPath: cfg.AuthRecordPath,
+			CacheName:      cfg.CacheName,
+			Authenticated:  true,
+		}); err != nil {
+			slog.Error("default account registration failed", "error", err)
+			os.Exit(1)
+		}
 	}
 
 	// Step 7c: Restore additional accounts from the persistent accounts file.
@@ -127,7 +133,7 @@ func main() {
 	restored, total := auth.RestoreAccounts(
 		cfg.AccountsPath, cfg.CacheName, authRecordDir,
 		registry, auth.SetupCredentialForAccount, auth.NewDefaultGraphClientFactory(scopes),
-		scopes,
+		scopes, cfg.TokenStorage,
 	)
 	if total > 0 {
 		slog.Info("additional accounts loaded",
@@ -157,6 +163,7 @@ func main() {
 	// account selection and interactive authentication prompts.
 	s := server.NewMCPServer("outlook-local", version,
 		server.WithToolCapabilities(false),
+		server.WithResourceCapabilities(false, false),
 		server.WithRecovery(),
 		server.WithLogging(),
 		server.WithElicitation(),
@@ -176,6 +183,7 @@ func main() {
 		Logger:         slog.Default(),
 	}
 	internalserver.RegisterTools(s, retryCfg, cfg.RequestTimeout, metrics, tracer, cfg.ReadOnly, authMiddleware, registry, cfg, authenticator)
+	internalserver.RegisterResources(s)
 
 	// Create root context for graceful shutdown.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -200,6 +208,52 @@ func main() {
 	slog.Info("server shutting down", "reason", "stdin closed")
 	cancel()
 	close(done)
+}
+
+// shouldAddImplicitDefault reports whether the startup lifecycle should register
+// an implicit "default" AccountEntry from the env cfg. It returns false when:
+//   - clientID is empty (no env cfg identity to register), OR
+//   - accounts.json contains an entry whose (client_id, tenant_id) matches
+//     the supplied clientID and tenantID (identity already covered), OR
+//   - accounts.json contains any entry with the literal label "default"
+//     (explicit default already configured).
+//
+// When accounts.json is missing or empty, this function returns true so that
+// the single-account env-only configuration path continues to work.
+//
+// Parameters:
+//   - accountsPath: path to the accounts JSON file.
+//   - clientID: the OAuth 2.0 client ID from the env cfg.
+//   - tenantID: the Entra ID tenant identifier from the env cfg.
+//
+// Side effects: reads accounts.json from disk. Logs a warning if the file
+// cannot be read (other than not-found), and treats it as an empty file.
+func shouldAddImplicitDefault(accountsPath, clientID, tenantID string) bool {
+	if clientID == "" {
+		return false
+	}
+
+	accounts, err := auth.LoadAccounts(accountsPath)
+	if err != nil {
+		slog.Warn("failed to load accounts for implicit-default check, assuming empty",
+			"error", err, "path", accountsPath)
+		accounts = nil
+	}
+
+	if _, found := auth.FindByIdentity(accounts, clientID, tenantID); found {
+		slog.Info("implicit default registration skipped: accounts.json covers cfg identity",
+			"client_id", clientID, "tenant_id", tenantID)
+		return false
+	}
+
+	for _, a := range accounts {
+		if a.Label == "default" {
+			slog.Info("implicit default registration skipped: accounts.json has explicit default label")
+			return false
+		}
+	}
+
+	return true
 }
 
 // startupProbeTimeout is the maximum duration for the startup silent token

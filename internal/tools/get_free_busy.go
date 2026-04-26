@@ -11,10 +11,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	abstractions "github.com/microsoft/kiota-abstractions-go"
@@ -124,7 +124,7 @@ type BusyPeriod struct {
 //   - Returns a JSON object with timeRange and busyPeriods fields.
 func NewHandleGetFreeBusy(retryCfg graph.RetryConfig, timeout time.Duration, defaultTimezone string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "calendar_get_free_busy")
+		logger := logging.Logger(ctx)
 		start := time.Now()
 
 		client, err := GraphClient(ctx)

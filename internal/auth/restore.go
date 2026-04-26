@@ -12,6 +12,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -40,11 +41,14 @@ const silentAuthTimeout = 5 * time.Second
 //   - authMethod: the authentication method (browser, device_code, auth_code).
 //   - cacheNameBase: base name for the OS keychain partition.
 //   - authRecordDir: directory where per-account auth record files are stored.
+//   - tokenStorage: token storage backend ("auto", "keychain", or "file"),
+//     forwarded from the top-level server configuration so that per-account
+//     credentials honour the same storage preference as the default credential.
 //
 // Returns the token credential, authenticator, auth record path, cache name,
 // or an error if credential construction fails.
 type CredentialFactory func(
-	label, clientID, tenantID, authMethod, cacheNameBase, authRecordDir string,
+	label, clientID, tenantID, authMethod, cacheNameBase, authRecordDir, tokenStorage string,
 ) (azcore.TokenCredential, Authenticator, string, string, error)
 
 // GraphClientFactory creates a Graph API client from a token credential.
@@ -82,6 +86,10 @@ func NewDefaultGraphClientFactory(scopes []string) GraphClientFactory {
 // no error and zero restored accounts. Individual account failures are logged
 // but do not prevent other accounts from being restored.
 //
+// Restore is idempotent for labels already present in the registry (e.g. the
+// "default" account registered at startup). Such entries are silently skipped
+// at Debug level rather than producing a warning.
+//
 // Parameters:
 //   - accountsPath: filesystem path to the accounts JSON file.
 //   - cacheNameBase: base name for the OS keychain partition. Each account
@@ -91,6 +99,9 @@ func NewDefaultGraphClientFactory(scopes []string) GraphClientFactory {
 //   - credFactory: factory function to create credentials and authenticators.
 //   - clientFactory: factory function to create Graph clients from credentials.
 //   - scopes: OAuth scopes to use for silent token acquisition (from Scopes(cfg)).
+//   - tokenStorage: token storage backend forwarded from the top-level server
+//     configuration so that per-account credentials honour the same storage
+//     preference as the default credential ("auto", "keychain", or "file").
 //
 // Returns the number of successfully restored accounts (with active tokens)
 // and the total number of accounts loaded from the file.
@@ -102,6 +113,7 @@ func RestoreAccounts(
 	credFactory CredentialFactory,
 	clientFactory GraphClientFactory,
 	scopes []string,
+	tokenStorage string,
 ) (restored int, total int) {
 	accounts, err := LoadAccounts(accountsPath)
 	if err != nil {
@@ -117,7 +129,7 @@ func RestoreAccounts(
 	slog.Info("restoring accounts from accounts file", "path", accountsPath, "count", total)
 
 	for _, acct := range accounts {
-		if restoreOne(acct, cacheNameBase, authRecordDir, registry, credFactory, clientFactory, scopes) {
+		if restoreOne(acct, cacheNameBase, authRecordDir, registry, credFactory, clientFactory, scopes, tokenStorage) {
 			restored++
 		}
 	}
@@ -128,14 +140,23 @@ func RestoreAccounts(
 
 // restoreOne restores a single account from its persisted configuration.
 // It creates the credential via the provided CredentialFactory, attempts
-// silent token acquisition (except for device_code accounts), creates a
-// Graph client on success, and registers the account in the registry.
+// silent token acquisition, creates a Graph client on success, and registers
+// the account in the registry.
 //
-// For device_code accounts, silent token acquisition is skipped entirely
-// because DeviceCodeCredential.GetToken triggers the device code callback
+// For device_code accounts, silent token acquisition is attempted only when
+// a non-empty auth record file exists at authRecordPath. Without a prior auth
+// record, DeviceCodeCredential.GetToken triggers the device code callback
 // (printing to stderr) when no cached token exists, causing spurious output
-// and startup delays. These accounts are registered with Client=nil and
+// and startup delays. When the auth record exists the credential can silently
+// refresh from the file cache, enabling headless restores (CR-0064 Phase 3).
+// Accounts that fail silent auth are registered with Client=nil and
 // Authenticated=false, deferring re-authentication to the first tool call.
+//
+// If the account label is already present in the registry (for example, the
+// "default" account registered at startup), the function skips the entry and
+// returns false without emitting a warning — this keeps restore idempotent
+// when accounts.json contains labels that overlap with startup-registered
+// accounts.
 //
 // Parameters:
 //   - acct: the persisted account configuration.
@@ -145,6 +166,9 @@ func RestoreAccounts(
 //   - credFactory: factory function to create credentials and authenticators.
 //   - clientFactory: factory function to create Graph clients.
 //   - scopes: OAuth scopes to use for silent token acquisition (from Scopes(cfg)).
+//   - tokenStorage: token storage backend forwarded from the top-level server
+//     configuration so that per-account credentials honour the same storage
+//     preference as the default credential.
 //
 // Returns true if the account was restored with an active token and Graph
 // client, false if the account was registered but needs re-authentication.
@@ -156,12 +180,20 @@ func restoreOne(
 	credFactory CredentialFactory,
 	clientFactory GraphClientFactory,
 	scopes []string,
+	tokenStorage string,
 ) bool {
 	logger := slog.With("account", acct.Label)
 
+	// Skip labels already present in the registry (e.g. the "default" account
+	// registered at startup). Treat as already-restored without a warning.
+	if _, exists := registry.Get(acct.Label); exists {
+		logger.Debug("account already registered, skipping restore")
+		return false
+	}
+
 	cred, authenticator, authRecordPath, cacheName, err := credFactory(
 		acct.Label, acct.ClientID, acct.TenantID, acct.AuthMethod,
-		cacheNameBase, authRecordDir,
+		cacheNameBase, authRecordDir, tokenStorage,
 	)
 	if err != nil {
 		logger.Warn("failed to create credential for account, skipping",
@@ -189,19 +221,24 @@ func restoreOne(
 		entry.Email = acct.UPN
 	}
 
-	// Skip silent token acquisition for device_code accounts. Without a
-	// cached token, DeviceCodeCredential.GetToken triggers the device code
+	// For device_code accounts, attempt silent token acquisition only when
+	// an auth record file already exists and is non-empty. Without a prior
+	// auth record, DeviceCodeCredential.GetToken triggers the device code
 	// callback (printing to stderr) and then times out — wasting 5 seconds
 	// per account and producing spurious output that confuses Claude Desktop.
-	// These accounts are registered with Client=nil and Authenticated=false;
-	// the auth middleware handles re-authentication on first tool call.
-	if acct.AuthMethod != "device_code" {
+	// When the auth record exists, the credential can satisfy the request from
+	// its file cache without starting an interactive flow, matching the
+	// behavior of browser/auth_code accounts.
+	attemptSilent := acct.AuthMethod != "device_code" || authRecordExists(authRecordPath)
+
+	if attemptSilent {
 		// Attempt silent token acquisition with a bounded timeout.
 		ctx, cancel := context.WithTimeout(context.Background(), silentAuthTimeout)
 		defer cancel()
 
 		_, tokenErr := cred.GetToken(ctx, policy.TokenRequestOptions{
-			Scopes: scopes,
+			Scopes:    scopes,
+			EnableCAE: true,
 		})
 
 		if tokenErr == nil {
@@ -219,7 +256,7 @@ func restoreOne(
 				"error", tokenErr)
 		}
 	} else {
-		logger.Info("device_code account skipped silent auth, re-authentication deferred to first use")
+		logger.Info("device_code account skipped silent auth (no auth record), re-authentication deferred to first use")
 	}
 
 	if regErr := registry.Add(entry); regErr != nil {
@@ -234,6 +271,19 @@ func restoreOne(
 
 	logger.Info("account restored, re-authentication required on first use")
 	return false
+}
+
+// authRecordExists reports whether the file at path exists and is non-empty.
+// An empty file is treated as non-existent because a valid auth record always
+// contains JSON content. This helper gates the silent-first attempt in
+// restoreOne for device_code accounts: if no auth record has been written yet,
+// DeviceCodeCredential.GetToken would trigger the device code callback.
+func authRecordExists(path string) bool {
+	fi, err := os.Stat(path)
+	if err != nil {
+		return false
+	}
+	return fi.Size() > 0
 }
 
 // AuthRecordDir extracts the directory path from an auth record file path.

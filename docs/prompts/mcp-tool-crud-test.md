@@ -15,6 +15,15 @@ Step-by-step instruction for Claude Code to exercise the MCP tools through a com
 - At least one account is authenticated (verify with `{tool: "account", args: {operation: "list"}}`).
 - The server **must** be configured with `LOG_LEVEL=debug` and file logging enabled (`LOG_FILE` set). Both are verified in Step 0.
 
+## Non-interactive mode (CR-0064 Phase 3)
+
+When this test runs under `claude -p` or any other non-interactive caller, the following rules apply:
+
+- **MUST NOT call `account.login` for any reason.** The device-code and browser flows require a human at the keyboard and will hang a non-interactive runner indefinitely.
+- **Cached tokens are a hard precondition.** Before starting, ensure all accounts whose steps you intend to execute have a valid file-cache token (run the server interactively at least once to warm the cache).
+- **If an account shows `disconnected` in Step 1:** attempt one benign read with that account (e.g., `{tool: "mail", args: {operation: "list_folders", account: "<label>"}}`). If the read succeeds the account was silently reconnected via the Phase 3 path. If the read returns an auth error, mark all steps that depend on that account **SKIP** and continue with any remaining authenticated accounts.
+- **Steps 28 and 29 (logout/login round-trip) are unconditionally SKIP in non-interactive mode.** See those steps for the explicit note.
+
 ## Instructions
 
 Follow every step sequentially. Use the **default account** (omit `account` param) unless the user specifies otherwise. Omit the `output` parameter for all read operations (the default is `text`) unless a step specifies otherwise.
@@ -27,14 +36,55 @@ Pick a test date **7 days from today** to avoid conflicts with real events. Use 
 
 **0a.** Call `{tool: "system", args: {operation: "help"}}`.
 
-- **Verify:** The response is plain text listing the available system verbs (at least `help`, `status`).
-- **Purpose:** Exercises the help verb and confirms the server is responding (AC-12 / FR-15).
-- **Fail:** Stop and report if the help verb errors.
+- **Verify:** The response is plain text listing the available system verbs (at least `help`, `status`, `list_docs`, `search_docs`, `get_docs`).
+- **Purpose:** Exercises the help verb and confirms the server is responding and that the docs verbs are registered (CR-0061 AC-1).
+- **Fail:** Stop and report if the help verb errors or if any docs verb is missing.
+
+**0a2.** Call `{tool: "system", args: {operation: "list_docs"}}`.
+
+- **Verify:** The response is plain text listing at least three slugs: `readme`, `quickstart`, and `troubleshooting`.
+- **Purpose:** Exercises the `list_docs` verb (CR-0061 AC-1).
+- **Fail:** Report if the verb errors or the expected slugs are absent.
+
+**0a3.** Call `{tool: "system", args: {operation: "search_docs", query: "token refresh"}}`.
+
+- **Verify:** The response includes at least one result with a snippet containing "token" or "refresh" and references the `troubleshooting` slug.
+- **Purpose:** Exercises the `search_docs` verb with a known query (CR-0061 AC-2).
+- **Fail:** Report if the verb errors. Zero results for this query is a failure.
+
+**0a4.** Call `{tool: "system", args: {operation: "get_docs", slug: "troubleshooting", section: "token-refresh"}}`.
+
+- **Verify:** The response is plain text containing the content of the `## Token refresh` section from the troubleshooting guide.
+- **Verify:** The response does NOT include sections from other parts of the document (e.g., `## Graph 429 throttling`).
+- **Purpose:** Exercises the `get_docs` verb with section slicing (CR-0061 AC-3).
+- **Fail:** Report if the verb errors or if the section content is missing or incorrect.
+
+**0a5.** Call `{tool: "system", args: {operation: "get_docs", slug: "troubleshooting", output: "raw"}}`.
+
+- **Verify:** The response is raw Markdown text (starts with `# Troubleshooting`).
+- **Purpose:** Exercises the `raw` output mode of `get_docs` (CR-0061 AC-3).
+- **Fail:** Report if the verb errors.
+
+**0a6.** Intent verification — self-troubleshooting via the docs surface.
+
+Treat the following as a user question that you must answer using only the in-server documentation verbs (`system.search_docs`, `system.get_docs`). Do not rely on prior context, training data, or web knowledge for the answer:
+
+> "A user reports that the auto-registered `default` account keeps reappearing after they remove it. What does the server's in-built troubleshooting guide say to do?"
+
+- **Required actions:**
+  1. Call `system.search_docs` with a query you derive from the question (e.g. `"auto default account"` or `"default account reappear"`).
+  2. Based on the search hits, call `system.get_docs` with the most relevant `slug` (and `section` if the hit identifies one) to fetch the actual guidance.
+  3. Compose a short answer (2–4 sentences) that paraphrases the retrieved section.
+- **Verify:** Both `system.search_docs` and `system.get_docs` were called in this step (recorded in the run's tool-call log).
+- **Verify:** Your answer references the troubleshooting section about the implicit default (anchor `#auto-default-account` or equivalent) — for example, mentioning that removal is persistent and the implicit `default` only re-registers when no other accounts are connected (CR-0064 semantics).
+- **Purpose:** Confirms the **intent** of CR-0061 — that an LLM faced with an unfamiliar problem will discover and consult the in-server docs to help the user, rather than hallucinating from priors.
+- **Fail:** If you answer without calling `search_docs` AND `get_docs` in this step, or if the answer does not reflect content from the troubleshooting guide.
 
 **0b.** Call `{tool: "system", args: {operation: "status", output: "summary"}}` (the full JSON config is needed for this verification step).
 
 - **Verify:** At least one account is listed with an authenticated status.
-- **Fail:** Stop and report the authentication issue.
+- **Verify:** The response contains a `docs` object with `base_uri="doc://outlook-local-mcp/"`, `troubleshooting_slug="troubleshooting"`, and a `version` field (CR-0061 AC-5).
+- **Fail:** Stop and report the authentication issue or if the `docs` section is absent.
 
 **0c.** Record the top-level status fields and the `config` object from the Step 0b JSON response.
 
@@ -70,6 +120,7 @@ Call `{tool: "account", args: {operation: "list"}}`.
 - **Record:** The number of accounts and their labels for the environment report.
 - **Record:** If **two or more** accounts show authenticated status, set **multi-account mode** to `true`. Record the first authenticated account that is NOT the default as the **attendee account label**.
 - If only one account is authenticated, set **multi-account mode** to `false`.
+- **If any required account shows `disconnected` in non-interactive mode:** attempt one benign read with that account (e.g., `{tool: "mail", args: {operation: "list_folders", account: "<label>"}}`). If the read succeeds, the account was silently reconnected (CR-0064 Phase 3) — treat it as authenticated and continue. If the read returns an auth error, do NOT call `account.login`; mark all steps depending on that account **SKIP**.
 - **Fail:** If no accounts are returned or none are authenticated.
 
 ### Step 2 -- List calendars
@@ -391,7 +442,7 @@ Call `{tool: "calendar", args: {operation: "get_event", event_id: "<saved Teams 
 
 Read the **log file path** recorded in Step 0c. Inspect the log entries emitted during the test (from Step 1 onward).
 
-- **Verify:** Every tool call has a `DEBUG`-level "tool called" entry and an `INFO`-level (or `ERROR` for Steps 15, 23, 25) "tool completed" entry.
+- **Verify:** Every tool call has a `DEBUG`-level entry at the start of the operation and an `INFO`-level (or `ERROR` for Steps 15, 23, 25) "tool completed" entry. The DEBUG entry may be the generic `"tool called"` (read verbs and `create_event`, `create_meeting`, `update_event`) or a domain-specific message (`"rescheduling event"`, `"deleting event"`, `"responding to event"`, `"cancelling event"`); both forms satisfy this check.
 - **Verify:** The `calendar.create_event` audit entry includes the event ID.
 - **Verify:** The `calendar.delete_event` audit entry includes the event ID and confirms deletion.
 - **Verify:** The `calendar.reschedule_event` audit entry includes the event ID.
@@ -416,6 +467,8 @@ Call `{tool: "account", args: {operation: "refresh", label: "<default account la
 
 ### Step 28 -- Log out of account
 
+> **Non-interactive mode:** Mark Steps 28 and 29 unconditionally **SKIP**. The login step requires interactive user input (browser or device code) and will hang a non-interactive runner. Do not attempt even if cached tokens appear valid.
+
 > **Note:** This test requires at least one non-default account in addition to the default account, or `account login` in Step 29 must be used to restore access before further tests. If only one account is registered, mark Steps 28 and 29 **SKIP** to avoid leaving the test environment unauthenticated.
 
 Pick a **non-default authenticated account** from Step 1's list (the **attendee account label** in multi-account mode). Call `{tool: "account", args: {operation: "logout", label: "<non-default account label>"}}`.
@@ -427,6 +480,8 @@ Pick a **non-default authenticated account** from Step 1's list (the **attendee 
 
 ### Step 29 -- Log back in to account
 
+> **Non-interactive mode:** Mark this step unconditionally **SKIP** (see Step 28 note above).
+
 Call `{tool: "account", args: {operation: "login", label: "<label from Step 28>"}}`.
 
 Complete the authentication flow interactively when prompted (browser, device code, or auth code, per the account's persisted auth method).
@@ -435,6 +490,35 @@ Complete the authentication flow interactively when prompted (browser, device co
 - **Verify:** A subsequent `{tool: "account", args: {operation: "list"}}` call shows the account back as `authenticated`.
 - **Verify:** Calling `{tool: "account", args: {operation: "login", label: "<label>"}}` again on the same (now connected) account returns an error stating the account is already connected.
 - **Fail:** If the account does not return to the authenticated state or the already-connected guard does not trigger.
+
+### Step 29a -- Durable account removal (skip if single-account mode)
+
+> **Multi-account only.** If single-account mode, mark this step **SKIP**.
+
+This step verifies that `account.remove` is durable across server restart when `accounts.json` contains an entry for the removed label (CR-0064 AC-4).
+
+1. Call `{tool: "account", args: {operation: "list"}}` and record the full set of registered account labels.
+2. Pick any non-default account that has a persisted `accounts.json` entry (for example the attendee account from Step 1). Record its label as `<remove-target>`.
+3. Call `{tool: "account", args: {operation: "remove", label: "<remove-target>"}}`.
+   - **Pass:** Response is plain text confirming removal including the label and "Token cache cleared."
+   - **Verify:** A subsequent `{tool: "account", args: {operation: "list"}}` does not include `<remove-target>`.
+4. **Restart the server** (stop and start the `outlook-local-mcp` process).
+5. After restart, call `{tool: "account", args: {operation: "list"}}` again.
+   - **Pass:** `<remove-target>` is absent from the account list.
+   - **Fail:** If `<remove-target>` reappears, `accounts.json` was not rewritten correctly.
+6. **Restore:** Call `{tool: "account", args: {operation: "add", label: "<remove-target>", ...}}` with the original `client_id`, `tenant_id`, and `auth_method` to restore the attendee account for subsequent steps. Complete the authentication flow when prompted.
+
+### Step 29b -- Default reappearance when accounts.json loses cfg coverage (informational)
+
+> **Informational only.** Do not run this step in automated test suites; it requires a server restart and leaves the default account in a potentially unauthenticated state. Record as **SKIP** unless specifically testing CR-0064 AC-5.
+
+When `accounts.json` contains the only entry whose `client_id` and `tenant_id` match the env config (`OUTLOOK_MCP_CLIENT_ID`, `OUTLOOK_MCP_TENANT_ID`), removing that entry removes the gating signal. The implicit "default" reappears at the next server start. This is expected behavior: the env-only single-account UX is preserved.
+
+To verify AC-5 manually:
+1. Ensure `accounts.json` contains exactly one entry whose identity matches the env config.
+2. Run `{tool: "account", args: {operation: "remove", label: "<that entry>"}}`.
+3. Restart the server.
+4. Call `{tool: "account", args: {operation: "list"}}` and verify "default" is present.
 
 ### Step 30 -- Mail operations (skip if mail disabled)
 
@@ -469,7 +553,7 @@ Call `{tool: "mail", args: {operation: "create_draft", to: "<own UPN>", subject:
 
 ### Step 32 -- Update draft
 
-Call `{tool: "mail", args: {operation: "update_draft", id: "<draft ID>", subject: "CRUD test draft (updated)"}}`.
+Call `{tool: "mail", args: {operation: "update_draft", message_id: "<draft ID>", subject: "CRUD test draft (updated)"}}`.
 
 - **Verify:** Response is plain text confirming the update.
 - **Verify:** A subsequent `{tool: "mail", args: {operation: "get_message", id: "<draft ID>"}}` call shows the updated subject.
@@ -477,7 +561,7 @@ Call `{tool: "mail", args: {operation: "update_draft", id: "<draft ID>", subject
 
 ### Step 33 -- Create reply draft
 
-Call `{tool: "mail", args: {operation: "create_reply_draft", id: "<draft ID>", comment: "Replying to my own draft."}}`.
+Call `{tool: "mail", args: {operation: "create_reply_draft", message_id: "<draft ID>", comment: "Replying to my own draft."}}`. **Note:** `create_reply_draft` cannot reply to a draft message (Microsoft Graph constraint); the call is expected to return an error indicating the source must be a received or sent message. Fall back to using a recent Inbox message ID for this step.
 
 If the server rejects replying to a draft, instead pick the most recent message from `{tool: "mail", args: {operation: "list_messages", folder: "Inbox"}}` and reply to it. Record the reply draft ID as **reply draft ID**.
 
@@ -486,9 +570,9 @@ If the server rejects replying to a draft, instead pick the most recent message 
 
 ### Step 34 -- Delete reply draft and original draft
 
-Call `{tool: "mail", args: {operation: "delete_draft", id: "<reply draft ID>"}}` (if created).
+Call `{tool: "mail", args: {operation: "delete_draft", message_id: "<reply draft ID>"}}` (if created).
 
-Then call `{tool: "mail", args: {operation: "delete_draft", id: "<draft ID>"}}`.
+Then call `{tool: "mail", args: {operation: "delete_draft", message_id: "<draft ID>"}}`.
 
 - **Verify:** Both calls return plain text delete confirmations.
 - **Verify:** A subsequent `{tool: "mail", args: {operation: "get_message", id: "<draft ID>"}}` returns an error (message no longer exists).
@@ -526,6 +610,13 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 0b   | Verify connectivity (summary)     | PASS/FAIL      | e.g., "default account authenticated; DEBUG logging on"  |
 | 0c   | Record config                     | PASS/FAIL      | e.g., "log_file present; timezone=Europe/Stockholm"      |
 | 0d   | Verify text default for status    | PASS/FAIL      | e.g., "plain text, no config leak"                       |
+| 0a   | system help (docs verbs listed)   | PASS/FAIL      | e.g., "list_docs, search_docs, get_docs present"         |
+| 0a2  | list_docs (text)                  | PASS/FAIL      | e.g., "3 slugs: readme, quickstart, troubleshooting"     |
+| 0a3  | search_docs (token refresh)       | PASS/FAIL      | e.g., "troubleshooting slug ranked in results"           |
+| 0a4  | get_docs section (token-refresh)  | PASS/FAIL      | e.g., "section content returned, no cross-section bleed" |
+| 0a5  | get_docs raw (troubleshooting)    | PASS/FAIL      | e.g., "raw markdown starts with # Troubleshooting"       |
+| 0a6  | docs intent (self-troubleshoot)   | PASS/FAIL      | e.g., "search_docs + get_docs called; answer cites #auto-default-account" |
+| 0b   | status docs section present       | PASS/FAIL      | e.g., "base_uri + troubleshooting_slug + version"        |
 | 1    | List accounts (text)              | PASS/FAIL      | e.g., "1 authenticated, 1 disconnected"                  |
 | 2    | List calendars (text)             | PASS/FAIL      | e.g., "default + Birthdays"                              |
 | 2a   | Discover calendar verbs (help)    | PASS/FAIL      | e.g., "all 14 verbs listed in help output"               |
@@ -561,6 +652,7 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 27   | Force refresh token (text)        | PASS/FAIL      | e.g., "label + expiry in plain text"                     |
 | 28   | Log out non-default account       | PASS/FAIL/SKIP | e.g., "only default authenticated" or "logged out"       |
 | 29   | Log back in non-default account   | PASS/FAIL/SKIP | e.g., "only default authenticated" or "re-authenticated" |
+| 29a  | Durable account removal           | PASS/FAIL/SKIP | e.g., "single-account mode" or "label absent after restart" |
 | 30a  | Discover mail verbs (help)        | PASS/FAIL/SKIP | e.g., "mail disabled" or "all verbs listed"              |
 | 30b  | Mail list is_read filter          | PASS/FAIL/SKIP | e.g., "unread filter honored"                            |
 | 30c  | Mail list flag_status filter      | PASS/FAIL/SKIP | e.g., "flagged filter honored"                           |

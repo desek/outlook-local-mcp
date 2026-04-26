@@ -12,10 +12,10 @@ package tools
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
@@ -85,7 +85,7 @@ var rescheduleSelectFields = []string{"id", "start", "end"}
 // entry, error level on failure, and info level on success.
 func HandleRescheduleEvent(retryCfg graph.RetryConfig, timeout time.Duration, defaultTimezone string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "calendar_reschedule_event")
+		logger := logging.Logger(ctx)
 
 		client, err := GraphClient(ctx)
 		if err != nil {

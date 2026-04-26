@@ -66,8 +66,14 @@ func buildAccountVerbs(c accountVerbsConfig) ([]tools.Verb, *tools.VerbRegistry)
 	}
 
 	addVerb := tools.Verb{
-		Name:    "add",
-		Summary: "add and authenticate a new Microsoft account (browser/device_code/auth_code)",
+		Name:        "add",
+		Summary:     "add and authenticate a new Microsoft account (browser/device_code/auth_code)",
+		Description: "Adds a new Microsoft account to the registry and initiates authentication using the configured or specified method (browser, device_code, or auth_code). The label is a human-readable identifier used to reference this account in subsequent calls. If the server's CLIENT_ID is a well-known name, the account uses that client; otherwise supply a client_id.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"label": "work"}, Comment: "add a work account using the server's default auth method"},
+			{Args: map[string]any{"label": "personal", "auth_method": "device_code"}, Comment: "add with device code flow"},
+		},
+		SeeDocs: []string{"concepts#headless-and-non-interactive-authentication", "concepts#well-known-client-ids"},
 		Handler: wrap("account.add", "write", tools.HandleAddAccount(c.registry, c.cfg)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
@@ -93,9 +99,11 @@ func buildAccountVerbs(c accountVerbsConfig) ([]tools.Verb, *tools.VerbRegistry)
 	}
 
 	removeVerb := tools.Verb{
-		Name:    "remove",
-		Summary: "remove an account from the registry and clear its tokens (irreversible)",
-		Handler: wrap("account.remove", "write", tools.HandleRemoveAccount(c.registry, c.cfg.AccountsPath)),
+		Name:        "remove",
+		Summary:     "remove an account from the registry and clear its tokens (irreversible)",
+		Description: "Removes an account from the registry and clears all cached tokens. This operation is irreversible and local-only (it does not revoke the OAuth grant with Microsoft). To reconnect the same account, use the add verb again. The implicit auto-registered 'default' account reappears only when no other accounts are connected.",
+		SeeDocs:     []string{"concepts#auto-default-account-semantics"},
+		Handler:     wrap("account.remove", "write", tools.HandleRemoveAccount(c.registry, c.cfg.AccountsPath)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(true),
@@ -111,8 +119,13 @@ func buildAccountVerbs(c accountVerbsConfig) ([]tools.Verb, *tools.VerbRegistry)
 	}
 
 	listVerb := tools.Verb{
-		Name:    "list",
-		Summary: "list all registered accounts with label, UPN, state, and auth_method",
+		Name:        "list",
+		Summary:     "list all registered accounts with label, UPN, state, and auth_method",
+		Description: "Lists all accounts in the registry with their label, UPN (once authenticated), connection state (connected, disconnected), and the auth method used. Always call this before using calendar or mail verbs to confirm the correct account is connected.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"output": "summary"}, Comment: "get a compact JSON list of accounts"},
+		},
+		SeeDocs: []string{"concepts#multi-account-model-and-upn-identity"},
 		Handler: wrap("account.list", "read", tools.HandleListAccounts(c.registry)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -129,9 +142,11 @@ func buildAccountVerbs(c accountVerbsConfig) ([]tools.Verb, *tools.VerbRegistry)
 	}
 
 	loginVerb := tools.Verb{
-		Name:    "login",
-		Summary: "re-authenticate a disconnected account without removing it",
-		Handler: wrap("account.login", "write", tools.HandleLoginAccount(c.registry, c.cfg)),
+		Name:        "login",
+		Summary:     "re-authenticate a disconnected account without removing it",
+		Description: "Re-authenticates a disconnected account without removing it from the registry. Use this after a token has expired or the account was disconnected via logout. The label must match an existing registry entry.",
+		SeeDocs:     []string{"concepts#headless-and-non-interactive-authentication"},
+		Handler:     wrap("account.login", "write", tools.HandleLoginAccount(c.registry, c.cfg)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -147,9 +162,10 @@ func buildAccountVerbs(c accountVerbsConfig) ([]tools.Verb, *tools.VerbRegistry)
 	}
 
 	logoutVerb := tools.Verb{
-		Name:    "logout",
-		Summary: "disconnect an account without removing it; preserves config for login",
-		Handler: wrap("account.logout", "write", tools.HandleLogoutAccount(c.registry)),
+		Name:        "logout",
+		Summary:     "disconnect an account without removing it; preserves config for login",
+		Description: "Disconnects an authenticated account by clearing its cached tokens. The account entry remains in the registry so that login can reconnect it without re-specifying client and tenant details. Does not revoke the OAuth grant with Microsoft.",
+		Handler:     wrap("account.logout", "write", tools.HandleLogoutAccount(c.registry)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),
@@ -165,9 +181,10 @@ func buildAccountVerbs(c accountVerbsConfig) ([]tools.Verb, *tools.VerbRegistry)
 	}
 
 	refreshVerb := tools.Verb{
-		Name:    "refresh",
-		Summary: "force a token refresh for an authenticated account; returns new expiry",
-		Handler: wrap("account.refresh", "write", tools.HandleRefreshAccount(c.registry, c.cfg)),
+		Name:        "refresh",
+		Summary:     "force a token refresh for an authenticated account; returns new expiry",
+		Description: "Forces an immediate token refresh for an authenticated account and returns the new expiry time. Useful in long-running sessions before making time-sensitive Graph API calls. Tokens are normally refreshed automatically on each call; this verb forces the refresh eagerly.",
+		Handler:     wrap("account.refresh", "write", tools.HandleRefreshAccount(c.registry, c.cfg)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),
 			mcp.WithDestructiveHintAnnotation(false),

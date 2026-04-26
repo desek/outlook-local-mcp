@@ -6,6 +6,7 @@
 * Use `deepwiki` MCP for knowledge about specific package implementations details when needed.
 * Use the file `.deepwiki` as a repository for relevant DeepWiki repositories.
 * Continuously keep the `.gitignore` accurate to not bloat the repository.
+* `CHANGELOG.md` is managed by release-please and **MUST NOT** be manually updated.
 
 ## Project Structure
 
@@ -25,7 +26,7 @@ outlook-mcp/
     validate/                  # Input validation helpers
     observability/             # OpenTelemetry metrics and tracing, WithObservability middleware
     server/                    # RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
-    tools/                     # 4 aggregate domain tools dispatching verb sets: calendar (15 verbs), mail (5-13 verbs gated by MailEnabled/MailManageEnabled), account (7 verbs), system (2-3 verbs gated by auth_code); see CR-0056, CR-0058, CR-0060
+    tools/                     # 4 aggregate domain tools dispatching verb sets: calendar (15 verbs), mail (5-13 verbs gated by MailEnabled/MailManageEnabled), account (7 verbs), system (5-6 verbs gated by auth_code: status, complete_auth, help, list_docs, search_docs, get_docs); see CR-0056, CR-0058, CR-0060, CR-0061
   docs/
     ...
 ```
@@ -84,7 +85,7 @@ Aggregate tools and their domains:
 * `calendar` -- Calendar and event verbs
 * `mail` -- Mail message, folder, and draft verbs
 * `account` -- Account management verbs
-* `system` -- Server-level verbs (`status`, optional `complete_auth`, `help`)
+* `system` -- Server-level verbs (`status`, optional `complete_auth`, `help`, `list_docs`, `search_docs`, `get_docs`); see CR-0061
 
 Verb names **MUST** be self-explanatory English verbs or verb phrases without the domain prefix (for example `create_event`, not `calendar_create_event`). Every domain tool exposes an `operation="help"` verb that documents its registered verbs. The `{domain}.{operation}` identity is what surfaces in audit logs and OpenTelemetry attributes.
 
@@ -129,6 +130,36 @@ Every token in an MCP tool response competes with user instructions, conversatio
 ## MCP Tool Testing Instructions
 
 When a new MCP tool is added or an existing tool's parameters/behavior change, `docs/prompts/mcp-tool-crud-test.md` **MUST** be updated to include testing steps that exercise the new or changed functionality. This keeps the CRUD lifecycle test accurate and ensures all tools are covered by the integration test script.
+
+### Harness Maintenance
+
+The `make crud-test` harness (`scripts/crud-test.sh`) **MUST** be lifecycled alongside MCP tool surface changes. When a verb, domain, or tool is added, renamed, or removed, the following **MUST** be updated in the same change:
+
+* `docs/prompts/mcp-tool-crud-test.md` — the prompt the headless agent executes; new verbs need new test steps, removed verbs need their steps deleted.
+* `scripts/crud-test.sh` — if a new top-level domain (currently `calendar`, `mail`, `account`, `system`) is introduced, add a corresponding `mcp_<domain>` column to the CSV header and a matching bucket in the per-run tool-count `awk` block. Removed domains require pruning the column and bucket.
+* `docs/bench/crud-runs.csv` — header **MUST** match the script's output schema; reset historical rows when columns change rather than leaving short rows.
+
+The harness's value depends on this coupling: drift means the bench either silently skips new functionality or emits malformed CSV rows.
+
+## Documentation Governance
+
+User-facing documentation has a single source of truth per concern. Future CRs that add or change documentation **MUST** route content according to the rules below.
+
+1. **Per-tool reference** (verb name, parameters, return shape, examples) is owned by the `Verb` registry in `internal/tools/dispatch_registry.go`. Each verb populates `Summary`, `Description`, and where applicable `Examples` and `SeeDocs`. The `system.help` verb renders the registry; do not duplicate this content in markdown.
+2. **Narrative concepts** (output tiers, multi-account model, gating modes, authentication flows, OAuth scopes summary, observability overview, well-known client IDs, in-server documentation surface, MCP elicitation) live in `docs/concepts.md`. New concepts are added as new anchored sections; verbs reference them via `SeeDocs`. Detailed contributor-level material (sequence diagrams, token cache schema, middleware chain, OTel attribute lists) does NOT belong here; it lives in `docs/reference/` and is not embedded.
+3. **First-run workflow** lives in `docs/quickstart.md`. Configuration steps, integration setup, and end-to-end verification go here.
+4. **Failure modes and recovery** live in `docs/troubleshooting.md`. Each entry has a stable anchor for `SeeDocs` references.
+5. **Architecture and internals** live in `docs/reference/{architecture,auth-flows,observability,release}.md`. These files are not embedded into the binary. The boundary rule: if an LLM helping a user mid-session needs the content to use or troubleshoot the server, it belongs in an embedded file (`concepts.md` or `troubleshooting.md`); if only a contributor modifying the code needs it, it belongs in `docs/reference/`.
+6. **Governance** (CRs and ADRs) lives in `docs/cr/` and `docs/adr/`. Not embedded.
+7. The repository-root `README.md` is a landing page only. It contains install, the four-domain tool invocation example, a link grid into `docs/`, and the licence. It **MUST NOT** contain per-tool reference, full configuration tables, or narrative concepts.
+8. The embedded bundle is exactly four files: `docs/{readme,quickstart,concepts,troubleshooting}.md`. Adding a fifth requires updating `docs/embed.go`, the allowlist test, and this section.
+9. **Placement decision tree for new content:**
+   - Is it 1:1 with a verb? → registry (`Description`, `Examples`).
+   - Does it span verbs and explain a concept? → `docs/concepts.md`.
+   - Is it a step-by-step setup workflow? → `docs/quickstart.md`.
+   - Is it a failure mode and how to recover? → `docs/troubleshooting.md`.
+   - Is it architecture, internals, or a build/release detail? → `docs/reference/`.
+   - Is it a decision or scope change? → CR or ADR under `docs/cr/` or `docs/adr/`.
 
 ## Quality Standards
 

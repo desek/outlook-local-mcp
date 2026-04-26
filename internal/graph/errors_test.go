@@ -2,9 +2,12 @@ package graph
 
 import (
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
+	"unicode"
 
+	"github.com/desek/outlook-local-mcp/internal/docs"
 	"github.com/microsoftgraph/msgraph-sdk-go/models/odataerrors"
 )
 
@@ -106,4 +109,139 @@ func TestRedactGraphError_NonODataError(t *testing.T) {
 	if !strings.Contains(got, "[email redacted]") {
 		t.Errorf("expected [email redacted], got %q", got)
 	}
+}
+
+// TestErrorSeeHint_InefficientFilter verifies that a Graph ErrorInvalidRequest
+// or InefficientFilter OData error returns the troubleshooting URI for the
+// inefficient-filter anchor. This assertion acts as a build guard: if the
+// mapping is removed or the anchor changes, this test fails.
+func TestErrorSeeHint_InefficientFilter(t *testing.T) {
+	code := "ErrorInvalidRequest"
+	msg := "The request filter is inefficient"
+
+	mainErr := odataerrors.NewMainError()
+	mainErr.SetCode(&code)
+	mainErr.SetMessage(&msg)
+
+	odataErr := odataerrors.NewODataError()
+	odataErr.SetErrorEscaped(mainErr)
+
+	got := ErrorSeeHint(odataErr)
+	want := "doc://outlook-local-mcp/troubleshooting#inefficient-filter"
+	if got != want {
+		t.Errorf("ErrorSeeHint() = %q, want %q", got, want)
+	}
+}
+
+// TestErrorSeeHint_Throttling verifies that TooManyRequests OData errors
+// resolve to the graph-429-throttling anchor.
+func TestErrorSeeHint_Throttling(t *testing.T) {
+	code := "TooManyRequests"
+	msg := "Too many requests"
+
+	mainErr := odataerrors.NewMainError()
+	mainErr.SetCode(&code)
+	mainErr.SetMessage(&msg)
+
+	odataErr := odataerrors.NewODataError()
+	odataErr.SetErrorEscaped(mainErr)
+
+	got := ErrorSeeHint(odataErr)
+	want := "doc://outlook-local-mcp/troubleshooting#graph-429-throttling"
+	if got != want {
+		t.Errorf("ErrorSeeHint() = %q, want %q", got, want)
+	}
+}
+
+// TestErrorSeeHint_SentinelString verifies that the sentinel string
+// "auth_expired" embedded in a plain error is mapped to the token-refresh
+// anchor via the fallback string-scan path.
+func TestErrorSeeHint_SentinelString(t *testing.T) {
+	err := errors.New("auth_expired: token cache empty")
+	got := ErrorSeeHint(err)
+	want := "doc://outlook-local-mcp/troubleshooting#token-refresh"
+	if got != want {
+		t.Errorf("ErrorSeeHint() = %q, want %q", got, want)
+	}
+}
+
+// TestErrorSeeHint_Nil verifies that a nil error returns an empty string.
+func TestErrorSeeHint_Nil(t *testing.T) {
+	if got := ErrorSeeHint(nil); got != "" {
+		t.Errorf("ErrorSeeHint(nil) = %q, want empty", got)
+	}
+}
+
+// TestErrorSeeHint_Unknown verifies that an unmapped error returns an empty
+// string rather than a garbage URI.
+func TestErrorSeeHint_Unknown(t *testing.T) {
+	err := errors.New("completely unknown error class")
+	if got := ErrorSeeHint(err); got != "" {
+		t.Errorf("ErrorSeeHint(unknown) = %q, want empty", got)
+	}
+}
+
+// headingSlugRe matches Markdown ATX headings (## or deeper) and captures the
+// heading text so it can be normalised to a slug for anchor comparison.
+var headingSlugRe = regexp.MustCompile(`(?m)^#{2,}\s+(.+)$`)
+
+// headingToSlug converts a Markdown heading string to a GitHub-compatible
+// anchor slug: lowercase, spaces replaced by hyphens, non-alphanumeric
+// characters (except hyphens) removed.
+func headingToSlug(heading string) string {
+	s := strings.ToLower(strings.TrimSpace(heading))
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == ' ':
+			b.WriteRune('-')
+		case r == '-' || unicode.IsLetter(r) || unicode.IsDigit(r):
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+// TestErrorSeeTable_AnchorsCoverEmbeddedHeadings is a build-time guard that
+// verifies every anchor slug in errorSeeTable resolves to an actual ## (or
+// deeper) heading in the embedded troubleshooting document. The test fails if
+// any anchor has no corresponding heading, ensuring that the mapping stays
+// consistent with the documentation as both evolve.
+func TestErrorSeeTable_AnchorsCoverEmbeddedHeadings(t *testing.T) {
+	data, err := docs.ReadSlug("troubleshooting")
+	if err != nil {
+		t.Fatalf("docs.ReadSlug(\"troubleshooting\") error: %v", err)
+	}
+
+	// Build the set of slugs present in the embedded document.
+	matches := headingSlugRe.FindAllStringSubmatch(string(data), -1)
+	knownSlugs := make(map[string]bool, len(matches))
+	for _, m := range matches {
+		knownSlugs[headingToSlug(m[1])] = true
+	}
+
+	// Collect unique anchors from errorSeeTable and assert each resolves.
+	seen := make(map[string]bool)
+	for code, anchor := range errorSeeTable {
+		if seen[anchor] {
+			continue
+		}
+		seen[anchor] = true
+		t.Run(anchor, func(t *testing.T) {
+			if !knownSlugs[anchor] {
+				t.Errorf("errorSeeTable[%q] = %q: anchor %q has no matching ## heading in embedded troubleshooting.md; available slugs: %v",
+					code, anchor, anchor, slugList(knownSlugs))
+			}
+		})
+	}
+}
+
+// slugList returns a sorted human-readable list of known slugs for error
+// messages. It is used only in test failure output.
+func slugList(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
 }

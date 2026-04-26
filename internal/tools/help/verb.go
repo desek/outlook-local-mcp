@@ -37,8 +37,10 @@ func NewHelpVerb(registry *tools.VerbRegistry) tools.Verb {
 	}
 
 	return tools.Verb{
-		Name:    "help",
-		Summary: "show detailed documentation for all verbs or a single named verb",
-		Handler: tools.Handler(handler),
+		Name:        "help",
+		Summary:     "show detailed documentation for all verbs or a single named verb",
+		Description: "Renders documentation for all verbs in this domain or a single named verb. Use output=text (default) for human-readable output, output=summary for compact JSON, or output=raw for the full structured JSON including examples and see_docs references.",
+		SeeDocs:     []string{"concepts#in-server-documentation-surface"},
+		Handler:     tools.Handler(handler),
 	}
 }

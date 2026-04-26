@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
 )
@@ -148,6 +149,7 @@ func buildDispatchHandler(domain string, registry VerbRegistry) mcpserver.ToolHa
 			), nil
 		}
 
+		ctx = logging.WithToolName(ctx, domain+"."+op)
 		return verb.wrappedHandler()(ctx, req)
 	}
 }

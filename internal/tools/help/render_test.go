@@ -213,6 +213,74 @@ func TestRenderHelp_SummaryIncludesParameters(t *testing.T) {
 	}
 }
 
+// TestRenderTextIncludesDescription verifies that text output includes each
+// verb's Description (CR-0065 AC-5, FR-10).
+func TestRenderTextIncludesDescription(t *testing.T) {
+	reg := tools.VerbRegistry{
+		"list_events": {
+			Name:        "list_events",
+			Summary:     "list events in a time window",
+			Description: "Returns calendar events in the specified window, expanding recurrences.",
+		},
+		"help": {
+			Name:        "help",
+			Summary:     "show documentation",
+			Description: "Renders documentation for this domain.",
+		},
+	}
+	result, err := Render(reg, "", "text")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	text := resultText(t, result)
+	for _, want := range []string{
+		"Returns calendar events",
+		"Renders documentation for this domain",
+	} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text output missing description %q\noutput:\n%s", want, text)
+		}
+	}
+}
+
+// TestRenderRawIncludesExamplesAndSeeDocs verifies that raw JSON output
+// contains examples and see_docs fields per verb (CR-0065 AC-5, FR-10).
+func TestRenderRawIncludesExamplesAndSeeDocs(t *testing.T) {
+	reg := tools.VerbRegistry{
+		"list_events": {
+			Name:        "list_events",
+			Summary:     "list events in a time window",
+			Description: "Returns calendar events in the specified window.",
+			Examples: []tools.Example{
+				{Args: map[string]any{"date": "today"}, Comment: "list today's events"},
+			},
+			SeeDocs: []string{"concepts#output-tiers"},
+		},
+	}
+	result, err := Render(reg, "", "raw")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	text := resultText(t, result)
+
+	var payload struct {
+		Operations []map[string]json.RawMessage `json:"operations"`
+	}
+	if err := json.Unmarshal([]byte(text), &payload); err != nil {
+		t.Fatalf("raw JSON unmarshal: %v\n%s", err, text)
+	}
+	if len(payload.Operations) != 1 {
+		t.Fatalf("expected 1 operation, got %d", len(payload.Operations))
+	}
+	op := payload.Operations[0]
+	if _, ok := op["examples"]; !ok {
+		t.Errorf("raw JSON missing 'examples' key: %v", op)
+	}
+	if _, ok := op["see_docs"]; !ok {
+		t.Errorf("raw JSON missing 'see_docs' key: %v", op)
+	}
+}
+
 // TestRenderHelp_UnknownVerb verifies that scoping to an unregistered verb
 // returns a structured error (AC-3 / FR-5).
 func TestRenderHelp_UnknownVerb(t *testing.T) {

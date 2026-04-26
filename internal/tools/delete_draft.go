@@ -10,10 +10,10 @@ package tools
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -58,7 +58,7 @@ func NewDeleteDraftTool() mcp.Tool {
 // Graph API.
 func NewHandleDeleteDraft(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "mail_delete_draft")
+		logger := logging.Logger(ctx)
 
 		client, err := GraphClient(ctx)
 		if err != nil {

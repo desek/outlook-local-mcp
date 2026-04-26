@@ -12,11 +12,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"sort"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	msgraphcore "github.com/microsoftgraph/msgraph-sdk-go-core"
@@ -105,7 +105,7 @@ var conversationFullSelectFields = []string{
 //     thread via SerializeConversationThread.
 func NewHandleGetConversation(retryCfg graph.RetryConfig, timeout time.Duration, provenancePropertyID string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		logger := slog.With("tool", "mail_get_conversation")
+		logger := logging.Logger(ctx)
 		start := time.Now()
 
 		client, err := GraphClient(ctx)
