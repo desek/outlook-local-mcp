@@ -5,7 +5,7 @@ BUILD_DIR := .
 CMD_PATH := ./cmd/outlook-local-mcp/
 
 build:
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	go build -ldflags="-X main.commit=$$(git rev-parse --short HEAD) -X main.buildDate=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 test:
 	CGO_ENABLED=0 go test -coverprofile=coverage.out ./...

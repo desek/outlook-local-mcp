@@ -25,7 +25,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{.Version}}
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.buildDate={{.Date}}
 
   - id: container
     main: ./cmd/outlook-local-mcp/
@@ -40,7 +40,7 @@ builds:
     flags:
       - -trimpath
     ldflags:
-      - -s -w -X main.version={{.Version}}
+      - -s -w -X main.version={{.Version}} -X main.commit={{.ShortCommit}} -X main.buildDate={{.Date}}
 
 archives:
   - id: binaries
