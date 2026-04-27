@@ -11,6 +11,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/desek/outlook-local-mcp/internal/buildinfo"
 )
 
 // FormatEventsText formats a slice of serialized summary event maps into a
@@ -774,6 +776,34 @@ func FormatStatusText(status statusResponse) string {
 	}
 	fmt.Fprintf(&b, "\nFeatures: read-only=%s, mail=%s, mail-manage=%s, provenance=%s", readOnly, mail, mailManage, status.Config.Features.ProvenanceTag)
 
+	return b.String()
+}
+
+// FormatAboutText formats a buildinfo.Info into a labelled single-screen
+// plain-text rendering suitable for the LLM to read once and remember.
+// The output stays under 24 lines as required by CR-0067 FR-9.
+//
+// Parameters:
+//   - info: the buildinfo.Info snapshot from buildinfo.Snapshot.
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatAboutText(info buildinfo.Info) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "outlook-local-mcp %s\n", info.Version)
+	fmt.Fprintf(&b, "  commit: %s\n", info.Commit)
+	fmt.Fprintf(&b, "  built:  %s\n", info.BuildDate)
+	fmt.Fprintf(&b, "  go:     %s\n", info.GoVersion)
+	b.WriteString("Host\n")
+	fmt.Fprintf(&b, "  os/arch:      %s/%s\n", info.OS, info.Arch)
+	fmt.Fprintf(&b, "  runtime:      %s\n", info.Runtime)
+	fmt.Fprintf(&b, "  distribution: %s\n", info.Distribution)
+	fmt.Fprintf(&b, "  auth backend: %s\n", info.AuthBackend)
+	b.WriteString("Links\n")
+	fmt.Fprintf(&b, "  homepage: %s\n", info.Homepage)
+	fmt.Fprintf(&b, "  issues:   %s\n", info.IssueTracker)
+	fmt.Fprintf(&b, "  docs:     %s\n", info.DocsBase)
 	return b.String()
 }
 

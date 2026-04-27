@@ -58,6 +58,8 @@ func main() {
 	// Steps 1-2: Load config, validate, then init logger
 	cfg := config.LoadConfig()
 	cfg.Version = version
+	cfg.Commit = commit
+	cfg.BuildDate = buildDate
 	if err := config.ValidateConfig(cfg); err != nil {
 		slog.Error("configuration validation failed", "error", err)
 		os.Exit(1)

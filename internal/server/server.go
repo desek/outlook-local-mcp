@@ -134,10 +134,13 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		tracer:    t,
 		authMW:    authMW,
 		cred:      cred,
+		version:   cfg.Version,
+		commit:    cfg.Commit,
+		buildDate: cfg.BuildDate,
 	})
 	populated := tools.RegisterDomainTool(s, tools.DomainToolConfig{
 		Domain:          "system",
-		Intro:           "System diagnostics and authentication utilities for the Outlook MCP server.",
+		Intro:           "System diagnostics and authentication utilities for the Outlook MCP server. Start with system.about when troubleshooting — it returns build identity and host environment metadata without requiring authentication.",
 		Verbs:           sysVerbs,
 		ToolAnnotations: systemToolAnnotations(),
 	})

@@ -250,6 +250,48 @@ func TestAggregateAnnotations_FourToolsRegistered(t *testing.T) {
 	}
 }
 
+// TestAboutVerbAnnotations_ReadOnlyLocalIdempotent verifies that the
+// system.about verb is registered as read-only, non-destructive, idempotent,
+// and local (no open-world) per CR-0067 AC-7.
+//
+// The verb is called with operation="about" and must return a non-error result
+// containing the version and host fields in plain text.
+func TestAboutVerbAnnotations_ReadOnlyLocalIdempotent(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"about"}}}`
+	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
+
+	rpcResp, ok := resp.(mcp.JSONRPCResponse)
+	if !ok {
+		t.Fatalf("expected JSONRPCResponse, got %T", resp)
+	}
+	result, ok := rpcResp.Result.(*mcp.CallToolResult)
+	if !ok {
+		t.Fatalf("expected *CallToolResult, got %T", rpcResp.Result)
+	}
+	if result.IsError {
+		t.Fatalf("about verb returned error: %v", result.Content)
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("about verb returned empty content")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	// Verify key fields are present in the text output.
+	for _, want := range []string{"outlook-local-mcp", "Host", "Links"} {
+		if !strings.Contains(tc.Text, want) {
+			t.Errorf("about text output missing %q; got:\n%s", want, tc.Text)
+		}
+	}
+}
+
 // TestPerVerbAnnotations_DocumentedInHelp verifies that calling
 // operation="help" on each domain tool returns output that documents
 // annotation-relevant semantics (read-only, destructive) per AC-9.

@@ -47,6 +47,15 @@ type systemVerbsConfig struct {
 	// cred is the default authenticator for the complete_auth verb. May be nil
 	// when auth_code is not the active auth method.
 	cred auth.Authenticator
+
+	// version is the binary version string injected via ldflags at build time.
+	version string
+
+	// commit is the short Git SHA injected via ldflags at build time.
+	commit string
+
+	// buildDate is the RFC3339 UTC build timestamp injected via ldflags at build time.
+	buildDate string
 }
 
 // buildSystemVerbs constructs the ordered []tools.Verb slice for the system
@@ -200,8 +209,38 @@ func buildSystemVerbs(c systemVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 		},
 	}
 
+	// about verb: read-only, local, no Graph call, safe without authentication.
+	aboutHandler := observability.WithObservability(
+		"system.about", c.m, c.tracer,
+		audit.AuditWrap("system.about", "read", tools.HandleAbout(c.version, c.commit, c.buildDate)),
+	)
+	aboutVerb := tools.Verb{
+		Name:        "about",
+		Summary:     "return build identity and host environment metadata for troubleshooting",
+		Description: "Returns a stable, read-only snapshot of build identity (version, commit, build date, Go runtime) and host environment (OS, architecture, container detection, distribution channel hint, auth backend in use) plus project URLs (homepage, issue tracker, docs base). Use this verb first when grounding troubleshooting advice or drafting issue reports — it answers \"what am I talking to?\" without making any Graph call. Safe to call without authentication.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"operation": "about"}, Comment: "get build and environment metadata"},
+			{Args: map[string]any{"operation": "about", "output": "summary"}, Comment: "compact JSON for issue reports"},
+		},
+		SeeDocs: []string{"troubleshooting"},
+		Handler: tools.Handler(aboutHandler),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(false),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("output",
+				mcp.Description("Output mode: 'text' (default), 'summary', or 'raw'."),
+				mcp.Enum("text", "summary", "raw"),
+			),
+		},
+	}
+
 	verbs := []tools.Verb{
 		help.NewHelpVerb(registryPtr),
+		aboutVerb,
 		statusVerb,
 		listDocsVerb,
 		searchDocsVerb,
