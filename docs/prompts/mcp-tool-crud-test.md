@@ -80,6 +80,31 @@ Treat the following as a user question that you must answer using only the in-se
 - **Purpose:** Confirms the **intent** of CR-0061 — that an LLM faced with an unfamiliar problem will discover and consult the in-server docs to help the user, rather than hallucinating from priors.
 - **Fail:** If you answer without calling `search_docs` AND `get_docs` in this step, or if the answer does not reflect content from the troubleshooting guide.
 
+**0a7.** Call `{tool: "system", args: {operation: "about"}}` (default `text` output).
+
+- **Verify:** The response is plain text containing `outlook-local-mcp`, `Host`, and `Links` blocks.
+- **Verify:** The output is at most 24 lines.
+- **Purpose:** Exercises the `about` verb in its default text mode (CR-0067 AC-1, FR-9).
+- **Fail:** Report if the verb errors or if any of the three required blocks are absent.
+
+**0a8.** Call `{tool: "system", args: {operation: "about", output: "summary"}}`.
+
+- **Verify:** The response is compact JSON containing all 12 fields: `version`, `commit`, `buildDate`, `goVersion`, `os`, `arch`, `runtime`, `distribution`, `authBackend`, `homepage`, `issueTracker`, `docsBase`.
+- **Purpose:** Exercises the `about` verb in `summary` mode (CR-0067 AC-2).
+- **Fail:** Report if any of the 12 fields are absent from the JSON.
+
+**0a9.** Call `{tool: "system", args: {operation: "about", output: "raw"}}`.
+
+- **Verify:** The response is JSON with at minimum the same 12 fields as `summary` mode plus any additional fields from the full `Info` struct.
+- **Purpose:** Exercises the `about` verb in `raw` mode (CR-0067 AC-2).
+- **Fail:** Report if the verb errors.
+
+**0a10.** Check that the `system.help` output (Step 0a) mentions `about`.
+
+- **Verify:** The help text for the `system` domain lists `about` as a registered verb.
+- **Purpose:** Confirms the verb is discoverable via the registry-driven help surface (CR-0067 AC-6).
+- **Fail:** If `about` does not appear in the system help output.
+
 **0b.** Call `{tool: "system", args: {operation: "status", output: "summary"}}` (the full JSON config is needed for this verification step).
 
 - **Verify:** At least one account is listed with an authenticated status.
@@ -616,6 +641,10 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 0a4  | get_docs section (token-refresh)  | PASS/FAIL      | e.g., "section content returned, no cross-section bleed" |
 | 0a5  | get_docs raw (troubleshooting)    | PASS/FAIL      | e.g., "raw markdown starts with # Troubleshooting"       |
 | 0a6  | docs intent (self-troubleshoot)   | PASS/FAIL      | e.g., "search_docs + get_docs called; answer cites #auto-default-account" |
+| 0a7  | about text (all blocks present)   | PASS/FAIL      | e.g., "outlook-local-mcp, Host, Links blocks ≤24 lines"  |
+| 0a8  | about summary (12 JSON fields)    | PASS/FAIL      | e.g., "all 12 fields present in compact JSON"            |
+| 0a9  | about raw (full Info JSON)        | PASS/FAIL      | e.g., "raw JSON includes version, authBackend, docsBase"  |
+| 0a10 | about listed in system help       | PASS/FAIL      | e.g., "about verb present in system help output"         |
 | 0b   | status docs section present       | PASS/FAIL      | e.g., "base_uri + troubleshooting_slug + version"        |
 | 1    | List accounts (text)              | PASS/FAIL      | e.g., "1 authenticated, 1 disconnected"                  |
 | 2    | List calendars (text)             | PASS/FAIL      | e.g., "default + Birthdays"                              |
