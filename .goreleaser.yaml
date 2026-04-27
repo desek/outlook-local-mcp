@@ -88,10 +88,12 @@ release:
   mode: keep-existing
 
 dockers_v2:
-  - id: outlook-local-mcp
+  - id: outlook-local-mcp-scratch
     ids:
       - container
     dockerfile: Dockerfile
+    flags:
+      - --target=runtime-scratch
     images:
       - "ghcr.io/desek/{{ .ProjectName }}"
     tags:
@@ -100,6 +102,35 @@ dockers_v2:
     platforms:
       - linux/amd64
       - linux/arm64
+
+  - id: outlook-local-mcp-distroless
+    ids:
+      - container
+    dockerfile: Dockerfile
+    flags:
+      - --target=runtime-distroless
+    images:
+      - "ghcr.io/desek/{{ .ProjectName }}"
+    tags:
+      - "v{{ .Version }}-distroless"
+      - distroless
+    platforms:
+      - linux/amd64
+      - linux/arm64
+
+  - id: outlook-local-mcp-debug
+    ids:
+      - container
+    dockerfile: Dockerfile
+    flags:
+      - --target=runtime-debug
+    images:
+      - "ghcr.io/desek/{{ .ProjectName }}"
+    tags:
+      - "v{{ .Version }}-debug"
+      - debug
+    platforms:
+      - linux/amd64
 
 snapshot:
   version_template: "{{ incpatch .Version }}-snapshot"
