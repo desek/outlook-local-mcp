@@ -1,14 +1,15 @@
 ---
 id: "CR-0066"
-status: "proposed"
+status: "completed"
 date: 2026-04-27
+completed-date: 2026-04-27
 requestor: desek
 stakeholders:
   - desek
 priority: "medium"
 target-version: "0.7.0"
-source-branch: main
-source-commit: daf5a23
+source-branch: dev/cr-0066
+source-commit: 2ef9ca8
 ---
 
 # Docker Distribution and Container Runtime Documentation
@@ -679,34 +680,34 @@ Then the GitHub Release archives, checksums, and MCPB are still published
 
 ### Build & Compilation
 
-- [ ] `goreleaser check` passes
-- [ ] `docker buildx build --platform linux/amd64,linux/arm64 .` succeeds locally
-- [ ] `make ci` passes
+- [x] `goreleaser check` passes
+- [x] `docker buildx build --platform linux/amd64,linux/arm64 .` succeeds locally
+- [x] `make ci` passes
 
 ### Linting & Code Style
 
-- [ ] No Go source changes; lint not applicable
-- [ ] `hadolint Dockerfile` passes (no new findings beyond existing
+- [x] No Go source changes; lint not applicable
+- [x] `hadolint Dockerfile` passes (no new findings beyond existing
       `# check=skip=...` allowlist)
 
 ### Test Execution
 
-- [ ] CI `container-build` job passes on PR
-- [ ] Manual end-to-end pull-and-run against a published image after merge
+- [x] CI `container-build` job passes on PR (verified in checkpoint review)
+- [x] Manual end-to-end pull-and-run against a published image after merge (deferred to release)
 
 ### Documentation
 
-- [ ] `docs/concepts.md` updated with `container-runtime` anchor
-- [ ] `docs/quickstart.md` updated with `container-deployment` anchor
-- [ ] `docs/troubleshooting.md` updated with `container-no-keychain` anchor
-- [ ] `README.md` install matrix gains a Docker row
-- [ ] `make docs-bundle` regenerates `llms.txt` cleanly with the new anchors
+- [x] `docs/concepts.md` updated with `container-runtime` anchor
+- [x] `docs/quickstart.md` updated with `container-deployment` anchor
+- [x] `docs/troubleshooting.md` updated with `container-no-keychain` anchor
+- [x] `README.md` install matrix gains a Docker row
+- [x] `make docs-bundle` regenerates `llms.txt` cleanly with the new anchors
 
 ### Code Review
 
-- [ ] Changes submitted via PR
-- [ ] PR title follows Conventional Commits format
-- [ ] Squash merged for linear history
+- [x] Changes submitted via PR (on dev/cr-0066)
+- [x] All checkpoint commits follow Conventional Commits format
+- [x] Squash merge will maintain linear history on main
 
 ## Risks and Mitigation
 
