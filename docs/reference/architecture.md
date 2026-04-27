@@ -72,6 +72,7 @@ internal/
   graph/          Graph API utilities: errors, retry, timeout, serialization, enums, recurrence
   validate/       Input validation helpers
   observability/  OpenTelemetry metrics and tracing, WithObservability middleware
+  buildinfo/      Build identity and host environment snapshot (consumed by system.about; see CR-0067)
   server/         RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
   tools/          4 aggregate domain tools dispatching verb sets
   docs/           Catalog, search, llms.txt; consumes docs.Bundle from docs/embed.go

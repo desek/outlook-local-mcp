@@ -25,6 +25,7 @@ outlook-mcp/
     graph/                     # Graph API utilities: errors, retry, timeout, serialization, enums, recurrence
     validate/                  # Input validation helpers
     observability/             # OpenTelemetry metrics and tracing, WithObservability middleware
+    buildinfo/                 # Build identity and host environment snapshot (system.about; CR-0067)
     server/                    # RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
     tools/                     # 4 aggregate domain tools dispatching verb sets: calendar (15 verbs), mail (5-13 verbs gated by MailEnabled/MailManageEnabled), account (7 verbs), system (6-7 verbs gated by auth_code: about, status, complete_auth, help, list_docs, search_docs, get_docs); see CR-0056, CR-0058, CR-0060, CR-0061, CR-0067
   docs/
