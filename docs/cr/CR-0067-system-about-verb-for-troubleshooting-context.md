@@ -169,7 +169,7 @@ Update `Makefile` `build` target to inject the same values from `git rev-parse
 ### 2. Add `internal/buildinfo/` Package
 
 Small read-only helper package exposing build/runtime identity. Single file,
-single function `Snapshot(version, commit, buildDate string) Info`. Returns:
+single function `Snapshot(version, commit, buildDate, authBackend string) Info`. Returns:
 
 ```go
 type Info struct {
@@ -301,8 +301,8 @@ flowchart TD
 7. The verb **MUST** be audit-wrapped under the identity `system.about`.
 8. The verb **MUST** support the three-tier output model
    (`text`/`summary`/`raw`).
-9. The default (`text`) output **MUST** fit on a single terminal screen
-   (~24 lines).
+9. The default (`text`) output **MUST** be under 24 lines and **MUST**
+   render every field on a labelled line.
 10. The verb **MUST** include the following fields: `version`, `commit`,
     `buildDate`, `goVersion`, `os`, `arch`, `runtime`, `distribution`,
     `authBackend`, `homepage`, `issueTracker`, `docsBase`.
@@ -324,8 +324,9 @@ flowchart TD
 
 15. The `authBackend` field **MUST** reflect the currently active token
     cache backend (`"keychain"` or `"file"`).
-16. The auth subsystem **MUST** expose its selected backend through a
-    method or field that the about handler can read at request time.
+16. The auth subsystem **MUST** expose its selected backend through an
+    exported function or field that the about handler **MUST** read at
+    request time.
 
 #### Documentation
 
@@ -502,6 +503,11 @@ package-level state set during `InitCache`.
 | About handler — summary | integration | output=summary | compact JSON |
 | About handler — raw | integration | output=raw | full Info JSON |
 | Tool annotations | unit | new verb registered | aggregate annotations unchanged |
+| Auth backend reflected | unit | InitCache with storage="file" | authBackend="file" |
+| Help overview references about | unit | render system.help | overview text mentions `system.about` |
+| Default ldflags absent | unit | `go run` (no ldflags) | version="dev", commit="unknown", buildDate="unknown" |
+| Distribution detection failure | unit | unreadable executable path | distribution="unknown", no panic |
+| About handler latency | unit | benchmark | completes in under 5ms |
 | `make ci` | full | full tree | passes |
 
 ## Acceptance Criteria
@@ -694,3 +700,37 @@ issue-quality reports without duplicating runtime state.
 * CR-0066: Docker Distribution and Container Runtime Documentation —
   the runtime-detection categories `about` returns are the same set
   documented in `docs/concepts.md#container-runtime`.
+
+<!--
+## CR Review Summary (Agent 2)
+
+Findings: 5
+Fixes applied:
+1. Resolved `Snapshot` signature contradiction between Section 2 and Phase 2
+   (now consistently takes `version, commit, buildDate, authBackend`).
+2. Tightened FR-9 from vague "~24 lines" to MUST under 24 lines with labelled
+   field lines, aligning with AC-4.
+3. Replaced vague wording in FR-16 ("method or field that the about handler
+   can read") with MUST-form requirement on both auth subsystem and handler.
+4. Added Test Strategy rows for AC-3 (auth backend) and AC-6 (help overview),
+   previously uncovered.
+5. Added Test Strategy rows for FR-3 (ldflags-absent defaults), FR-14
+   (distribution detection no-panic fallback), and NFR-3 (under-5ms latency)
+   to close requirement-to-test coverage gaps.
+
+Unresolved items: none.
+
+CLAUDE.md compliance verified:
+- Aggregate-tool verb dispatch (CR-0060): `about` added as a verb under the
+  existing `system` aggregate tool — not a new top-level tool. OK.
+- 5 MCP annotations: aggregate annotations unchanged (FR-20, AC-7); new verb
+  is read-only/idempotent/local/non-destructive, strictly less restrictive.
+- Three-tier output (text/summary/raw): all three implemented (FR-8, Section 4).
+- `extension/manifest.json`: aggregate count unchanged, no manifest update
+  needed — explicitly noted in Affected Components.
+- Go doc comments and small isolated files: new `internal/buildinfo/` and
+  `internal/tools/about.go` files keep LoC small per project convention.
+- CRUD test coverage: Phase 5 explicitly updates
+  `docs/prompts/mcp-tool-crud-test.md`. OK.
+-->
+
