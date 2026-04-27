@@ -69,10 +69,15 @@ code changes. The remaining work is workflow wiring and documentation.
 * `Dockerfile`: multi-stage (alpine for CA certs, scratch for runtime).
   Statically links the `container` GoReleaser build (`CGO_ENABLED=0`). Sets
   `OUTLOOK_MCP_AUTH_RECORD_PATH=/data/auth/auth_record.json` so the token cache
-  lands at a predictable mount point. `ENTRYPOINT` runs the binary directly,
-  preserving stdio transport. The Dockerfile will be extended in this CR with
-  a second target stage based on `gcr.io/distroless/static-debian12:nonroot`
-  to produce the distroless variant from the same binary.
+  lands at a predictable mount point, and (per CR-0067) sets
+  `RUNNING_IN_CONTAINER=1` so the `buildinfo` runtime detector reports
+  `runtime=container` from `system.about` even on a `scratch` image where
+  filesystem markers like `/.dockerenv` are absent. `ENTRYPOINT` runs the
+  binary directly, preserving stdio transport. The Dockerfile will be extended
+  in this CR with a second target stage based on
+  `gcr.io/distroless/static-debian12:nonroot` to produce the distroless
+  variant from the same binary; the new stage **MUST** carry the same
+  `RUNNING_IN_CONTAINER=1` env.
 * `.goreleaser.yaml` has a `dockers_v2` block targeting
   `ghcr.io/desek/outlook-local-mcp` for `linux/amd64` and `linux/arm64`, tagged
   `v{{ .Version }}` and `latest`.
@@ -116,8 +121,8 @@ binary input:
   response and is used only for the `<tag>-debug` image tags.
 
 Both stages copy the same `/usr/local/bin/outlook-local-mcp` binary, the same
-`/data/auth` env default, and the same OCI labels. The `ENTRYPOINT` is
-unchanged.
+`/data/auth` env default, the same `RUNNING_IN_CONTAINER=1` env (per CR-0067),
+and the same OCI labels. The `ENTRYPOINT` is unchanged.
 
 ### 2. Add Container Build/Push Job to Release Workflow
 
@@ -287,44 +292,53 @@ flowchart LR
    `licenses`, `title`, `description`) sourced from the existing `Dockerfile`.
 7. The distroless variant **MUST** run as the non-root `nonroot` user
    (UID 65532). The scratch variant runs as root (no alternative inside
-   `scratch`); this is documented as a trade-off.
-5. The image **MUST** be signed and SBOM-attested if and only if signing is
+   `scratch`); this trade-off **MUST** be documented in `docs/concepts.md`.
+8. The image **MUST** be signed and SBOM-attested if and only if signing is
    already enabled at the project level (deferred per CR-0036; tracked as a
    non-goal here).
-6. The image push **MUST** use `GITHUB_TOKEN` with `packages: write` scope, no
-   long-lived PAT.
-7. Image publish failure **MUST NOT** block the GitHub Release itself
-   (archives, MCPB are independent).
+9. The image push **MUST** use `GITHUB_TOKEN` with `packages: write` scope and
+   **MUST NOT** rely on a long-lived PAT.
+10. Image publish failure **MUST NOT** block the GitHub Release itself
+    (archives and MCPB are independent artefacts).
 
 #### CI Validation
 
-8. CI **MUST** build the image for `linux/amd64` on every PR via
-   `docker buildx build` without `--push`.
-9. CI **MUST** run `docker run --rm <image> --version` and assert exit code 0.
-10. CI **MUST** fail if the Dockerfile fails to build or the smoke test fails.
+11. CI **MUST** build the image for `linux/amd64` on every PR via
+    `docker buildx build` without `--push`, against both `runtime-scratch`
+    and `runtime-distroless` target stages.
+12. CI **MUST** run `docker run --rm <image> --version` against each built
+    variant and **MUST** assert exit code 0.
+13. CI **MUST** assert via `docker inspect` that the distroless variant's
+    configured user is `nonroot` or `65532`.
+14. CI **MUST** fail if any Dockerfile build, smoke test, or non-root
+    assertion fails.
 
 #### Runtime Behaviour
 
-11. The container **MUST** run the server on stdio with no transport
+15. The container **MUST** run the server on stdio with no transport
     configuration required.
-12. The container **MUST** persist the token cache to `/data/auth/` so a host
+16. The container **MUST** persist the token cache to `/data/auth/` so a host
     volume mount preserves credentials across restarts.
-13. The container **MUST** log a warning, not error, when a keychain-backed
+17. The container **MUST** log a warning, not an error, when a keychain-backed
     cache is requested but unavailable, and **MUST** automatically fall back to
     file storage. (Already implemented; this CR documents and tests it.)
 
 #### Documentation
 
-14. `docs/concepts.md` **MUST** gain a `container-runtime` section covering
+18. `docs/concepts.md` **MUST** gain a `container-runtime` section covering
     what works, the keychain limitation, and the deferred HTTP transport.
-15. `docs/quickstart.md` **MUST** gain a `container-deployment` section with
+19. `docs/quickstart.md` **MUST** gain a `container-deployment` section with
     the recommended `docker run -i --rm -v ...` invocation and an MCP client
     config snippet.
-16. `docs/troubleshooting.md` **MUST** gain a `container-no-keychain` entry
+20. `docs/troubleshooting.md` **MUST** gain a `container-no-keychain` entry
     that links from the runtime warning's `see` field.
-17. `README.md` **MUST** include a Docker install entry in the install matrix.
-18. The Graph error envelope `see` mechanism (CR-0061) **MUST NOT** require
-    changes; the new doc anchors are addressable directly.
+21. `README.md` **MUST** include a Docker install entry in the install matrix.
+22. The Graph error envelope `see` mechanism (CR-0061) **MUST NOT** require
+    changes; the new doc anchors **MUST** be addressable directly.
+23. Both runtime stages **MUST** export `RUNNING_IN_CONTAINER=1` (CR-0067) so
+    `system.about` reports `runtime=container` and `distribution=container`
+    from a `scratch` image where `/proc/1/cgroup` and `/.dockerenv` may not
+    be readable.
 
 ### Non-Functional Requirements
 
@@ -430,9 +444,29 @@ deployment path for users without a Go toolchain.
 
 ## Implementation Approach
 
-### Phase 1: CI Validation Job
+### Phase 1: Dockerfile Dual-Target Refactor
 
-Add to `.github/workflows/ci.yml` (depends on the existing `build` job):
+Refactor `Dockerfile` so a single builder stage produces one binary that two
+named runtime stages consume:
+
+* `runtime-scratch` (existing behaviour): `FROM scratch`, ca-certs copied from
+  the alpine builder, root UID, no shell. This stage **MUST** export
+  `RUNNING_IN_CONTAINER=1`.
+* `runtime-distroless`: `FROM gcr.io/distroless/static-debian12:nonroot`. Runs
+  as the `nonroot` user (UID 65532). Includes ca-certs and tzdata from the
+  base. This stage **MUST** export `RUNNING_IN_CONTAINER=1` and **MUST**
+  carry the same OCI labels and `/data/auth` env default as the scratch stage.
+
+Update `.goreleaser.yaml` `dockers_v2` so both target stages and all six tag
+permutations (`v{{ .Version }}`, `latest`, `v{{ .Version }}-distroless`,
+`distroless`, `v{{ .Version }}-debug`, `debug`) are declared.
+
+### Phase 3: CI Validation Job
+
+Add to `.github/workflows/ci.yml` (depends on the existing `build` job). The
+job **MUST** build both `runtime-scratch` and `runtime-distroless` target
+stages and run a `--version` smoke test against each, plus assert the
+distroless variant is configured to run as `nonroot`/`65532`:
 
 ```yaml
 container-build:
@@ -507,7 +541,7 @@ The `--snapshot` flag is acceptable because the version label inside the
 binary is set elsewhere; the only artefact consumed here is the binary copied
 into the runtime stage.
 
-### Phase 3: Documentation
+### Phase 4: Documentation
 
 * `docs/concepts.md`: add `## Container runtime` (anchor `container-runtime`)
   with three subsections: "Supported", "Limitations", "Deferred".
@@ -519,7 +553,7 @@ into the runtime stage.
   and the file-storage fallback.
 * `README.md`: append a Docker install row.
 
-### Phase 4: Validate
+### Phase 5: Validate
 
 1. `make ci` — confirms quality gates still pass.
 2. Open a PR — confirm the new `container-build` CI job runs and passes.
@@ -543,6 +577,9 @@ into the runtime stage.
 | Multi-arch publish | Inspect manifest after release | Released tag | `linux/amd64` + `linux/arm64` present |
 | Token volume persistence | Run twice with same `-v` mount | Image + volume | Second run reuses cached token |
 | Keychain fallback warning | Run with `OUTLOOK_MCP_TOKEN_CACHE_STORAGE=keychain` | Built image | Warning logged, file cache used |
+| `system.about` runtime detection | Pipe `tools/call system about` JSON-RPC into `docker run -i` | Built image | `runtime=container`, `distribution=container`, `authBackend=file` |
+| Distroless non-root user | `docker inspect --format '{{.Config.User}}' <image>` | Distroless image | Output is `nonroot` or `65532` |
+| Release isolation on container failure | Inject simulated `docker push` failure in workflow re-run | Release workflow | GitHub Release artefacts (archives, checksums, MCPB) still published |
 
 No Go source changes; existing unit tests in `internal/auth/cache_nocgo_test.go`
 already cover the keychain fallback.
@@ -619,7 +656,17 @@ When they look up the warning in docs/troubleshooting.md
 Then the container-no-keychain entry explains the cause and confirms the fallback is safe
 ```
 
-### AC-8: Image publish failure does not block release
+### AC-8: `system.about` self-identifies as container
+
+```gherkin
+Given the published scratch or distroless image
+When "system.about" is invoked over stdio
+Then the response reports runtime="container"
+  And distribution="container"
+  And authBackend="file"
+```
+
+### AC-9: Image publish failure does not block release
 
 ```gherkin
 Given the release workflow is running
@@ -743,9 +790,53 @@ surfacing the keychain trade-off in the docs rather than silently degrading.
 * CR-0061: In-server Documentation Access — the `see` doc-hint mechanism that
   the new `container-no-keychain` anchor will be addressable through if the
   warning log is later upgraded to surface a doc pointer.
+* CR-0067: `system.about` Verb for Build and Environment Troubleshooting
+  Context — implemented; provides the `RUNNING_IN_CONTAINER` env detector
+  and the `runtime` / `distribution` / `authBackend` fields this CR's
+  Dockerfile and validation depend on.
 * CR-0064: Conditional Implicit Default Account Registration — relevant
   because container-mode users typically rely on env-cfg + a single account,
   which is exactly the path Phase 3 of CR-0064 hardened.
 * `awesome-mcp-servers` PR
   [#5437](https://github.com/punkpeye/awesome-mcp-servers/pull/5437) — the
   immediate consumer of this CR's published image.
+
+<!--
+## Review Summary (Agent 2, CR Reviewer)
+
+Findings: 7
+Fixes applied:
+  1. Renumbered duplicate Functional Requirements in Image Publishing
+     (FR 5/6/7 collisions resolved; section now 1-10 contiguous, with
+     CI Validation 11-14, Runtime Behaviour 15-17, Documentation 18-23).
+  2. Tightened ambiguous prose: scratch root trade-off, GITHUB_TOKEN scope,
+     keychain warning, and CR-0061 anchor addressability now use MUST/MUST NOT.
+  3. Reconciled Implementation Approach with Estimated Effort: added
+     Phase 1 (Dockerfile + .goreleaser.yaml refactor), renumbered subsequent
+     phases so Implementation Approach now matches the 5-phase Estimated
+     Effort table (Dockerfile, Release, CI, Docs, Validate).
+  4. Strengthened Phase 3 (CI) text to require both target stages plus the
+     non-root assertion, aligning with AC-2 and AC-1b.
+  5. Added Test Strategy rows for AC-1b (distroless non-root user) and
+     AC-9 (release isolation on container-job failure), closing
+     AC-to-test coverage gaps.
+  6. Confirmed FR 23 (RUNNING_IN_CONTAINER) maps to AC-8, which already has
+     a Test Strategy row.
+  7. Verified scope: Affected Components (Dockerfile, .goreleaser.yaml,
+     two workflow files, four doc files) now all have a corresponding
+     Implementation Approach phase.
+
+Unresolved / notes for caller:
+  - CLAUDE.md compliance: confirmed no Go source changes, no new MCP tools,
+    no tool annotation/output-tier work. Naming/annotation rules N/A.
+  - CRUD test prompt (`docs/prompts/mcp-tool-crud-test.md`): system.about
+    is already covered by CR-0067. A dedicated step exercising
+    system.about *inside the container* would be a useful addition but
+    is out of this CR's documentation scope; flagged for follow-up.
+  - Existing prose in the CR retains some em-dashes from the original
+    draft. New prose added by this review uses commas only, per
+    user CLAUDE.md.
+  - Mermaid diagrams use `\n` line breaks; they render correctly in
+    GitHub's mermaid version and were left unchanged.
+-->
+
