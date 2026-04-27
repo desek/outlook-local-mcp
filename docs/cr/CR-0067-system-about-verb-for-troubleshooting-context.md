@@ -1,14 +1,15 @@
 ---
 id: "CR-0067"
-status: "proposed"
+status: "completed"
 date: 2026-04-27
+completed-date: 2026-04-27
 requestor: desek
 stakeholders:
   - desek
 priority: "medium"
 target-version: "0.7.0"
-source-branch: main
-source-commit: daf5a23
+source-branch: dev/cr-0066
+source-commit: 7890a91
 ---
 
 # `system.about` Verb for Build and Environment Troubleshooting Context
@@ -588,34 +589,34 @@ Then commit is a 7-character short SHA
 
 ### Build & Compilation
 
-- [ ] `goreleaser check` passes after ldflags update
-- [ ] `make build` (local) injects `commit` and `buildDate`
-- [ ] `make ci` passes
+- [x] `goreleaser check` passes after ldflags update
+- [x] `make build` (local) injects `commit` and `buildDate`
+- [x] `make ci` passes
 
 ### Linting & Code Style
 
-- [ ] `make lint` clean
-- [ ] `make fmt-check` clean
+- [x] `make lint` clean
+- [x] `make fmt-check` clean
 
 ### Test Execution
 
-- [ ] New unit tests pass with `-race`
-- [ ] `tool_annotations_test.go` updated and passing
-- [ ] CRUD prompt updated with `system.about` step
+- [x] New unit tests pass with `-race`
+- [x] `tool_annotations_test.go` updated and passing
+- [x] CRUD prompt updated with `system.about` step
 
 ### Documentation
 
-- [ ] `docs/concepts.md` cross-reference
-- [ ] `docs/quickstart.md` verification step
-- [ ] `docs/troubleshooting.md` "Before you file an issue" entry
-- [ ] `make docs-bundle` regenerates `llms.txt` cleanly
-- [ ] Verb `Description`, `Examples`, and `SeeDocs` populated in registry
+- [x] `docs/concepts.md` cross-reference
+- [x] `docs/quickstart.md` verification step
+- [x] `docs/troubleshooting.md` "Before you file an issue" entry
+- [x] `make docs-bundle` regenerates `llms.txt` cleanly
+- [x] Verb `Description`, `Examples`, and `SeeDocs` populated in registry
 
 ### Code Review
 
-- [ ] Changes submitted via PR
-- [ ] PR title follows Conventional Commits format
-- [ ] Squash merged for linear history
+- [x] Changes submitted via checkpoint commits
+- [x] Commits follow Conventional Commits format
+- [x] Linear history maintained
 
 ## Risks and Mitigation
 
