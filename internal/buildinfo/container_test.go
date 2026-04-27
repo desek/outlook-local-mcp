@@ -35,13 +35,22 @@ func TestIsContainerKubernetes(t *testing.T) {
 	}
 }
 
+// TestIsContainerRunningInContainerEnv verifies that IsContainer returns true
+// when RUNNING_IN_CONTAINER is set.
+func TestIsContainerRunningInContainerEnv(t *testing.T) {
+	t.Setenv("RUNNING_IN_CONTAINER", "1")
+	if !IsContainer() {
+		t.Error("IsContainer() = false with RUNNING_IN_CONTAINER set, want true")
+	}
+}
+
 // TestIsContainerNone verifies that IsContainer returns false when no
 // container markers are present (assuming the test environment itself is not
 // a container — this test is skipped when running inside Docker/k8s).
 func TestIsContainerNone(t *testing.T) {
 	// If the test host is already inside a container we cannot test the
 	// false-negative path without mocking the filesystem, so skip.
-	if fileExists("/.dockerenv") || fileExists("/run/.containerenv") || os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+	if fileExists("/.dockerenv") || fileExists("/run/.containerenv") || os.Getenv("KUBERNETES_SERVICE_HOST") != "" || os.Getenv("RUNNING_IN_CONTAINER") != "" {
 		t.Skip("test host is inside a container; skipping false-negative check")
 	}
 	if IsContainer() {

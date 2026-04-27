@@ -12,6 +12,8 @@ import (
 //   - /.dockerenv exists (Docker).
 //   - /run/.containerenv exists (Podman).
 //   - The environment variable KUBERNETES_SERVICE_HOST is non-empty (Kubernetes).
+//   - The environment variable RUNNING_IN_CONTAINER is non-empty (explicit opt-in
+//     for image authors and orchestrators that cannot rely on filesystem markers).
 //   - /proc/1/cgroup contains any of "docker", "containerd", or "kubepods".
 //
 // Filesystem errors degrade gracefully to false so the function never panics.
@@ -23,6 +25,9 @@ func IsContainer() bool {
 		return true
 	}
 	if os.Getenv("KUBERNETES_SERVICE_HOST") != "" {
+		return true
+	}
+	if os.Getenv("RUNNING_IN_CONTAINER") != "" {
 		return true
 	}
 	return cgroupMarker()

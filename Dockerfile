@@ -31,6 +31,7 @@ LABEL org.opencontainers.image.title="Outlook Local MCP Server" \
       org.opencontainers.image.source="https://github.com/desek/outlook-local-mcp" \
       org.opencontainers.image.licenses="MIT"
 
-ENV OUTLOOK_MCP_AUTH_RECORD_PATH=/data/auth/auth_record.json
+ENV OUTLOOK_MCP_AUTH_RECORD_PATH=/data/auth/auth_record.json \
+    RUNNING_IN_CONTAINER=1
 
 ENTRYPOINT ["/usr/local/bin/outlook-local-mcp"]
