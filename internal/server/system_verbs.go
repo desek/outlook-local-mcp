@@ -222,7 +222,7 @@ func buildSystemVerbs(c systemVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 			{Args: map[string]any{"operation": "about"}, Comment: "get build and environment metadata"},
 			{Args: map[string]any{"operation": "about", "output": "summary"}, Comment: "compact JSON for issue reports"},
 		},
-		SeeDocs: []string{"troubleshooting"},
+		SeeDocs: []string{"troubleshooting#before-you-file-an-issue"},
 		Handler: tools.Handler(aboutHandler),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),

@@ -124,6 +124,12 @@ Each document is also exposed as an MCP resource at `doc://outlook-local-mcp/{sl
 
 The embedded bundle contains exactly four slugs: `readme`, `quickstart`, `concepts` (this file), and `troubleshooting`.
 
+When troubleshooting or filing an issue, call `system.about` first to capture the build identity and host environment in a single snapshot (see [Before you file an issue](troubleshooting#before-you-file-an-issue)):
+
+```
+{tool: "system", args: {operation: "about", output: "summary"}}
+```
+
 ## Observability at a glance
 
 **Structured logging** — written to stderr. Configure with:

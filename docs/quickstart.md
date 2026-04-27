@@ -74,7 +74,15 @@ Replace `/absolute/path/to/outlook-local-mcp` with the actual path to the built 
 
 ## 3. Authenticate and Verify
 
-Restart Claude Desktop (or reload MCP servers in Claude Code) and ask:
+Restart Claude Desktop (or reload MCP servers in Claude Code) and verify the server is reachable:
+
+```
+{tool: "system", args: {operation: "about"}}
+```
+
+This returns the build version, Go runtime, OS, and auth backend in use — no authentication required. Keep this output handy when reporting issues (see [Before you file an issue](troubleshooting#before-you-file-an-issue)).
+
+Then ask:
 
 > "List my calendars"
 

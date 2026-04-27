@@ -4,6 +4,31 @@ Common failure modes and remediation steps for `outlook-local-mcp`.
 
 ---
 
+## Before you file an issue {#before-you-file-an-issue}
+
+Call `system.about` before opening a GitHub issue. It captures build identity and host environment in one snapshot without making any Graph API call:
+
+```
+{tool: "system", args: {operation: "about", output: "summary"}}
+```
+
+Paste the JSON output into the issue report. It provides the version, commit SHA, build date, Go runtime, OS, architecture, distribution channel, and auth backend — everything a maintainer needs to reproduce and triage your issue.
+
+**Recommended issue template:**
+
+```
+**system.about (summary)**
+<paste JSON here>
+
+**What I did:**
+
+**What I expected:**
+
+**What happened:**
+```
+
+---
+
 ## Authentication failures
 
 **Symptom:** A tool call returns an error like `authentication required` or `failed to acquire token`.
