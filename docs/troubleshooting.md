@@ -316,6 +316,32 @@ If `accounts.json` has a single entry whose `client_id` and `tenant_id` match th
 
 ---
 
+## Container has no keychain access {#container-no-keychain}
+
+**Symptom:** The server logs a warning such as `keychain unavailable, falling back to file storage` when starting inside a container.
+
+**Cause:** The OS keychain (Apple Keychain, Windows Credential Manager, libsecret) is not reachable from a Linux container. The container build (`CGO_ENABLED=0`) detects this at startup and automatically falls back to file-backed token storage at `/data/auth/`. This is expected behaviour, not an error.
+
+**Remediation:** No action is required. The fallback is safe for the container use case. Token files are written to `/data/auth/` inside the container, which maps to the named volume on the host.
+
+To persist tokens across container restarts, mount a named volume at that path:
+
+```bash
+docker run -i --rm -v outlook-mcp-auth:/data/auth ghcr.io/desek/outlook-local-mcp:latest
+```
+
+Using a named volume (rather than a bind mount to a host directory) avoids UID/GID mismatch issues. Token files at rest are protected only by filesystem permissions on the host volume, not by the OS keychain. Users who require keychain-grade protection at rest should use the native binary rather than the container.
+
+Verify the active auth backend with:
+
+```
+{tool: "system", args: {operation: "about", output: "summary"}}
+```
+
+The `authBackend` field in the response will read `file` when the fallback is active.
+
+---
+
 ## In-server documentation access
 
 The server embeds this guide and other user-facing documentation. The LLM can access it directly without leaving the session:

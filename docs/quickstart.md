@@ -183,6 +183,73 @@ Fetch a document or a specific section by heading anchor:
 
 The embedded bundle contains `readme`, `quickstart`, and `troubleshooting`. Each document is also exposed as an MCP resource at `doc://outlook-local-mcp/{slug}` for clients that support `resources/list` and `resources/read`. Run `system.status` to discover the base URI and the troubleshooting slug. See CR-0061 for implementation details.
 
+## Container deployment {#container-deployment}
+
+The server is available as an OCI image at `ghcr.io/desek/outlook-local-mcp`. No Go toolchain is required.
+
+### Recommended invocation
+
+```bash
+docker run -i --rm \
+  -v outlook-mcp-auth:/data/auth \
+  -e OUTLOOK_MCP_TENANT_ID=<tenant> \
+  -e OUTLOOK_MCP_CLIENT_ID=<client> \
+  ghcr.io/desek/outlook-local-mcp:latest
+```
+
+The named volume `outlook-mcp-auth` persists the token cache across container restarts so the device-code or browser auth flow does not repeat on every session.
+
+### Claude Desktop / generic MCP client config
+
+```json
+{
+  "mcpServers": {
+    "outlook-local": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "outlook-mcp-auth:/data/auth",
+        "-e", "OUTLOOK_MCP_TENANT_ID",
+        "-e", "OUTLOOK_MCP_CLIENT_ID",
+        "ghcr.io/desek/outlook-local-mcp:latest"
+      ],
+      "env": {
+        "OUTLOOK_MCP_TENANT_ID": "your-tenant-id",
+        "OUTLOOK_MCP_CLIENT_ID": "your-client-id"
+      }
+    }
+  }
+}
+```
+
+### Non-root variant (distroless)
+
+For deployment targets that enforce non-root containers (Kubernetes PSA `restricted`, OpenShift, hardened CI), use the `:distroless` tag:
+
+```json
+{
+  "mcpServers": {
+    "outlook-local": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "--user", "65532:65532",
+        "-v", "outlook-mcp-auth:/data/auth",
+        "-e", "OUTLOOK_MCP_TENANT_ID",
+        "-e", "OUTLOOK_MCP_CLIENT_ID",
+        "ghcr.io/desek/outlook-local-mcp:distroless"
+      ],
+      "env": {
+        "OUTLOOK_MCP_TENANT_ID": "your-tenant-id",
+        "OUTLOOK_MCP_CLIENT_ID": "your-client-id"
+      }
+    }
+  }
+}
+```
+
+For more on image variants and the keychain trade-off, see [Container runtime](concepts#container-runtime).
+
 ## Further Reading
 
 See [README.md](README.md) for the full reference documentation.

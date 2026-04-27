@@ -130,6 +130,40 @@ When troubleshooting or filing an issue, call `system.about` first to capture th
 {tool: "system", args: {operation: "about", output: "summary"}}
 ```
 
+## Container runtime {#container-runtime}
+
+The server ships as an OCI container image at `ghcr.io/desek/outlook-local-mcp`. The image uses stdio transport so the container integrates with MCP clients the same way the native binary does.
+
+### Supported
+
+Running inside a container supports the full feature set over stdio:
+
+- All four aggregate domain tools: `calendar`, `mail`, `account`, `system`
+- Microsoft Graph API access (ca-certs are included in every variant)
+- Multi-account support with file-backed token storage
+- Observability: structured logs written to stderr, OpenTelemetry metrics and traces
+- `system.about` reports `runtime=container`, `distribution=container`, and `authBackend=file` from both image variants, even on the `scratch` base where `/proc` and `/.dockerenv` may not be readable (see CR-0067 for the `RUNNING_IN_CONTAINER` detector)
+
+### Image variants
+
+| Tag | Base | Size | User | Use case |
+|---|---|---|---|---|
+| `:latest` / `:vX.Y.Z` | `scratch` | ~15 MB | root (UID 0) | Default, smallest attack surface, ca-certs only |
+| `:distroless` / `:vX.Y.Z-distroless` | `gcr.io/distroless/static-debian12:nonroot` | ~17 MB | `nonroot` (UID 65532) | Non-root enforcement (Kubernetes PSA restricted, OpenShift, hardened CI) |
+| `:debug` / `:vX.Y.Z-debug` | distroless `:debug` | ~20 MB | `nonroot` (UID 65532) | Incident response only, includes busybox shell; not for production |
+
+The default `:latest` tag points at the scratch image. The scratch variant runs as root because there is no alternative inside a `FROM scratch` image. Users who require a non-root UID should use `:distroless`.
+
+### Limitations
+
+The OS keychain (Apple Keychain, Windows Credential Manager, libsecret) is not reachable from a Linux container. When the server starts inside a container, it automatically falls back to file-backed token storage and logs a warning at the `warn` level. Token files land at `/data/auth/` inside the container.
+
+Tokens at rest are protected only by filesystem permissions on the host volume, not by the OS keychain. This is a weaker security posture than the native binary on a desktop OS. Users who require keychain-grade protection at rest should use the native binary (`go install` or Homebrew) rather than the container. See [Container has no keychain access](troubleshooting#container-no-keychain) in the troubleshooting guide.
+
+### Deferred
+
+HTTP transport (SSE / streamable-HTTP) is not implemented in this release. The container ships stdio only. HTTP transport requires transport selection, port exposure, multi-client token isolation, and TLS/auth at the transport layer, all deferred to a future CR.
+
 ## Observability at a glance
 
 **Structured logging** — written to stderr. Configure with:
