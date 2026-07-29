@@ -14,6 +14,18 @@ A single-binary MCP server that connects Claude Desktop and Claude Code to Micro
 go install github.com/desek/outlook-local-mcp/cmd/outlook-local-mcp@latest
 ```
 
+**Docker / OCI**:
+
+```bash
+docker run -i --rm \
+  -v outlook-mcp-auth:/data/auth \
+  -e OUTLOOK_MCP_TENANT_ID=<tenant> \
+  -e OUTLOOK_MCP_CLIENT_ID=<client> \
+  ghcr.io/desek/outlook-local-mcp:latest
+```
+
+See [Container deployment](docs/quickstart.md#container-deployment) for the full client config snippet, and [Container runtime](docs/concepts.md#container-runtime) for the keychain trade-off and image variants.
+
 **Claude Desktop extension** (no terminal required):
 
 Download the `.mcpb` file from the [latest release](https://github.com/desek/outlook-local-mcp/releases/latest) and open it in Claude Desktop via **Settings > Extensions > Install from file**.

@@ -166,6 +166,16 @@ type Config struct {
 	// report the running server version.
 	Version string
 
+	// Commit is the short Git SHA injected by the binary entry point at startup
+	// via the ldflags-wired package-level var. Defaults to "unknown" when
+	// ldflags are absent. Exposed by the system.about verb (CR-0067).
+	Commit string
+
+	// BuildDate is the RFC3339 UTC build timestamp injected by the binary entry
+	// point at startup via the ldflags-wired package-level var. Defaults to
+	// "unknown" when ldflags are absent. Exposed by the system.about verb (CR-0067).
+	BuildDate string
+
 	// TokenCacheBackend is the actual resolved token storage backend in use
 	// at runtime. Set after token cache initialization in the binary entry
 	// point. Valid values are "keychain" (OS keychain) or "file" (file-based

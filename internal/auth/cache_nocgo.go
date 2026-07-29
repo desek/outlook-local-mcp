@@ -36,11 +36,13 @@ func InitCache(name, storage string) azidentity.Cache {
 	if err != nil {
 		slog.Warn("file-based token cache unavailable, falling back to in-memory cache",
 			"error", err)
+		setActiveBackend("file")
 		return azidentity.Cache{}
 	}
 
 	slog.Info("file-based persistent token cache initialized (CGo disabled)",
 		"name", name)
+	setActiveBackend("file")
 	return c
 }
 

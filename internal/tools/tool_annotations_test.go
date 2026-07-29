@@ -186,11 +186,17 @@ func TestAggregateAnnotations_Account(t *testing.T) {
 }
 
 // TestAggregateAnnotations_System verifies the conservative aggregate
-// annotations on the "system" domain tool (AC-9 / FR-9).
+// annotations on the "system" domain tool (CR-0068 FR-6/FR-8, OBS-1).
 //
-// system hosts complete_auth (write, non-idempotent) when auth_code is active,
-// and status (read). No verb is destructive. Conservative: readOnly=false,
-// destructive=false, idempotent=false, openWorld=true.
+// Under AuthMethod "browser" the auth_code verb complete_auth is NOT registered,
+// so every registered system verb is local and read-only (help, about, status,
+// list_docs, search_docs, get_docs). The corrected fold therefore reports
+// readOnly=true, destructive=false, idempotent=true, openWorld=false. This
+// replaces the pre-Phase-4 values (readOnly=false, idempotent=false), which were
+// an artefact of the help verb declaring no classification and folding as
+// not-read-only and non-idempotent; Phase 4 fixes that classification.
+//
+// The complementary auth_code case is TestSystemAnnotationsOpenWorldWithAuthCode.
 func TestAggregateAnnotations_System(t *testing.T) {
 	s := buildTestServer(t, config.Config{
 		AuthRecordPath: "/tmp/test",
@@ -200,11 +206,87 @@ func TestAggregateAnnotations_System(t *testing.T) {
 	tool := getRegisteredTool(t, s, "system")
 	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
 		title:       "System",
-		readOnly:    false,
+		readOnly:    true,
 		destructive: false,
+		idempotent:  true,
+		openWorld:   false,
+	})
+}
+
+// TestMailAnnotationsGatedReadOnly verifies AC-1 / FR-7: in the default gated
+// configuration (neither MailEnabled nor MailManageEnabled set) the mail tool
+// registers only read verbs, so the aggregate reports readOnly=true,
+// destructive=false, and openWorld=true (the verbs still call Microsoft Graph).
+func TestMailAnnotationsGatedReadOnly(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+	tool := getRegisteredTool(t, s, "mail")
+	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
+		title:       "Mail",
+		readOnly:    true,
+		destructive: false,
+		idempotent:  true,
+		openWorld:   true,
+	})
+}
+
+// TestMailAnnotationsManageEnabled verifies AC-2: with MailManageEnabled set the
+// mail tool registers write and destructive verbs (create_draft, delete_draft,
+// ...), so the aggregate reports readOnly=false and destructive=true.
+func TestMailAnnotationsManageEnabled(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "browser",
+		MailManageEnabled: true,
+	})
+	tool := getRegisteredTool(t, s, "mail")
+	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
+		title:       "Mail",
+		readOnly:    false,
+		destructive: true,
 		idempotent:  false,
 		openWorld:   true,
 	})
+}
+
+// TestSystemAnnotationsClosedWorld verifies AC-3 / FR-8: without the auth_code
+// authentication method the complete_auth verb is not registered, every system
+// verb is local, and the aggregate reports openWorld=false.
+func TestSystemAnnotationsClosedWorld(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+	tool := getRegisteredTool(t, s, "system")
+	if tool.Annotations.OpenWorldHint == nil {
+		t.Fatal("system OpenWorldHint is nil")
+	}
+	if *tool.Annotations.OpenWorldHint {
+		t.Errorf("system OpenWorldHint = true, want false when complete_auth is unregistered")
+	}
+}
+
+// TestSystemAnnotationsOpenWorldWithAuthCode verifies AC-4 / FR-6: with the
+// auth_code authentication method the complete_auth verb is registered and calls
+// Microsoft Graph, so the aggregate reports openWorld=true.
+func TestSystemAnnotationsOpenWorldWithAuthCode(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "auth_code",
+	})
+	tool := getRegisteredTool(t, s, "system")
+	if tool.Annotations.OpenWorldHint == nil {
+		t.Fatal("system OpenWorldHint is nil")
+	}
+	if !*tool.Annotations.OpenWorldHint {
+		t.Errorf("system OpenWorldHint = false, want true when complete_auth is registered")
+	}
 }
 
 // TestAggregateAnnotations_NoOldToolNames verifies that no old
@@ -246,6 +328,48 @@ func TestAggregateAnnotations_FourToolsRegistered(t *testing.T) {
 	for _, name := range []string{"calendar", "mail", "account", "system"} {
 		if _, ok := registered[name]; !ok {
 			t.Errorf("aggregate tool %q not registered", name)
+		}
+	}
+}
+
+// TestAboutVerbAnnotations_ReadOnlyLocalIdempotent verifies that the
+// system.about verb is registered as read-only, non-destructive, idempotent,
+// and local (no open-world) per CR-0067 AC-7.
+//
+// The verb is called with operation="about" and must return a non-error result
+// containing the version and host fields in plain text.
+func TestAboutVerbAnnotations_ReadOnlyLocalIdempotent(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+
+	msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"system","arguments":{"operation":"about"}}}`
+	resp := s.HandleMessage(context.Background(), json.RawMessage(msg))
+
+	rpcResp, ok := resp.(mcp.JSONRPCResponse)
+	if !ok {
+		t.Fatalf("expected JSONRPCResponse, got %T", resp)
+	}
+	result, ok := rpcResp.Result.(*mcp.CallToolResult)
+	if !ok {
+		t.Fatalf("expected *CallToolResult, got %T", rpcResp.Result)
+	}
+	if result.IsError {
+		t.Fatalf("about verb returned error: %v", result.Content)
+	}
+	if len(result.Content) == 0 {
+		t.Fatal("about verb returned empty content")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("expected TextContent, got %T", result.Content[0])
+	}
+	// Verify key fields are present in the text output.
+	for _, want := range []string{"outlook-local-mcp", "Host", "Links"} {
+		if !strings.Contains(tc.Text, want) {
+			t.Errorf("about text output missing %q; got:\n%s", want, tc.Text)
 		}
 	}
 }

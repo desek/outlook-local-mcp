@@ -211,24 +211,3 @@ func buildAccountVerbs(c accountVerbsConfig) ([]tools.Verb, *tools.VerbRegistry)
 
 	return verbs, registryPtr
 }
-
-// accountToolAnnotations returns the conservative aggregate MCP annotations for
-// the account domain tool per CR-0060 FR-9 and AC-9.
-//
-// readOnlyHint is false because write verbs (add, remove, login, logout, refresh)
-// are present. destructiveHint is true because remove irreversibly deletes an
-// account and its token cache. idempotentHint is false because add/login/logout
-// are non-idempotent. openWorldHint is true because add/login/refresh call
-// Microsoft identity and Graph APIs.
-//
-// These values represent the most conservative annotation across all verbs in
-// the account domain per FR-9.
-func accountToolAnnotations() []mcp.ToolOption {
-	return []mcp.ToolOption{
-		mcp.WithTitleAnnotation("Account"),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithIdempotentHintAnnotation(false),
-		mcp.WithOpenWorldHintAnnotation(true),
-	}
-}

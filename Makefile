@@ -5,7 +5,7 @@ BUILD_DIR := .
 CMD_PATH := ./cmd/outlook-local-mcp/
 
 build:
-	go build -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
+	go build -ldflags="-X main.commit=$$(git rev-parse --short HEAD) -X main.buildDate=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_PATH)
 
 test:
 	CGO_ENABLED=0 go test -coverprofile=coverage.out ./...
@@ -75,7 +75,7 @@ clean:
 # Headless CRUD lifecycle test runner. Wraps scripts/crud-test.sh which spawns
 # claude -p, captures stream-json metrics to docs/bench/runs/{ts}/, appends a
 # row to docs/bench/crud-runs.csv, and writes TEST-REPORT-{ts}.md.
-# Override defaults with env: ACCOUNT (default), MODEL (claude-sonnet-4-6),
+# Override defaults with env: ACCOUNT (default), MODEL (claude-sonnet-5),
 # THINKING (low|medium|high|xhigh|max).
 crud-test:
 	./scripts/crud-test.sh

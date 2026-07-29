@@ -4,6 +4,31 @@ Common failure modes and remediation steps for `outlook-local-mcp`.
 
 ---
 
+## Before you file an issue {#before-you-file-an-issue}
+
+Call `system.about` before opening a GitHub issue. It captures build identity and host environment in one snapshot without making any Graph API call:
+
+```
+{tool: "system", args: {operation: "about", output: "summary"}}
+```
+
+Paste the JSON output into the issue report. It provides the version, commit SHA, build date, Go runtime, OS, architecture, distribution channel, and auth backend — everything a maintainer needs to reproduce and triage your issue.
+
+**Recommended issue template:**
+
+```
+**system.about (summary)**
+<paste JSON here>
+
+**What I did:**
+
+**What I expected:**
+
+**What happened:**
+```
+
+---
+
 ## Authentication failures
 
 **Symptom:** A tool call returns an error like `authentication required` or `failed to acquire token`.
@@ -288,6 +313,32 @@ When neither is true (for example, `accounts.json` is absent or empty), the impl
 ### Removing a cfg-identity-covering entry causes default to reappear
 
 If `accounts.json` has a single entry whose `client_id` and `tenant_id` match the env config, removing that entry causes the implicit "default" to reappear at the next start. This is intentional: removing the entry from `accounts.json` removes the gating signal, so `main.go` falls back to the implicit default. To suppress the implicit default permanently, keep an `accounts.json` entry that covers the cfg identity under any label.
+
+---
+
+## Container has no keychain access {#container-no-keychain}
+
+**Symptom:** The server logs a warning such as `keychain unavailable, falling back to file storage` when starting inside a container.
+
+**Cause:** The OS keychain (Apple Keychain, Windows Credential Manager, libsecret) is not reachable from a Linux container. The container build (`CGO_ENABLED=0`) detects this at startup and automatically falls back to file-backed token storage at `/data/auth/`. This is expected behaviour, not an error.
+
+**Remediation:** No action is required. The fallback is safe for the container use case. Token files are written to `/data/auth/` inside the container, which maps to the named volume on the host.
+
+To persist tokens across container restarts, mount a named volume at that path:
+
+```bash
+docker run -i --rm -v outlook-mcp-auth:/data/auth ghcr.io/desek/outlook-local-mcp:latest
+```
+
+Using a named volume (rather than a bind mount to a host directory) avoids UID/GID mismatch issues. Token files at rest are protected only by filesystem permissions on the host volume, not by the OS keychain. Users who require keychain-grade protection at rest should use the native binary rather than the container.
+
+Verify the active auth backend with:
+
+```
+{tool: "system", args: {operation: "about", output: "summary"}}
+```
+
+The `authBackend` field in the response will read `file` when the fallback is active.
 
 ---
 

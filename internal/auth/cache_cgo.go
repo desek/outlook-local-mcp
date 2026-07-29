@@ -34,6 +34,7 @@ import (
 func InitCache(name, storage string) azidentity.Cache {
 	if storage == "file" {
 		slog.Info("token storage explicitly set to file-based", "name", name)
+		setActiveBackend("file")
 		return initFileCacheOrWarn(name)
 	}
 
@@ -42,15 +43,18 @@ func InitCache(name, storage string) azidentity.Cache {
 		if storage == "keychain" {
 			slog.Error("OS keychain unavailable and token_storage=keychain",
 				"error", err)
+			setActiveBackend("file")
 			return azidentity.Cache{}
 		}
 		// storage == "auto": fall back to file-based.
 		slog.Warn("OS keychain unavailable, falling back to file-based cache",
 			"error", err)
+		setActiveBackend("file")
 		return initFileCacheOrWarn(name)
 	}
 
 	slog.Info("persistent token cache initialized (OS keychain)", "name", name)
+	setActiveBackend("keychain")
 	return c
 }
 

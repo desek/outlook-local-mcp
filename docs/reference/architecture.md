@@ -72,6 +72,7 @@ internal/
   graph/          Graph API utilities: errors, retry, timeout, serialization, enums, recurrence
   validate/       Input validation helpers
   observability/  OpenTelemetry metrics and tracing, WithObservability middleware
+  buildinfo/      Build identity and host environment snapshot (consumed by system.about; see CR-0067)
   server/         RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
   tools/          4 aggregate domain tools dispatching verb sets
   docs/           Catalog, search, llms.txt; consumes docs.Bundle from docs/embed.go
@@ -130,6 +131,8 @@ Tools are registered via `s.AddTool(tool, handler)` where `tool` is an `mcp.Tool
 ```go
 func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error)
 ```
+
+Each aggregate tool's five MCP annotations are not hardcoded at the call site. As of CR-0068 they are computed at registration time by `tools.AggregateAnnotations(title, verbs)` (`internal/tools/aggregate_annotations.go`), a pure conservative fold over the classifications of the verbs actually registered for that domain in the running configuration. Because gating (`MailEnabled`, `MailManageEnabled`, `auth_code`) changes the registered verb set, the published `tools/list` annotations for `mail` and `system` differ by configuration. The four former per-domain `*ToolAnnotations()` functions were deleted; each verb now declares its own classification in its registry `Annotations` entry. See [Tool annotation semantics](../concepts.md#tool-annotation-semantics) for the configuration-dependent values and CR-0068.
 
 ### Stdio transport
 

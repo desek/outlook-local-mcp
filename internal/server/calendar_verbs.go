@@ -810,23 +810,3 @@ func buildGetFreeBusyVerb(c calendarVerbsConfig, rc graph.RetryConfig, tz string
 		},
 	}
 }
-
-// calendarToolAnnotations returns the conservative aggregate MCP annotations
-// for the calendar domain tool per CR-0060 FR-9 and AC-9.
-//
-// readOnlyHint is false because write verbs (create_event, update_event,
-// delete_event, respond_event, reschedule_event, create_meeting, update_meeting,
-// cancel_meeting, reschedule_meeting) are present. destructiveHint is true
-// because delete_event and cancel_meeting irreversibly remove data or send
-// cancellation notices. idempotentHint is false because create_event and
-// create_meeting are non-idempotent. openWorldHint is true because all verbs
-// call Microsoft Graph.
-func calendarToolAnnotations() []mcp.ToolOption {
-	return []mcp.ToolOption{
-		mcp.WithTitleAnnotation("Calendar"),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithIdempotentHintAnnotation(false),
-		mcp.WithOpenWorldHintAnnotation(true),
-	}
-}

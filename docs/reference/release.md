@@ -6,10 +6,11 @@ Reference documentation for the GoReleaser pipeline, snapshot builds, MCPB exten
 
 ## Overview
 
-The release pipeline produces two artifact types:
+The release pipeline produces three artifact types:
 
 1. **Go binary releases** via GoReleaser — platform-native binaries uploaded to GitHub Releases and installable via `go install`.
 2. **MCPB extension package** — a `.mcpb` archive containing the binary and `extension/manifest.json`, installable in Claude Desktop with one click.
+3. **Container images** — multi-arch OCI images published to `ghcr.io/desek/outlook-local-mcp` on every tagged release (see [Container images](#container-images) below).
 
 ---
 
@@ -78,6 +79,34 @@ make mcpb-local
 ### Manifest
 
 `extension/manifest.json` contains the four aggregate domain tools (`calendar`, `mail`, `account`, `system`) with their annotations. When a new verb is added or a tool annotation changes, the manifest **MUST** be updated to match. The manifest is validated by `make mcpb-validate`, which is wired into `make ci`.
+
+---
+
+## Container images
+
+As of CR-0066, every tagged release publishes multi-arch OCI images to `ghcr.io/desek/outlook-local-mcp` via a dedicated `container` job in `.github/workflows/release.yml`. The job runs after the `release` job and uses `docker buildx` with QEMU emulation to produce `linux/amd64` and `linux/arm64` layers.
+
+### Image variants
+
+| Tag | Base | UID | Size | Use case |
+|-----|------|-----|------|----------|
+| `latest`, `v<version>` | `scratch` | root (0) | ~15 MB | Default — minimum attack surface |
+| `distroless`, `v<version>-distroless` | `gcr.io/distroless/static-debian12:nonroot` | nonroot (65532) | ~17 MB | Non-root enforcement (Kubernetes PSA, OpenShift) |
+| `debug`, `v<version>-debug` | `gcr.io/distroless/static-debian12:debug` | nonroot (65532) | larger | Incident response only; not for production |
+
+The scratch and distroless variants are built for both `linux/amd64` and `linux/arm64`. The debug variant is `linux/amd64` only.
+
+### CI validation
+
+Every PR runs a `container-build` job that builds both `runtime-scratch` and `runtime-distroless` target stages for `linux/amd64` (without pushing), executes a `--version` smoke test against each variant, and asserts that the distroless image's configured user is `nonroot` or `65532`.
+
+### Build mechanics
+
+The container job stages the binary via `goreleaser release --clean --snapshot --id container --skip=publish,announce,sbom`, then invokes `docker buildx build --push` against the pre-built artifact. This reuses the cross-compiled binary rather than recompiling, keeping release time overhead to roughly two minutes.
+
+### Runtime notes
+
+Both image variants export `RUNNING_IN_CONTAINER=1` (CR-0067) so `system.about` reports `runtime=container` even from a `scratch` image where filesystem markers (`/.dockerenv`, `/proc/1/cgroup`) may be absent. The OS keychain is not available inside the container; the server automatically falls back to file-backed token storage at `/data/auth/`. See [Container runtime](../concepts.md#container-runtime) for the full narrative and [Container deployment](../quickstart.md#container-deployment) for the recommended invocation pattern.
 
 ---
 

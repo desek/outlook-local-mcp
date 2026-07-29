@@ -31,6 +31,16 @@ import (
 // -ldflags="-X main.version=<value>". Defaults to "dev" for local builds.
 var version = "dev"
 
+// commit is the Git commit SHA, injected at build time via
+// -ldflags="-X main.commit=<value>". Defaults to "unknown" for local builds
+// that do not pass ldflags.
+var commit = "unknown"
+
+// buildDate is the UTC build timestamp in RFC 3339 format, injected at build
+// time via -ldflags="-X main.buildDate=<value>". Defaults to "unknown" for
+// local builds that do not pass ldflags.
+var buildDate = "unknown"
+
 // main is the application entry point. It executes the full 11-step startup
 // lifecycle in order: (1) init logger, (2) load config, (3-6) authentication
 // (cache, auth record, credential, authenticate), (7) create Graph client,
@@ -48,6 +58,8 @@ func main() {
 	// Steps 1-2: Load config, validate, then init logger
 	cfg := config.LoadConfig()
 	cfg.Version = version
+	cfg.Commit = commit
+	cfg.BuildDate = buildDate
 	if err := config.ValidateConfig(cfg); err != nil {
 		slog.Error("configuration validation failed", "error", err)
 		os.Exit(1)
@@ -59,7 +71,7 @@ func main() {
 	if cfg.LogFile != "" {
 		logFileField = cfg.LogFile
 	}
-	slog.Info("server starting", "version", version, "transport", "stdio",
+	slog.Info("server starting", "version", version, "commit", commit, "build_date", buildDate, "transport", "stdio",
 		"log_sanitize", cfg.LogSanitize, "log_file", logFileField,
 		"audit_enabled", cfg.AuditLogEnabled,
 		"read_only", cfg.ReadOnly, "auth_method", cfg.AuthMethod,

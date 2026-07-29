@@ -9,37 +9,53 @@
 # Usage:
 #   scripts/crud-test.sh [account_label]
 #
-# Defaults: account_label=default, model=claude-sonnet-4-6, thinking effort=low.
+# Defaults: account_label=default, model=claude-sonnet-5, thinking effort=low.
 # Override via env: ACCOUNT, MODEL, THINKING.
 set -euo pipefail
 
 ACCOUNT="${ACCOUNT:-${1:-default}}"
-MODEL="${MODEL:-claude-sonnet-4-6}"
+MODEL="${MODEL:-claude-sonnet-5}"
 THINKING="${THINKING:-low}"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-# Precondition: a connected account must exist. An account is "connected" when
-# it is registered in accounts.json AND has a corresponding {label}_auth_record.json.
+# Precondition: a connected account must exist. Two shapes are accepted, because
+# the server supports two ways an account can be usable:
+#
+#   1. A named account persisted in accounts.json with a matching
+#      {label}_auth_record.json alongside it.
+#   2. The implicit "default" account (CR-0064), synthesised in memory from
+#      auth_record.json whenever no named entry covers the configured identity.
+#      It is deliberately never written to accounts.json, so checking that file
+#      alone would reject the most common single-account setup even though the
+#      server reports the account as authenticated.
+#
 # If the requested ACCOUNT label is not connected, fall back to the first
 # connected account. If none are connected, abort and instruct the user.
 ACCOUNTS_DIR="${HOME}/.outlook-local-mcp"
 ACCOUNTS_JSON="${ACCOUNTS_DIR}/accounts.json"
-if [[ ! -s "$ACCOUNTS_JSON" ]]; then
-  echo "ERROR: no accounts registered at ${ACCOUNTS_JSON}." >&2
-  echo "Run the server interactively and add an account via the 'account.login' verb before retrying." >&2
-  exit 2
+IMPLICIT_AUTH_RECORD="${ACCOUNTS_DIR}/auth_record.json"
+
+CONNECTED=()
+if [[ -s "$ACCOUNTS_JSON" ]]; then
+  mapfile -t CONNECTED < <(jq -r '.accounts[].label' "$ACCOUNTS_JSON" 2>/dev/null \
+    | while read -r label; do
+        [[ -n "$label" && -s "${ACCOUNTS_DIR}/${label}_auth_record.json" ]] && echo "$label"
+      done)
 fi
 
-mapfile -t CONNECTED < <(jq -r '.accounts[].label' "$ACCOUNTS_JSON" 2>/dev/null \
-  | while read -r label; do
-      [[ -n "$label" && -s "${ACCOUNTS_DIR}/${label}_auth_record.json" ]] && echo "$label"
-    done)
+# Append the implicit default only when no named account already claims that
+# label, so a real "default" entry in accounts.json always takes precedence.
+if [[ -s "$IMPLICIT_AUTH_RECORD" ]] \
+  && ! printf '%s\n' ${CONNECTED[@]+"${CONNECTED[@]}"} | grep -qx "default"; then
+  CONNECTED+=("default")
+fi
 
 if [[ ${#CONNECTED[@]} -eq 0 ]]; then
-  echo "ERROR: no connected accounts found (no {label}_auth_record.json in ${ACCOUNTS_DIR})." >&2
-  echo "Run the server interactively and authenticate an account via 'account.login' before retrying." >&2
+  echo "ERROR: no connected accounts found in ${ACCOUNTS_DIR}." >&2
+  echo "Checked ${ACCOUNTS_JSON} for named accounts, and ${IMPLICIT_AUTH_RECORD} for the implicit 'default'." >&2
+  echo "Run the server interactively and authenticate via the 'account.add' verb before retrying." >&2
   exit 2
 fi
 
@@ -78,10 +94,18 @@ SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 WALL_S="$(awk '/^real/ {print $2}' "$TIMEFILE")"
 
 if [[ ! -s "$CSV" ]]; then
-  echo "run_ts,branch,sha,wall_s,duration_ms,duration_api_ms,num_turns,total_cost_usd,input_tokens,output_tokens,cache_creation_input_tokens,cache_read_input_tokens,is_error,mcp_calendar,mcp_mail,mcp_account,mcp_system,bash,read,write,tool_other" > "$CSV"
+  echo "run_ts,branch,sha,model,thinking,wall_s,duration_ms,duration_api_ms,num_turns,total_cost_usd,input_tokens,output_tokens,cache_creation_input_tokens,cache_read_input_tokens,is_error,mcp_calendar,mcp_mail,mcp_account,mcp_system,bash,read,write,tool_other" > "$CSV"
 fi
 
 # Tool-call counts per bucket (mcp__outlook-local-mcp__{domain} + common built-ins).
+#
+# MAINTENANCE: these buckets are the per-domain accounting the bench depends on.
+# Introducing a new top-level domain requires three matching edits, or the CSV
+# rows go malformed and the new domain's calls are silently counted as "other":
+#   1. add an `mcp_<domain>` column to the CSV header emitted above,
+#   2. add a matching pattern and counter to the awk block below,
+#   3. add the counter to the read/printf pair and to the jq output array.
+# Removing a domain requires pruning all three.
 read -r MCP_CAL MCP_MAIL MCP_ACC MCP_SYS T_BASH T_READ T_WRITE T_OTHER < <(
   jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | .name' "$STREAM" \
   | awk '
@@ -98,11 +122,12 @@ read -r MCP_CAL MCP_MAIL MCP_ACC MCP_SYS T_BASH T_READ T_WRITE T_OTHER < <(
   '
 )
 
-jq -r --arg ts "$RUN_TS" --arg branch "$BRANCH" --arg sha "$SHA" --arg wall "$WALL_S" \
+jq -r --arg ts "$RUN_TS" --arg branch "$BRANCH" --arg sha "$SHA" \
+  --arg model "$MODEL" --arg thinking "$THINKING" --arg wall "$WALL_S" \
   --arg cal "$MCP_CAL" --arg mail "$MCP_MAIL" --arg acc "$MCP_ACC" --arg sys "$MCP_SYS" \
   --arg bash "$T_BASH" --arg read "$T_READ" --arg write "$T_WRITE" --arg other "$T_OTHER" '
   select(.type=="result") |
-  [$ts, $branch, $sha, $wall,
+  [$ts, $branch, $sha, $model, $thinking, $wall,
    .duration_ms, .duration_api_ms, .num_turns, .total_cost_usd,
    .usage.input_tokens, .usage.output_tokens,
    .usage.cache_creation_input_tokens, .usage.cache_read_input_tokens,

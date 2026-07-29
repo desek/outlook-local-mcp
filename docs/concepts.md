@@ -66,6 +66,28 @@ Mail access is disabled by default and enabled in two tiers via environment vari
 
 `Mail.Send` is **never** requested under any configuration. The model prepares drafts that land in Outlook Drafts for manual review; email is never sent automatically. Enabling mail read for the first time triggers an incremental consent prompt; upgrading to mail manage triggers re-consent.
 
+## Tool annotation semantics
+
+The four aggregate tools (`calendar`, `mail`, `account`, `system`) each publish the five MCP annotations (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) at tool granularity. Because a single tool hosts many verbs whose individual classifications differ, each aggregate annotation is computed as a **conservative fold** over the verbs actually registered in the running configuration, not hard-coded:
+
+- `readOnlyHint` is `true` only when **every** registered verb is read-only.
+- `destructiveHint` is `true` when **at least one** registered verb is destructive.
+- `idempotentHint` is `false` when **at least one** registered verb is non-idempotent.
+- `openWorldHint` is `true` when **at least one** registered verb calls Microsoft Graph.
+
+Every verb declares its own read-only, destructive, idempotent, and open-world classification, and a verb cannot be registered without one. The `help` verb, present in every domain, is read-only, non-destructive, idempotent, and local.
+
+Because gating changes the registered verb set, the published annotations are **configuration-dependent**. The same tool reports different hints under different settings:
+
+| Tool | Configuration | `readOnlyHint` | `destructiveHint` | `openWorldHint` |
+|---|---|---|---|---|
+| `mail` | neither `MAIL_ENABLED` nor `MAIL_MANAGE_ENABLED` | `true` | `false` | `true` |
+| `mail` | `MAIL_MANAGE_ENABLED=true` | `false` | `true` | `true` |
+| `system` | auth method is not `auth_code` | `true` | `false` | `false` |
+| `system` | auth method is `auth_code` (registers `complete_auth`) | `false` | `false` | `true` |
+
+In the default gated configuration `mail` therefore advertises `readOnlyHint: true` because only read verbs are registered, and `system` advertises `openWorldHint: false` because every registered verb is local. A client that honours `destructiveHint` will not prompt for confirmation on read-only mail operations, and a client that honours `openWorldHint` will correctly treat `system` as local when `complete_auth` is absent. `readOnlyHint: true` is a hint, not the enforcement point; server-side write blocking is governed by [read-only mode](#read-only-mode).
+
 ## Headless and non-interactive authentication
 
 Authentication is lazy — deferred until the first tool call rather than blocking at startup. Three flows are available, controlled by `OUTLOOK_MCP_AUTH_METHOD`:
@@ -123,6 +145,46 @@ The server embeds its own documentation and exposes it through three verbs on th
 Each document is also exposed as an MCP resource at `doc://outlook-local-mcp/{slug}` for clients that support `resources/list` and `resources/read`. The server status response (`system.status`) includes a `docs` section with the base URI and the troubleshooting slug so an LLM client can locate the documentation surface without prior knowledge.
 
 The embedded bundle contains exactly four slugs: `readme`, `quickstart`, `concepts` (this file), and `troubleshooting`.
+
+When troubleshooting or filing an issue, call `system.about` first to capture the build identity and host environment in a single snapshot (see [Before you file an issue](troubleshooting#before-you-file-an-issue)):
+
+```
+{tool: "system", args: {operation: "about", output: "summary"}}
+```
+
+## Container runtime {#container-runtime}
+
+The server ships as an OCI container image at `ghcr.io/desek/outlook-local-mcp`. The image uses stdio transport so the container integrates with MCP clients the same way the native binary does.
+
+### Supported
+
+Running inside a container supports the full feature set over stdio:
+
+- All four aggregate domain tools: `calendar`, `mail`, `account`, `system`
+- Microsoft Graph API access (ca-certs are included in every variant)
+- Multi-account support with file-backed token storage
+- Observability: structured logs written to stderr, OpenTelemetry metrics and traces
+- `system.about` reports `runtime=container`, `distribution=container`, and `authBackend=file` from both image variants, even on the `scratch` base where `/proc` and `/.dockerenv` may not be readable (see CR-0067 for the `RUNNING_IN_CONTAINER` detector)
+
+### Image variants
+
+| Tag | Base | Size | User | Use case |
+|---|---|---|---|---|
+| `:latest` / `:vX.Y.Z` | `scratch` | ~15 MB | root (UID 0) | Default, smallest attack surface, ca-certs only |
+| `:distroless` / `:vX.Y.Z-distroless` | `gcr.io/distroless/static-debian12:nonroot` | ~17 MB | `nonroot` (UID 65532) | Non-root enforcement (Kubernetes PSA restricted, OpenShift, hardened CI) |
+| `:debug` / `:vX.Y.Z-debug` | distroless `:debug` | ~20 MB | `nonroot` (UID 65532) | Incident response only, includes busybox shell; not for production |
+
+The default `:latest` tag points at the scratch image. The scratch variant runs as root because there is no alternative inside a `FROM scratch` image. Users who require a non-root UID should use `:distroless`.
+
+### Limitations
+
+The OS keychain (Apple Keychain, Windows Credential Manager, libsecret) is not reachable from a Linux container. When the server starts inside a container, it automatically falls back to file-backed token storage and logs a warning at the `warn` level. Token files land at `/data/auth/` inside the container.
+
+Tokens at rest are protected only by filesystem permissions on the host volume, not by the OS keychain. This is a weaker security posture than the native binary on a desktop OS. Users who require keychain-grade protection at rest should use the native binary (`go install` or Homebrew) rather than the container. See [Container has no keychain access](troubleshooting#container-no-keychain) in the troubleshooting guide.
+
+### Deferred
+
+HTTP transport (SSE / streamable-HTTP) is not implemented in this release. The container ships stdio only. HTTP transport requires transport selection, port exposure, multi-client token isolation, and TLS/auth at the transport layer, all deferred to a future CR.
 
 ## Observability at a glance
 

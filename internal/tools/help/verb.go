@@ -42,5 +42,18 @@ func NewHelpVerb(registry *tools.VerbRegistry) tools.Verb {
 		Description: "Renders documentation for all verbs in this domain or a single named verb. Use output=text (default) for human-readable output, output=summary for compact JSON, or output=raw for the full structured JSON including examples and see_docs references.",
 		SeeDocs:     []string{"concepts#in-server-documentation-surface"},
 		Handler:     tools.Handler(handler),
+		// Classification: help renders in-memory registry documentation only. It
+		// reads nothing it can mutate, makes no Microsoft Graph call, and returns
+		// the same output for the same registry state, so it is read-only,
+		// non-destructive, idempotent, and local. Declaring all four hints is
+		// mandatory (CR-0068 FR-13): an undeclared hint would fold as its cautious
+		// value and, because help is registered in every domain, would drag every
+		// aggregate's readOnlyHint to false (the OBS-1 defect this fixes).
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(false),
+		},
 	}
 }

@@ -120,6 +120,82 @@ func TestEveryVerbHasDescription(t *testing.T) {
 	}
 }
 
+// TestEveryVerbHasClassification asserts that every verb in every domain
+// registry declares all four MCP annotation hints (readOnly, destructive,
+// idempotent, openWorld), so a new verb cannot be registered without a
+// classification (CR-0068 FR-13, AC-9). This is the guard that makes the
+// conservative aggregate fold trustworthy: an undeclared hint would silently
+// fold as its cautious value rather than the verb's true one.
+//
+// It builds the full verb surface (mail read and write verbs plus the auth_code
+// complete_auth verb) via server.BuildDomainVerbSets and materialises each
+// verb's Annotations the same way the aggregate fold does — by applying the
+// opaque mcp.ToolOption closures to a zero-value mcp.Tool and reading the
+// resulting hint pointers. A nil pointer means the hint was never declared.
+func TestEveryVerbHasClassification(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	// auth_code plus both mail flags registers every verb the server can host.
+	cfg := config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "auth_code",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+		verbs, ok := verbSets[domain]
+		if !ok {
+			t.Errorf("domain %q missing from verb sets", domain)
+			continue
+		}
+		for _, v := range verbs {
+			for _, hint := range missingClassificationHints(v.Annotations) {
+				t.Errorf("domain %q verb %q: missing %s classification; every verb MUST declare all four hints (CR-0068 FR-13)", domain, v.Name, hint)
+			}
+		}
+	}
+}
+
+// missingClassificationHints materialises the verb's annotation options onto a
+// zero-value mcp.Tool and returns the names of any of the four required hints
+// that were left undeclared (nil pointer). An empty result means the verb is
+// fully classified.
+func missingClassificationHints(opts []mcp.ToolOption) []string {
+	var mt mcp.Tool
+	for _, opt := range opts {
+		opt(&mt)
+	}
+	a := mt.Annotations
+
+	var missing []string
+	if a.ReadOnlyHint == nil {
+		missing = append(missing, "readOnlyHint")
+	}
+	if a.DestructiveHint == nil {
+		missing = append(missing, "destructiveHint")
+	}
+	if a.IdempotentHint == nil {
+		missing = append(missing, "idempotentHint")
+	}
+	if a.OpenWorldHint == nil {
+		missing = append(missing, "openWorldHint")
+	}
+	return missing
+}
+
 // TestEveryVerbHasSummary asserts that every verb has a non-empty Summary of
 // at most 80 characters (CR-0065 FR-9, original CR-0060 contract).
 func TestEveryVerbHasSummary(t *testing.T) {
