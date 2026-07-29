@@ -189,14 +189,14 @@ func TestAggregateAnnotations_Account(t *testing.T) {
 // annotations on the "system" domain tool (CR-0068 FR-6/FR-8, OBS-1).
 //
 // Under AuthMethod "browser" the auth_code verb complete_auth is NOT registered,
-// so every registered system verb is local (about, status, help, list_docs,
-// search_docs, get_docs). The aggregate therefore reports openWorld=false, the
-// corrected value the derived fold produces. This replaces the previous
-// hardcoded openWorld=true, which contradicted the registered verb set.
+// so every registered system verb is local and read-only (help, about, status,
+// list_docs, search_docs, get_docs). The corrected fold therefore reports
+// readOnly=true, destructive=false, idempotent=true, openWorld=false. This
+// replaces the pre-Phase-4 values (readOnly=false, idempotent=false), which were
+// an artefact of the help verb declaring no classification and folding as
+// not-read-only and non-idempotent; Phase 4 fixes that classification.
 //
-// Phase 4 of CR-0068 adds the complementary auth_code case
-// (TestSystemAnnotationsOpenWorldWithAuthCode) asserting openWorld=true when
-// complete_auth is registered.
+// The complementary auth_code case is TestSystemAnnotationsOpenWorldWithAuthCode.
 func TestAggregateAnnotations_System(t *testing.T) {
 	s := buildTestServer(t, config.Config{
 		AuthRecordPath: "/tmp/test",
@@ -206,11 +206,87 @@ func TestAggregateAnnotations_System(t *testing.T) {
 	tool := getRegisteredTool(t, s, "system")
 	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
 		title:       "System",
-		readOnly:    false,
+		readOnly:    true,
 		destructive: false,
-		idempotent:  false,
+		idempotent:  true,
 		openWorld:   false,
 	})
+}
+
+// TestMailAnnotationsGatedReadOnly verifies AC-1 / FR-7: in the default gated
+// configuration (neither MailEnabled nor MailManageEnabled set) the mail tool
+// registers only read verbs, so the aggregate reports readOnly=true,
+// destructive=false, and openWorld=true (the verbs still call Microsoft Graph).
+func TestMailAnnotationsGatedReadOnly(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+	tool := getRegisteredTool(t, s, "mail")
+	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
+		title:       "Mail",
+		readOnly:    true,
+		destructive: false,
+		idempotent:  true,
+		openWorld:   true,
+	})
+}
+
+// TestMailAnnotationsManageEnabled verifies AC-2: with MailManageEnabled set the
+// mail tool registers write and destructive verbs (create_draft, delete_draft,
+// ...), so the aggregate reports readOnly=false and destructive=true.
+func TestMailAnnotationsManageEnabled(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "browser",
+		MailManageEnabled: true,
+	})
+	tool := getRegisteredTool(t, s, "mail")
+	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
+		title:       "Mail",
+		readOnly:    false,
+		destructive: true,
+		idempotent:  false,
+		openWorld:   true,
+	})
+}
+
+// TestSystemAnnotationsClosedWorld verifies AC-3 / FR-8: without the auth_code
+// authentication method the complete_auth verb is not registered, every system
+// verb is local, and the aggregate reports openWorld=false.
+func TestSystemAnnotationsClosedWorld(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	})
+	tool := getRegisteredTool(t, s, "system")
+	if tool.Annotations.OpenWorldHint == nil {
+		t.Fatal("system OpenWorldHint is nil")
+	}
+	if *tool.Annotations.OpenWorldHint {
+		t.Errorf("system OpenWorldHint = true, want false when complete_auth is unregistered")
+	}
+}
+
+// TestSystemAnnotationsOpenWorldWithAuthCode verifies AC-4 / FR-6: with the
+// auth_code authentication method the complete_auth verb is registered and calls
+// Microsoft Graph, so the aggregate reports openWorld=true.
+func TestSystemAnnotationsOpenWorldWithAuthCode(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "auth_code",
+	})
+	tool := getRegisteredTool(t, s, "system")
+	if tool.Annotations.OpenWorldHint == nil {
+		t.Fatal("system OpenWorldHint is nil")
+	}
+	if !*tool.Annotations.OpenWorldHint {
+		t.Errorf("system OpenWorldHint = false, want true when complete_auth is registered")
+	}
 }
 
 // TestAggregateAnnotations_NoOldToolNames verifies that no old

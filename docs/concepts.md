@@ -66,6 +66,28 @@ Mail access is disabled by default and enabled in two tiers via environment vari
 
 `Mail.Send` is **never** requested under any configuration. The model prepares drafts that land in Outlook Drafts for manual review; email is never sent automatically. Enabling mail read for the first time triggers an incremental consent prompt; upgrading to mail manage triggers re-consent.
 
+## Tool annotation semantics
+
+The four aggregate tools (`calendar`, `mail`, `account`, `system`) each publish the five MCP annotations (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) at tool granularity. Because a single tool hosts many verbs whose individual classifications differ, each aggregate annotation is computed as a **conservative fold** over the verbs actually registered in the running configuration, not hard-coded:
+
+- `readOnlyHint` is `true` only when **every** registered verb is read-only.
+- `destructiveHint` is `true` when **at least one** registered verb is destructive.
+- `idempotentHint` is `false` when **at least one** registered verb is non-idempotent.
+- `openWorldHint` is `true` when **at least one** registered verb calls Microsoft Graph.
+
+Every verb declares its own read-only, destructive, idempotent, and open-world classification, and a verb cannot be registered without one. The `help` verb, present in every domain, is read-only, non-destructive, idempotent, and local.
+
+Because gating changes the registered verb set, the published annotations are **configuration-dependent**. The same tool reports different hints under different settings:
+
+| Tool | Configuration | `readOnlyHint` | `destructiveHint` | `openWorldHint` |
+|---|---|---|---|---|
+| `mail` | neither `MAIL_ENABLED` nor `MAIL_MANAGE_ENABLED` | `true` | `false` | `true` |
+| `mail` | `MAIL_MANAGE_ENABLED=true` | `false` | `true` | `true` |
+| `system` | auth method is not `auth_code` | `true` | `false` | `false` |
+| `system` | auth method is `auth_code` (registers `complete_auth`) | `false` | `false` | `true` |
+
+In the default gated configuration `mail` therefore advertises `readOnlyHint: true` because only read verbs are registered, and `system` advertises `openWorldHint: false` because every registered verb is local. A client that honours `destructiveHint` will not prompt for confirmation on read-only mail operations, and a client that honours `openWorldHint` will correctly treat `system` as local when `complete_auth` is absent. `readOnlyHint: true` is a hint, not the enforcement point; server-side write blocking is governed by [read-only mode](#read-only-mode).
+
 ## Headless and non-interactive authentication
 
 Authentication is lazy — deferred until the first tool call rather than blocking at startup. Three flows are available, controlled by `OUTLOOK_MCP_AUTH_METHOD`:
