@@ -283,26 +283,3 @@ func buildSystemVerbs(c systemVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 
 	return verbs, registryPtr
 }
-
-// systemToolAnnotations returns the conservative aggregate MCP annotations for
-// the system domain tool per CR-0060 FR-9 and AC-9.
-//
-// readOnlyHint is false because the domain may host the write complete_auth
-// verb (when auth_code is active). destructiveHint is false because no verb
-// irreversibly deletes data. idempotentHint is false because complete_auth is
-// non-idempotent. openWorldHint is true because complete_auth calls Microsoft
-// Graph.
-//
-// These values represent the most conservative annotation across all verbs that
-// may be registered for the domain. Even when complete_auth is absent (no
-// auth_code), the manifest-level annotation is fixed at construction time and
-// must remain consistent across deployment configurations.
-func systemToolAnnotations() []mcp.ToolOption {
-	return []mcp.ToolOption{
-		mcp.WithTitleAnnotation("System"),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithIdempotentHintAnnotation(false),
-		mcp.WithOpenWorldHintAnnotation(true),
-	}
-}

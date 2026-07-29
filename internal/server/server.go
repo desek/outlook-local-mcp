@@ -87,7 +87,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		Domain:          "calendar",
 		Intro:           "Calendar operations for Microsoft Outlook via Microsoft Graph.",
 		Verbs:           calVerbs,
-		ToolAnnotations: calendarToolAnnotations(),
+		ToolAnnotations: tools.AggregateAnnotations("Calendar", calVerbs),
 	})
 	*calRegistry = populatedCal
 
@@ -113,7 +113,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		Domain:          "account",
 		Intro:           "Account management for Microsoft accounts connected to the Outlook MCP server.",
 		Verbs:           accVerbs,
-		ToolAnnotations: accountToolAnnotations(),
+		ToolAnnotations: tools.AggregateAnnotations("Account", accVerbs),
 	})
 	*accRegistry = populatedAcc
 
@@ -142,7 +142,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		Domain:          "system",
 		Intro:           "System diagnostics and authentication utilities for the Outlook MCP server. Start with system.about when troubleshooting — it returns build identity and host environment metadata without requiring authentication.",
 		Verbs:           sysVerbs,
-		ToolAnnotations: systemToolAnnotations(),
+		ToolAnnotations: tools.AggregateAnnotations("System", sysVerbs),
 	})
 	*sysRegistry = populated
 
@@ -173,7 +173,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		Domain:          "mail",
 		Intro:           "Mail operations for Microsoft Outlook via Microsoft Graph.",
 		Verbs:           mailVerbs,
-		ToolAnnotations: mailToolAnnotations(),
+		ToolAnnotations: tools.AggregateAnnotations("Mail", mailVerbs),
 	})
 	*mailRegistry = populatedMail
 

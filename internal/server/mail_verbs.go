@@ -600,26 +600,3 @@ func buildDeleteDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite fun
 		},
 	}
 }
-
-// mailToolAnnotations returns the conservative aggregate MCP annotations for
-// the mail domain tool per CR-0060 FR-9 and AC-9.
-//
-// readOnlyHint is false because write verbs (create_draft, create_reply_draft,
-// create_forward_draft, update_draft, delete_draft) may be present when
-// MailManageEnabled is true. destructiveHint is true because delete_draft
-// permanently removes a message. idempotentHint is false because create_draft,
-// create_reply_draft, and create_forward_draft are non-idempotent.
-// openWorldHint is true because all verbs call Microsoft Graph.
-//
-// Per FR-9 these values represent the most conservative annotation across all
-// verbs that may be registered for the domain. They remain fixed at
-// construction time and must be consistent across deployment configurations.
-func mailToolAnnotations() []mcp.ToolOption {
-	return []mcp.ToolOption{
-		mcp.WithTitleAnnotation("Mail"),
-		mcp.WithReadOnlyHintAnnotation(false),
-		mcp.WithDestructiveHintAnnotation(true),
-		mcp.WithIdempotentHintAnnotation(false),
-		mcp.WithOpenWorldHintAnnotation(true),
-	}
-}

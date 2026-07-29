@@ -186,11 +186,17 @@ func TestAggregateAnnotations_Account(t *testing.T) {
 }
 
 // TestAggregateAnnotations_System verifies the conservative aggregate
-// annotations on the "system" domain tool (AC-9 / FR-9).
+// annotations on the "system" domain tool (CR-0068 FR-6/FR-8, OBS-1).
 //
-// system hosts complete_auth (write, non-idempotent) when auth_code is active,
-// and status (read). No verb is destructive. Conservative: readOnly=false,
-// destructive=false, idempotent=false, openWorld=true.
+// Under AuthMethod "browser" the auth_code verb complete_auth is NOT registered,
+// so every registered system verb is local (about, status, help, list_docs,
+// search_docs, get_docs). The aggregate therefore reports openWorld=false, the
+// corrected value the derived fold produces. This replaces the previous
+// hardcoded openWorld=true, which contradicted the registered verb set.
+//
+// Phase 4 of CR-0068 adds the complementary auth_code case
+// (TestSystemAnnotationsOpenWorldWithAuthCode) asserting openWorld=true when
+// complete_auth is registered.
 func TestAggregateAnnotations_System(t *testing.T) {
 	s := buildTestServer(t, config.Config{
 		AuthRecordPath: "/tmp/test",
@@ -203,7 +209,7 @@ func TestAggregateAnnotations_System(t *testing.T) {
 		readOnly:    false,
 		destructive: false,
 		idempotent:  false,
-		openWorld:   true,
+		openWorld:   false,
 	})
 }
 
