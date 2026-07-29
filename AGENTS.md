@@ -94,15 +94,17 @@ The aggregate tool name registered with `mcp.NewTool()` must match the name used
 
 ## MCP Tool Annotations
 
-All four aggregate MCP tools **MUST** include the full set of five MCP annotations for Anthropic Software Directory compliance (see CR-0052). Per CR-0060, the aggregate annotation **MUST** be the most conservative across the verbs the tool hosts:
+All four aggregate MCP tools **MUST** include the full set of five MCP annotations for Anthropic Software Directory compliance (see CR-0052). Per CR-0060 the aggregate annotation is the most conservative across the verbs the tool hosts; per CR-0068 that aggregate is no longer hardcoded but **COMPUTED** at registration time from the verbs actually registered in the running configuration, via `tools.AggregateAnnotations(title, verbs)` in `internal/tools/aggregate_annotations.go`. The four former `*ToolAnnotations()` functions were deleted. The conservative fold is:
 
-* `mcp.WithTitleAnnotation(string)` -- human-readable display name for UI tool pickers.
-* `mcp.WithReadOnlyHintAnnotation(bool)` -- `false` if any verb writes (true only for tools whose every verb is read-only).
-* `mcp.WithDestructiveHintAnnotation(bool)` -- `true` if any verb irreversibly deletes data or sends cancellation notices (verbs `calendar.delete_event`, `calendar.cancel_meeting`, `account.remove`).
-* `mcp.WithIdempotentHintAnnotation(bool)` -- `false` if any verb is non-idempotent (creates new resources each call).
-* `mcp.WithOpenWorldHintAnnotation(bool)` -- `true` if any verb calls Microsoft Graph; `false` only for tools whose every verb is local (no Graph verbs).
+* `mcp.WithTitleAnnotation(string)` -- human-readable display name for UI tool pickers; carried through unchanged.
+* `mcp.WithReadOnlyHintAnnotation(bool)` -- `true` only when **every** registered verb is read-only, `false` otherwise.
+* `mcp.WithDestructiveHintAnnotation(bool)` -- `true` if **any** registered verb irreversibly deletes data or sends cancellation notices (verbs `calendar.delete_event`, `calendar.cancel_meeting`, `account.remove`).
+* `mcp.WithIdempotentHintAnnotation(bool)` -- `false` if **any** registered verb is non-idempotent (creates new resources each call).
+* `mcp.WithOpenWorldHintAnnotation(bool)` -- `true` if **any** registered verb calls Microsoft Graph; `false` only when every registered verb is local.
 
-Per-verb annotation semantics **MUST** be documented in the `operation="help"` output for the domain. Annotation values **MUST** be explicitly set even when they match MCP spec defaults. The complete annotation matrix is defined in CR-0052; the conservative-aggregation rule is defined in CR-0060. New verbs **MUST** add a corresponding assertion in `internal/tools/tool_annotations_test.go`.
+Because gating (`MailEnabled`, `MailManageEnabled`, `auth_code`) changes the registered verb set, the published annotations are **configuration-dependent**: in the default gated config `mail` publishes `readOnlyHint: true`/`destructiveHint: false` and `system` publishes `openWorldHint: false`; enabling the gated verbs flips them. The gating-dependent values are documented in `docs/concepts.md` under "Tool annotation semantics".
+
+Every verb **MUST** declare its own four-hint classification in its registry `Annotations` entry -- a verb cannot be registered without one, because the aggregate fold reads each verb's declared hints (a shared `help` verb that declared none is what previously forced `readOnlyHint` to false everywhere). `TestEveryVerbHasClassification` in `internal/tools/verb_metadata_test.go` enforces this and names the offending verb and missing hint when it fails. Per-verb annotation semantics **MUST** be documented in the `operation="help"` output for the domain. Annotation values **MUST** be explicitly set even when they match MCP spec defaults. The complete annotation matrix is defined in CR-0052; the conservative-aggregation rule in CR-0060; the computed-from-registry rule in CR-0068. New verbs **MUST** declare all four hints (guarded by `TestEveryVerbHasClassification`) and add a corresponding value assertion in `internal/tools/tool_annotations_test.go`.
 
 ## MCP Tool Response Tiering
 
