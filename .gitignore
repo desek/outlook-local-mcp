@@ -54,3 +54,6 @@ docs/bench/runs/
 docs/research/cr-0060-token-economics/runs/
 # Staged container binaries produced by scripts/stage-container-binaries.sh
 /linux/
+
+# Claude Code agent worktrees
+/.claude/worktrees/
