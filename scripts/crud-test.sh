@@ -98,6 +98,14 @@ if [[ ! -s "$CSV" ]]; then
 fi
 
 # Tool-call counts per bucket (mcp__outlook-local-mcp__{domain} + common built-ins).
+#
+# MAINTENANCE: these buckets are the per-domain accounting the bench depends on.
+# Introducing a new top-level domain requires three matching edits, or the CSV
+# rows go malformed and the new domain's calls are silently counted as "other":
+#   1. add an `mcp_<domain>` column to the CSV header emitted above,
+#   2. add a matching pattern and counter to the awk block below,
+#   3. add the counter to the read/printf pair and to the jq output array.
+# Removing a domain requires pruning all three.
 read -r MCP_CAL MCP_MAIL MCP_ACC MCP_SYS T_BASH T_READ T_WRITE T_OTHER < <(
   jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | .name' "$STREAM" \
   | awk '

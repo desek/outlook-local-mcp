@@ -27,7 +27,7 @@ outlook-mcp/
     observability/             # OpenTelemetry metrics and tracing, WithObservability middleware
     buildinfo/                 # Build identity and host environment snapshot (system.about; CR-0067)
     server/                    # RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
-    tools/                     # 4 aggregate domain tools dispatching verb sets: calendar (15 verbs), mail (5-13 verbs gated by MailEnabled/MailManageEnabled), account (7 verbs), system (6-7 verbs gated by auth_code: about, status, complete_auth, help, list_docs, search_docs, get_docs); see CR-0056, CR-0058, CR-0060, CR-0061, CR-0067
+    tools/                     # The 4 aggregate domain tools and their verb registries
   docs/
     ...
 ```
@@ -86,49 +86,40 @@ Aggregate tools and their domains:
 * `calendar` -- Calendar and event verbs
 * `mail` -- Mail message, folder, and draft verbs
 * `account` -- Account management verbs
-* `system` -- Server-level verbs (`about`, `status`, optional `complete_auth`, `help`, `list_docs`, `search_docs`, `get_docs`); see CR-0061, CR-0067
+* `system` -- Server-level and diagnostic verbs
 
-Verb names **MUST** be self-explanatory English verbs or verb phrases without the domain prefix (for example `create_event`, not `calendar_create_event`). Every domain tool exposes an `operation="help"` verb that documents its registered verbs. The `{domain}.{operation}` identity is what surfaces in audit logs and OpenTelemetry attributes.
+The current verb inventory of a domain is the registry's to state, not this
+file's: invoke `operation="help"` on the domain.
 
-The aggregate tool name registered with `mcp.NewTool()` must match the name used in all middleware calls (`wrap`/`wrapWrite`, `WithObservability`, `AuditWrap`) in `server.go`. Per-verb dispatch is handled by `internal/tools/dispatch_route.go`.
+Verb names **MUST** be self-explanatory English verbs or verb phrases without the domain prefix (for example `create_event`, not `calendar_create_event`). Every domain tool **MUST** expose an `operation="help"` verb documenting its registered verbs. The `{domain}.{operation}` identity is what surfaces in audit logs and OpenTelemetry attributes.
+
+An aggregate tool's registered name **MUST** match the name used in every middleware call for that tool, so the audit and telemetry identity stays consistent.
 
 ## MCP Tool Annotations
 
-All four aggregate MCP tools **MUST** include the full set of five MCP annotations for Anthropic Software Directory compliance (see CR-0052). Per CR-0060 the aggregate annotation is the most conservative across the verbs the tool hosts; per CR-0068 that aggregate is no longer hardcoded but **COMPUTED** at registration time from the verbs actually registered in the running configuration, via `tools.AggregateAnnotations(title, verbs)` in `internal/tools/aggregate_annotations.go`. The four former `*ToolAnnotations()` functions were deleted. The conservative fold is:
+Rules for authors. The fold semantics and the configuration-dependent published
+values are documented once, in [`docs/concepts.md`](docs/concepts.md#tool-annotation-semantics);
+do not restate them here.
 
-* `mcp.WithTitleAnnotation(string)` -- human-readable display name for UI tool pickers; carried through unchanged.
-* `mcp.WithReadOnlyHintAnnotation(bool)` -- `true` only when **every** registered verb is read-only, `false` otherwise.
-* `mcp.WithDestructiveHintAnnotation(bool)` -- `true` if **any** registered verb irreversibly deletes data or sends cancellation notices (verbs `calendar.delete_event`, `calendar.cancel_meeting`, `account.remove`).
-* `mcp.WithIdempotentHintAnnotation(bool)` -- `false` if **any** registered verb is non-idempotent (creates new resources each call).
-* `mcp.WithOpenWorldHintAnnotation(bool)` -- `true` if **any** registered verb calls Microsoft Graph; `false` only when every registered verb is local.
+* Every verb **MUST** declare its own four-hint classification. A verb cannot be registered without one, because the aggregate annotation is computed from the registered verbs rather than hardcoded.
+* Annotation values **MUST** be set explicitly, even when they match the MCP spec defaults.
+* Per-verb annotation semantics **MUST** be documented in the domain's `operation="help"` output.
+* New verbs **MUST** add a value assertion alongside the existing annotation tests in `internal/tools/`.
 
-Because gating (`MailEnabled`, `MailManageEnabled`, `auth_code`) changes the registered verb set, the published annotations are **configuration-dependent**: in the default gated config `mail` publishes `readOnlyHint: true`/`destructiveHint: false` and `system` publishes `openWorldHint: false`; enabling the gated verbs flips them. The gating-dependent values are documented in `docs/concepts.md` under "Tool annotation semantics".
-
-Every verb **MUST** declare its own four-hint classification in its registry `Annotations` entry -- a verb cannot be registered without one, because the aggregate fold reads each verb's declared hints (a shared `help` verb that declared none is what previously forced `readOnlyHint` to false everywhere). `TestEveryVerbHasClassification` in `internal/tools/verb_metadata_test.go` enforces this and names the offending verb and missing hint when it fails. Per-verb annotation semantics **MUST** be documented in the `operation="help"` output for the domain. Annotation values **MUST** be explicitly set even when they match MCP spec defaults. The complete annotation matrix is defined in CR-0052; the conservative-aggregation rule in CR-0060; the computed-from-registry rule in CR-0068. New verbs **MUST** declare all four hints (guarded by `TestEveryVerbHasClassification`) and add a corresponding value assertion in `internal/tools/tool_annotations_test.go`.
+Specification: CR-0052 (annotation matrix), CR-0060 (conservative aggregation),
+CR-0068 (computed from the registry).
 
 ## MCP Tool Response Tiering
 
-All MCP tool responses **MUST** follow a three-tier output model to minimize token consumption for LLM consumers while preserving data access for programmatic use cases:
+Rules for authors. What each tier returns, which is the default, and why the model
+exists are documented once, in [`docs/concepts.md`](docs/concepts.md#output-tiers);
+do not restate them here.
 
-| Tier | Mode | Default | Format | Use Case |
-|------|------|---------|--------|----------|
-| 1 | `text` | **Yes** | CLI-like plain text with numbered lists and labeled fields | General LLM consumption, human-readable display |
-| 2 | `summary` | No | Compact JSON with an intentionally curated field set per tool | Programmatic LLM reasoning requiring structured data |
-| 3 | `raw` | No | Full, unmodified JSON matching Graph API response shape | Debugging, full-field inspection |
-
-### Rules
-
-* **Read tools** accept an `output` parameter with values `text` (default), `summary`, and `raw`. All three tiers **MUST** be implemented.
-* **Write tools** return text confirmations unconditionally (no `output` parameter). Confirmations include the action, subject, resource ID, key fields, and contextual message strings (e.g., attendee notification status).
-* **`text` is the default** — tool handlers **MUST** return plain text when `output` is empty or omitted.
-* **`raw` must be explicitly requested** — it is never the default for any tool. Raw output is the complete, unmodified Graph API serialization including empty values.
-* **`summary` field sets are intentional** — each tool's summary mode uses a deliberately chosen field set via a dedicated serialization function (e.g., `SerializeSummaryEvent`). Summary fields are **not** derived by filtering empty values from raw output. New tools **MUST** define their summary field set explicitly.
-* **Text formatters** live in `internal/tools/text_format.go`. New formatters follow the established patterns: numbered lists for collections, labeled fields for details, total counts at the end.
-* **Body escalation pattern**: Tools that return content previews by default (e.g., `bodyPreview`) **MUST** document in their tool description that the full content (e.g., HTML body) requires `output=raw`. This guides the LLM to use the preview to decide whether fetching the full content is necessary, avoiding unnecessary token consumption.
-
-### Why This Matters
-
-Every token in an MCP tool response competes with user instructions, conversation history, and LLM reasoning space. A 10-event JSON list consumes ~2,500 tokens; the same data as text consumes ~800 tokens — a 68% reduction. Over a session with 20-30 tool calls, this saves thousands of tokens and materially improves LLM performance.
+* Read verbs **MUST** implement all three tiers via the `output` parameter. Write verbs **MUST** return a text confirmation unconditionally and **MUST NOT** take an `output` parameter.
+* A write confirmation **MUST** name the action, the subject, the resource ID, the key fields that changed, and any contextual consequence the caller cannot otherwise see (for example whether attendees were notified).
+* Summary field sets **MUST** be chosen deliberately per verb via a dedicated serialization function (for example `SerializeSummaryEvent`), never derived by filtering empty values out of raw output.
+* Text formatters live in `internal/tools/text_format.go`. New formatters follow the established patterns: numbered lists for collections, labeled fields for details, a total count at the end.
+* **Body escalation**: a verb that returns a content preview by default (for example `bodyPreview`) **MUST** state in its description that the full content requires `output=raw`, so the LLM can decide from the preview whether the full fetch is warranted.
 
 ## MCP Tool Testing Instructions
 
@@ -138,9 +129,9 @@ When a new MCP tool is added or an existing tool's parameters/behavior change, `
 
 The `make crud-test` harness (`scripts/crud-test.sh`) **MUST** be lifecycled alongside MCP tool surface changes. When a verb, domain, or tool is added, renamed, or removed, the following **MUST** be updated in the same change:
 
-* `docs/prompts/mcp-tool-crud-test.md` — the prompt the headless agent executes; new verbs need new test steps, removed verbs need their steps deleted.
-* `scripts/crud-test.sh` — if a new top-level domain (currently `calendar`, `mail`, `account`, `system`) is introduced, add a corresponding `mcp_<domain>` column to the CSV header and a matching bucket in the per-run tool-count `awk` block. Removed domains require pruning the column and bucket.
-* `docs/bench/crud-runs.csv` — header **MUST** match the script's output schema; reset historical rows when columns change rather than leaving short rows.
+* `docs/prompts/mcp-tool-crud-test.md`: the prompt the headless agent executes; new verbs need new test steps, removed verbs need their steps deleted.
+* `scripts/crud-test.sh`: a new or removed top-level domain changes the per-domain tool-call accounting. The script's own comments state how; keep it self-consistent.
+* `docs/bench/crud-runs.csv`: the header **MUST** match the script's output schema. Reset historical rows when columns change rather than leaving short rows.
 
 The harness's value depends on this coupling: drift means the bench either silently skips new functionality or emits malformed CSV rows.
 
