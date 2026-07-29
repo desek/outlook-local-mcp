@@ -140,7 +140,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	})
 	populated := tools.RegisterDomainTool(s, tools.DomainToolConfig{
 		Domain:          "system",
-		Intro:           "System diagnostics and authentication utilities for the Outlook MCP server. Start with system.about when troubleshooting — it returns build identity and host environment metadata without requiring authentication.",
+		Intro:           "System diagnostics and authentication utilities for the Outlook MCP server. Start with system.about when troubleshooting; it returns build identity and host environment metadata without requiring authentication.",
 		Verbs:           sysVerbs,
 		ToolAnnotations: tools.AggregateAnnotations("System", sysVerbs),
 	})
@@ -170,8 +170,14 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		readOnly:             readOnly,
 	})
 	populatedMail := tools.RegisterDomainTool(s, tools.DomainToolConfig{
-		Domain:          "mail",
-		Intro:           "Mail operations for Microsoft Outlook via Microsoft Graph.",
+		Domain: "mail",
+		Intro: "Mail operations for Microsoft Outlook via Microsoft Graph. " +
+			"By default only read verbs are registered. Additional read verbs " +
+			"(get_conversation, list_attachments, get_attachment) are registered when " +
+			"MailEnabled is configured, and write verbs (create_draft, create_reply_draft, " +
+			"create_forward_draft, update_draft, delete_draft) are registered when " +
+			"MailManageEnabled is configured. The verbs listed below are those active in " +
+			"the current configuration.",
 		Verbs:           mailVerbs,
 		ToolAnnotations: tools.AggregateAnnotations("Mail", mailVerbs),
 	})
