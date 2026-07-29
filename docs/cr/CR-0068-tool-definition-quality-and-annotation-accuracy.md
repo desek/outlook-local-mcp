@@ -2,14 +2,15 @@
 id: "CR-0068"
 name: tool-definition-quality-and-annotation-accuracy
 description: Derive aggregate MCP annotations from the registered verb set and raise tool-definition quality across the four domain tools.
-status: "proposed"
+status: "completed"
 date: 2026-07-29
+completed-date: 2026-07-29
 requestor: daniel@grenemark.se
 stakeholders: repository maintainer, MCP client integrators, Glama MCP directory reviewers
 priority: "high"
 target-version: "0.7.0"
 source-branch: dev/cr-0066
-source-commit: 3ec5c17
+source-commit: 5516c5c
 ---
 
 # Tool definition quality and annotation accuracy
@@ -482,26 +483,26 @@ Then every parameter of every tool has a non-empty description field
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
-- [ ] Any linter exceptions are documented with justification
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
+- [x] Any linter exceptions are documented with justification
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] Inline code documentation updated where applicable
-- [ ] `docs/concepts.md` documents gating-dependent annotation semantics
-- [ ] `extension/manifest.json` kept in sync with the registered tool surface
+- [x] Inline code documentation updated where applicable
+- [x] `docs/concepts.md` documents gating-dependent annotation semantics
+- [x] `extension/manifest.json` kept in sync with the registered tool surface
 
 ### Code Review
 
