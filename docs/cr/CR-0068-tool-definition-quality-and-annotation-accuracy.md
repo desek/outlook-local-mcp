@@ -7,7 +7,7 @@ date: 2026-07-29
 requestor: daniel@grenemark.se
 stakeholders: repository maintainer, MCP client integrators, Glama MCP directory reviewers
 priority: "high"
-target-version: v0.5.0
+target-version: "0.7.0"
 source-branch: dev/cr-0066
 source-commit: 3ec5c17
 ---
@@ -211,8 +211,11 @@ across the registered verbs.
 
 ## Affected Components
 
-* `internal/tools/dispatch_registry.go` -- shared conservative-fold helper and verb
-  classification accessors.
+* `internal/tools/aggregate_annotations.go` -- new file: shared conservative-fold
+  helper and verb classification accessors (kept separate from
+  `dispatch_registry.go` per the small-single-purpose-file convention in AGENTS.md).
+* `internal/tools/dispatch_registry.go` -- reused unchanged as the source of the
+  per-verb `Annotations` field consumed by the helper.
 * `internal/server/mail_verbs.go` -- remove hardcoded annotations, adopt helper,
   extend description with the gating note.
 * `internal/server/calendar_verbs.go` -- remove hardcoded annotations, adopt helper,
@@ -220,7 +223,13 @@ across the registered verbs.
 * `internal/server/account_verbs.go` -- remove hardcoded annotations, adopt helper.
 * `internal/server/system_verbs.go` -- remove hardcoded annotations, adopt helper.
 * `internal/server/server.go` -- pass the registered verb set into the helper.
-* `internal/tools/tool_annotations_test.go` -- assertions become configuration-aware.
+* `internal/tools/tool_annotations_test.go` -- existing `TestAggregateAnnotations_*`
+  assertions become configuration-aware.
+* `internal/tools/aggregate_annotations_test.go` -- new file: unit tests for the fold.
+* `internal/tools/description_quality_test.go` -- new file: description structure and
+  bound checks.
+* `internal/tools/verb_metadata_test.go` -- add the per-verb classification-presence
+  assertion (alongside the existing `TestEveryVerbHasDescription`).
 * `extension/manifest.json` -- tool entries kept in sync per AGENTS.md.
 * `docs/concepts.md` -- annotation semantics under gated configurations.
 
@@ -292,8 +301,13 @@ the Glama quality score, which gates the awesome-mcp-servers listing.
 Four sequential phases, each independently verifiable.
 
 * **Phase 1 -- Shared fold helper.** Add `AggregateAnnotations(title string, verbs
-  []Verb) []mcp.ToolOption` to `internal/tools/`, plus accessors that read a verb's
-  classification from its registry `Annotations`. Unit-test the fold in isolation.
+  []Verb) []mcp.ToolOption` in a new `internal/tools/aggregate_annotations.go`, plus
+  accessors that read a verb's classification from its registry `Annotations`.
+  Because `Annotations` is a `[]mcp.ToolOption` of opaque functional options, the
+  accessors **MUST** materialise each verb's annotation values (for example by
+  applying the options to a throwaway `mcp.Tool` and reading the resulting
+  `Annotations` struct) rather than attempting to inspect the closures directly.
+  Unit-test the fold in isolation.
 * **Phase 2 -- Adopt the helper.** Replace the four `*ToolAnnotations()` functions
   with calls to the helper, passing the registered verb slice. Delete the hardcoded
   values.
@@ -332,6 +346,7 @@ flowchart LR
 | `internal/tools/aggregate_annotations_test.go` | `TestAggregateAnnotationsAllReadOnly` | Fold over read-only verbs only | 3 read-only verbs | `readOnlyHint: true`, `destructiveHint: false` |
 | `internal/tools/aggregate_annotations_test.go` | `TestAggregateAnnotationsOneDestructive` | One destructive verb dominates | 2 read-only, 1 destructive | `destructiveHint: true`, `readOnlyHint: false` |
 | `internal/tools/aggregate_annotations_test.go` | `TestAggregateAnnotationsAllLocal` | No Graph verb yields closed world | 3 local verbs | `openWorldHint: false` |
+| `internal/tools/aggregate_annotations_test.go` | `TestAggregateAnnotationsOneNonIdempotent` | One non-idempotent verb dominates (AC-11, FR-5) | 2 idempotent, 1 non-idempotent | `idempotentHint: false` |
 | `internal/tools/aggregate_annotations_test.go` | `TestAggregateAnnotationsEmptyVerbSet` | Degenerate empty registry | empty slice | Deterministic conservative default, no panic |
 | `internal/tools/tool_annotations_test.go` | `TestMailAnnotationsGatedReadOnly` | Default config exposes read verbs only | `MailEnabled=false` | `readOnlyHint: true`, `destructiveHint: false` |
 | `internal/tools/tool_annotations_test.go` | `TestMailAnnotationsManageEnabled` | Full mail surface | `MailManageEnabled=true` | `readOnlyHint: false`, `destructiveHint: true` |
@@ -341,14 +356,16 @@ flowchart LR
 | `internal/tools/description_quality_test.go` | `TestMailDescriptionMentionsGatedVerbs` | OBS-3 coverage | `mail` description | Names `MailEnabled` and `MailManageEnabled` |
 | `internal/tools/description_quality_test.go` | `TestEveryVerbStatesRequiredParameters` | OBS-2 coverage | all registered verbs | Each verb names its required parameters |
 | `internal/tools/description_quality_test.go` | `TestDescriptionLengthBounded` | NFR-3 coverage | 4 tool descriptions | Each under 4000 characters |
+| `internal/tools/description_quality_test.go` | `TestEveryParameterHasDescription` | AC-12, FR-12 regression guard | all parameters of all 4 tools | Every parameter description field non-empty |
+| `internal/tools/verb_metadata_test.go` | `TestEveryVerbHasClassification` | AC-9, FR-13 coverage; mirrors existing `TestEveryVerbHasDescription` | all registered verbs | Each verb has a non-empty `Annotations` entry, else the test fails naming the verb |
 
 ### Tests to Modify
 
 | Test File | Test Name | Current Behavior | New Behavior | Reason for Change |
 |-----------|-----------|------------------|--------------|-------------------|
-| `internal/tools/tool_annotations_test.go` | `TestMailToolAnnotations` | Asserts hardcoded `destructiveHint: true` | Asserts value derived from the registered verb set | The hardcoded expectation encodes the defect in OBS-1 |
-| `internal/tools/tool_annotations_test.go` | `TestSystemToolAnnotations` | Asserts hardcoded `openWorldHint: true` | Asserts derived value per configuration | Same defect, `system` domain |
-| `internal/tools/tool_annotations_test.go` | `TestAllToolsHaveFiveAnnotations` | Iterates hardcoded functions | Iterates helper output | The hardcoded functions no longer exist |
+| `internal/tools/tool_annotations_test.go` | `TestAggregateAnnotations_Mail` | Asserts the hardcoded aggregate under `MailEnabled=true, MailManageEnabled=true` (`destructiveHint: true`) | Asserts the same full-surface values now produced by `AggregateAnnotations` over the registered verb set; the gated-config case is added separately as `TestMailAnnotationsGatedReadOnly` | The hardcoded `mailToolAnnotations()` it exercised no longer exists |
+| `internal/tools/tool_annotations_test.go` | `TestAggregateAnnotations_System` | Asserts `openWorldHint: true` under `AuthMethod: browser` (no `complete_auth`) | Asserts the derived value: `openWorldHint: false` when `complete_auth` is not registered, `true` when `auth_code` is active | Encodes the `system` defect in OBS-1; the browser config must now yield closed-world |
+| `internal/tools/tool_annotations_test.go` | `TestAggregateAnnotations_Calendar` and `TestAggregateAnnotations_Account` | Assert hardcoded per-domain aggregates via the `assertAggregateAnnotations` helper | Assert the same expected values now produced by `AggregateAnnotations` over the registered verb set | The hardcoded `*ToolAnnotations()` functions they exercised no longer exist |
 
 ### Tests to Remove
 
@@ -365,6 +382,7 @@ Given the server is configured with MailEnabled unset and MailManageEnabled unse
 When an MCP client issues a tools/list request
 Then the mail tool reports readOnlyHint true
   And the mail tool reports destructiveHint false
+  And the mail tool reports openWorldHint true
 ```
 
 ### AC-2: Enabled mail management advertises write and destructive
@@ -442,6 +460,22 @@ Given the full test suite and the container smoke tests
 When make ci and the container-build jobs run
 Then every verb name, parameter name, and handler behaviour is unchanged
   And all four aggregate tools remain present in tools/list
+```
+
+### AC-11: A single non-idempotent verb dominates the aggregate
+
+```gherkin
+Given a domain registers a non-idempotent verb alongside idempotent verbs
+When the aggregate annotations are computed for that domain
+Then idempotentHint is false
+```
+
+### AC-12: Every parameter carries a non-empty description
+
+```gherkin
+Given the four aggregate tools registered in any configuration
+When an MCP client issues a tools/list request
+Then every parameter of every tool has a non-empty description field
 ```
 
 ## Quality Standards Compliance
@@ -563,6 +597,79 @@ score page, for example <https://glama.ai/mcp/servers/jbr/cargo-mcp/score>. The
 audit baseline table was produced by capturing `tools/list` from the container
 image built at commit `3ec5c17` and measuring description length, parameter count,
 enum size, and parameter description coverage per tool.
+
+<!-- review-summary -->
+## Review Summary (cr-reviewer, 2026-07-29)
+
+Reviewed against the code at branch `dev/cr-0066` (tip `bc1f849`). Core premises
+were verified against the source and hold: the `Verb` struct in
+`internal/tools/dispatch_registry.go:108` carries an unread `Annotations
+[]mcp.ToolOption` field; all four `*ToolAnnotations()` functions in
+`internal/server/{account,calendar,mail,system}_verbs.go` return hardcoded
+constants (`mailToolAnnotations` at `mail_verbs.go:617`, `systemToolAnnotations`
+at `system_verbs.go:300`); the mail tool is registered unconditionally with only
+five read-only verbs in the default gated configuration
+(`buildMailVerbs`, `mail_verbs.go:111-138`) while publishing `readOnlyHint:false,
+destructiveHint:true`. Cited paths, line numbers, the `3ec5c17` source commit, the
+`scripts/smoke-test-image.sh` command, and the `outlook-local-mcp:ci-standalone`
+image tag all resolve.
+
+### Findings by category
+
+- **Drift: 2**
+  - `target-version: v0.5.0` is impossible: the repo has already released v0.4.0
+    (latest tag) and the CR depends on CR-0060 (v0.6.0) and CR-0067 (0.7.0).
+    Corrected to `"0.7.0"` to match the sibling CRs (CR-0066, CR-0067) riding the
+    same `dev/cr-0066` release train, and quoted for format consistency with them.
+  - The "Tests to Modify" table named three tests that do not exist
+    (`TestMailToolAnnotations`, `TestSystemToolAnnotations`,
+    `TestAllToolsHaveFiveAnnotations`). The test file has been refactored to
+    `TestAggregateAnnotations_{Calendar,Mail,Account,System}` (via the
+    `assertAggregateAnnotations` helper). Table rewritten to the real test names
+    and their actual current assertions.
+- **Requirement/AC coverage gaps: 4**
+  - FR-5 (idempotentHint fold) had no AC and no test. Added AC-11 and
+    `TestAggregateAnnotationsOneNonIdempotent`.
+  - FR-7 required `openWorldHint:true` for default mail but AC-1 asserted only
+    readOnly and destructive. Added the openWorldHint line to AC-1.
+  - FR-12 (non-empty parameter descriptions) had no AC and no test. Added AC-12 and
+    `TestEveryParameterHasDescription`.
+  - AC-9 (missing classification fails the build) had no Test Strategy entry. Added
+    `TestEveryVerbHasClassification` in `verb_metadata_test.go`, mirroring the
+    existing `TestEveryVerbHasDescription` pattern.
+- **Scope consistency: 2**
+  - The two new test files (`aggregate_annotations_test.go`,
+    `description_quality_test.go`) and `verb_metadata_test.go` were absent from
+    Affected Components. Added.
+  - Helper file location was inconsistent: Affected Components placed the helper in
+    `dispatch_registry.go`, but the test filename and the small-single-purpose-file
+    convention imply a new `aggregate_annotations.go`. Reconciled to a new file and
+    Phase 1 updated to match; also flagged that `Annotations` is a slice of opaque
+    functional options, so the classification accessors MUST materialise the values.
+
+### Fixes applied: 10
+
+frontmatter target-version; AC-1 openWorldHint; AC-11 (new); AC-12 (new); three
+Tests-to-Add rows; Tests-to-Modify table rewrite; Affected Components (helper file,
+three test files); Phase 1 accessor note.
+
+### Convention checks passed
+
+RFC 2119: all Functional and Non-Functional requirements use MUST/MUST NOT only; no
+should/may/appropriate/as-needed language in the requirement or AC sections. ACs are
+Gherkin. Mermaid flowchart labels containing parentheses are double-quoted per the
+project's diagram rules; no `Note` blocks. No dashed em-dash characters in prose
+(the CR uses `--` as a spaced separator, which is acceptable). Internal counts are
+consistent: audit table parameters (6+33+18+5) equal the 62 referenced in FR-12.
+
+### Unresolved (human decision): 1
+
+- **Exact target version.** `v0.5.0` was objectively wrong and was set to `"0.7.0"`
+  to match the sibling CRs on this branch. If CR-0068 is intended to ship in a later
+  release than CR-0066/CR-0067 rather than alongside them, the maintainer should
+  bump this to `"0.8.0"`. Low confidence on the exact number, high confidence the
+  original value was invalid.
+<!-- /review-summary -->
 
 Note on requirement 12: all 62 parameters across the four tools already carry a
 non-empty description, so the requirement is a regression guard rather than new
