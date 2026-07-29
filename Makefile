@@ -75,7 +75,7 @@ clean:
 # Headless CRUD lifecycle test runner. Wraps scripts/crud-test.sh which spawns
 # claude -p, captures stream-json metrics to docs/bench/runs/{ts}/, appends a
 # row to docs/bench/crud-runs.csv, and writes TEST-REPORT-{ts}.md.
-# Override defaults with env: ACCOUNT (default), MODEL (claude-sonnet-4-6),
+# Override defaults with env: ACCOUNT (default), MODEL (claude-sonnet-5),
 # THINKING (low|medium|high|xhigh|max).
 crud-test:
 	./scripts/crud-test.sh
