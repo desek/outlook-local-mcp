@@ -12,6 +12,8 @@ The release pipeline produces three artifact types:
 2. **MCPB extension package** — a `.mcpb` archive containing the binary and `extension/manifest.json`, installable in Claude Desktop with one click.
 3. **Container images** — multi-arch OCI images published to `ghcr.io/desek/outlook-local-mcp` on every tagged release (see [Container images](#container-images) below).
 
+All three are produced by CI from a Git tag. One step is **not** automated: the [Glama directory listing](#directory-listings) publishes its own release from a pinned commit, and a tagged release is not complete until that release is published too.
+
 ---
 
 ## GoReleaser
@@ -98,15 +100,63 @@ The scratch and distroless variants are built for both `linux/amd64` and `linux/
 
 ### CI validation
 
-Every PR runs a `container-build` job that builds both `runtime-scratch` and `runtime-distroless` target stages for `linux/amd64` (without pushing), executes a `--version` smoke test against each variant, and asserts that the distroless image's configured user is `nonroot` or `65532`.
+Every PR runs two container jobs:
+
+* `container-build` builds the `runtime-scratch` and `runtime-distroless` target stages for `linux/amd64` (without pushing) and asserts the distroless image's configured user is `nonroot` or `65532`.
+* `container-build-standalone` builds the default target from a clean checkout with a bare `docker build .`, which is the path third-party build services and `docker-compose` use.
+
+Both jobs smoke-test via `scripts/smoke-test-image.sh`, which drives a real `initialize` plus `tools/list` handshake over stdio and asserts all four aggregate tools are advertised. It deliberately does not use `--version`: the binary takes no arguments, so `docker run <image> --version` starts the server, reads EOF and exits 0 even when no tools registered, proving only that the file is executable.
 
 ### Build mechanics
 
-The container job stages the binary via `goreleaser release --clean --snapshot --id container --skip=publish,announce,sbom`, then invokes `docker buildx build --push` against the pre-built artifact. This reuses the cross-compiled binary rather than recompiling, keeping release time overhead to roughly two minutes.
+The release stages do not compile. They expect a prebuilt static binary at `${TARGETOS}/${TARGETARCH}/outlook-local-mcp` relative to the build context, because buildx substitutes those variables per target platform.
+
+`scripts/stage-container-binaries.sh` produces that layout. GoReleaser does not emit it directly: `goreleaser build --id container` writes to `dist/container_linux_amd64_v1/` and `dist/container_linux_arm64_v8.0/`, where the trailing microarchitecture suffix corresponds to no `TARGETARCH` value. The script bridges the two and fails loudly if either architecture is missing.
+
+Note that `goreleaser release` has no `--id` flag; only `goreleaser build` does. The release workflow passes `--release` so the binaries carry the real tag rather than a `0.0.0-SNAPSHOT` version, which is what `system.about` reports from a published image.
+
+Reusing the cross-compiled binary rather than recompiling keeps release time overhead to roughly two minutes.
 
 ### Runtime notes
 
 Both image variants export `RUNNING_IN_CONTAINER=1` (CR-0067) so `system.about` reports `runtime=container` even from a `scratch` image where filesystem markers (`/.dockerenv`, `/proc/1/cgroup`) may be absent. The OS keychain is not available inside the container; the server automatically falls back to file-backed token storage at `/data/auth/`. See [Container runtime](../concepts.md#container-runtime) for the full narrative and [Container deployment](../quickstart.md#container-deployment) for the recommended invocation pattern.
+
+---
+
+## Directory listings
+
+The server is listed in the [Glama MCP registry](https://glama.ai/mcp/servers/desek/outlook-local-mcp). Glama does not track Git tags: it publishes its own releases, built from a pinned commit via a build spec configured in its admin UI. **A GitHub release is therefore not complete until the corresponding Glama release is published**, or the directory silently continues serving the previous build.
+
+### Why it matters
+
+Glama's quality score is not computed until a release exists. Until then the listing shows `quality - not tested` and the per-tool rows sit at `pending`, regardless of how good the tool definitions are. The score grades tool definition quality (70%) and server coherence (30%), so it reflects whatever verb registry and descriptions were in the pinned commit.
+
+### Publishing a Glama release
+
+1. Claim the server, if not already claimed. One-time.
+2. Open the Dockerfile admin page, configure the build spec, and click **Deploy**.
+3. Once the build test succeeds, click **Make Release**, enter the version, and publish.
+
+### Version consistency
+
+The Glama release version **MUST** equal the Git tag, and the pinned commit SHA **MUST** be the commit that tag points at. Glama's version field is free text and is not validated against the repository, so nothing prevents the two diverging.
+
+This has already happened once: release `0.4.0` was published from commit `326f3d74`, which is one commit ahead of the `v0.4.0` tag (`5b22fb5`). That commit is the squash-merge carrying CR-0066, CR-0067 and CR-0068, so the image published as "0.4.0" contains container distribution, `system.about`, and registry-computed annotations that the real `v0.4.0` does not. Because the quality score grades the pinned commit, the published score described code the named version did not contain.
+
+Cut the Git tag first, then publish Glama against that tag's commit.
+
+### Build spec values
+
+Glama generates its own Dockerfile from form fields rather than using the repository's. The repository `Dockerfile` builds a Go binary; Glama's template assumes Node and Python, so the Go toolchain is installed via build steps. Values verified against a local build of the generated file:
+
+* **Base image**: `debian:trixie-slim`. Node.js and Python version fields are unused by a Go build; leave the defaults.
+* **Build steps**: install `ca-certificates`, `curl`, then the Go toolchain tarball, then `CGO_ENABLED=0 go build -trimpath -o /usr/local/bin/outlook-local-mcp ./cmd/outlook-local-mcp`. `CGO_ENABLED=0` avoids needing a C toolchain in the slim image and selects the file-backed token cache, matching the release containers.
+* **CMD**: the binary path. Glama wraps it in `mcp-proxy`, which serves streamable HTTP on `/mcp` (not `/sse`) and requires a full `initialize` plus `notifications/initialized` handshake before `tools/list` will answer.
+* **Environment variables JSON schema**: declare no `required` entries. Every variable has a working default, and the server starts and answers introspection with none set. Marking any as required forces placeholder credentials that the checks do not need.
+* **Placeholder parameters**: `{}`, which is valid once the schema has no required entries.
+* **Pinned commit SHA**: the tagged release commit, per the version consistency rule above.
+
+The Go tarball URL is architecture-specific. If Glama's builders change architecture, that build step needs the matching `linux-<arch>` tarball.
 
 ---
 
