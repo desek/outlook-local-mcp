@@ -145,8 +145,10 @@ jobs:
       - uses: jdx/mise-action@v4
         with:
           install_args: "go goreleaser"
+      # --release so the published images report the real tag via system.about
+      # rather than a 0.0.0-SNAPSHOT version.
       - name: Stage binaries via GoReleaser
-        run: goreleaser release --clean --snapshot --id container --skip=publish,announce,sbom
+        run: ./scripts/stage-container-binaries.sh --release
       - name: Build and push scratch image
         uses: docker/build-push-action@v5
         with:

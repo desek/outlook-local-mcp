@@ -5,6 +5,15 @@
 docs/
 *.md
 !go.sum
+# The `build` stage compiles from source, and docs/embed.go embeds exactly these
+# four files. They must survive the docs/ and *.md exclusions above or the
+# go:embed directive fails at compile time. Later patterns win in .dockerignore,
+# so these negations re-include the files inside the excluded directory.
+!docs/embed.go
+!docs/readme.md
+!docs/quickstart.md
+!docs/concepts.md
+!docs/troubleshooting.md
 *_test.go
 outlook-local-mcp
 *.out
