@@ -137,6 +137,41 @@ collected until the site is deployed.
   JavaScript. LCP at 2,565 ms is only 65 ms over budget. The landing page's CLS of
   0.094 has **no attributable element** and did not move when the font work landed,
   which rules out font swap and points at the load-time GSAP and Lenis animation.
+* **Cross-checked against Google's infrastructure after the fact.** A named Cloudflare
+  tunnel was stood up at `preview.outlook-local-mcp.com` and PageSpeed Insights was run
+  against it (Lighthouse 13.4.1, mobile). It disagrees with the local run in ways that
+  bear directly on this attempt's disposition:
+
+  | metric | PSI | local lhci |
+  |---|---|---|
+  | Performance | 0.91 | 0.93 |
+  | Accessibility | 0.96 | 0.96 |
+  | Best Practices | 0.96 | 1.00 |
+  | SEO | 1.00 | 1.00 |
+  | LCP | **2.4 s, inside budget** | 2,565 ms, over budget |
+  | CLS | **0** | 0.094 |
+  | Speed Index | 4.8 s | 2,253 ms |
+  | TBT | 160 ms | about 20 ms |
+
+  Both of the metrics this attempt targeted pass when Google measures them. The local
+  CLS of 0.094 had no attributable element and reads as an artifact of the headless run
+  rather than anything a visitor experiences. What drags PSI's Performance down is Speed
+  Index at 4.8 s, which is tunnel latency (edge to a laptop rather than edge to Fastly)
+  and should be discounted. Two of the three console errors behind PSI's Best Practices
+  0.96 come from Cloudflare's `email-decode.min.js`, injected by the proxy and absent on
+  GitHub Pages, so 1.00 is the honest figure there.
+
+  Neither measurement is the deployed truth: local understates Speed Index and
+  overstates CLS, PSI overstates Speed Index. The real numbers are likely better than
+  both, and only a deploy settles it. That is a catch-22 worth naming, because the gate
+  blocks the deploy and only the deploy yields a trustworthy measurement.
+
+  PSI did surface one real defect the local run did not: Accessibility 0.96 is
+  **colour contrast**, not the `role=tab` issue. `#abff02` lime on `#ffffff` measures
+  1.23, and `#6f6f6f` on the off-white `#f0f0f0` section background measures 4.4,
+  just under the 4.5 AA threshold. The second is a Phase 5 change that did not go far
+  enough: the darkened grey was checked against white but not against `#f0f0f0`.
+
 * **Why the work stopped here:** closing the remaining 0.02 means reducing DOM size or
   deferring hydration. Both alter the adopted v3 markup, which the CR's Out of Scope
   section defers, and that boundary has already produced one contradiction when the
@@ -144,6 +179,74 @@ collected until the site is deployed.
   GSAP and Lenis motion layer that was the reason v3 was chosen over the rebuild. That
   is a change-owner decision, not an agent one.
 * **Disposition:** pending
+
+## Carry-forward
+
+Items this session has identified but not actioned. They are not attempts and carry no
+disposition; they are recorded here so they survive the session and can be routed at
+close.
+
+### TODO: fold metrics tracking into the project so regressions are visible
+
+Today the only enforced metric is the Lighthouse gate, and it asserts a threshold
+without retaining history. A score that drifts from 1.00 to 0.96 across three commits
+fails nothing until it crosses the floor, and nobody can see when it started. The same
+is true of every structural property this CR added: nothing records that the landing
+page had 12,360 characters of text without JavaScript yesterday and 4,000 today.
+
+What is worth tracking, all of it already measurable by the checks this session used:
+
+* Lighthouse category scores and the underlying metrics (LCP, CLS, TBT, Speed Index,
+  FCP) per page, retained over time rather than only asserted.
+* Payload budgets: JS and CSS bytes, and page HTML size. The stylesheet went from 88 KB
+  to 39 KB in this session and nothing would have noticed it going back.
+* Structural SEO and GEO properties: characters of text without JavaScript per page,
+  `<h1>` count, canonical and Open Graph and Twitter tag counts, JSON-LD entity types,
+  crawler-file presence, `SeeDocs` anchor resolution, `/index.md` word count and Mermaid
+  fence count.
+* W3C validator error count per page, excluding the CSS-profile lag that accounts for 54
+  of the current errors on every page.
+
+The natural home is the existing site test suite plus the deploy workflow, with a
+committed snapshot so a change shows up as a diff. That is a CR-sized piece of work, not
+a session attempt.
+
+### TODO: make future agents aware of the preview tunnel and PageSpeed Insights
+
+Both capabilities now exist and no agent will discover them from the repository. Neither
+is documented anywhere durable yet; the ledger is the wrong long-term home, so at close
+this should be routed to `CONTRIBUTING.md` or `docs/reference/`.
+
+What an agent needs to know:
+
+* **A named Cloudflare tunnel exists.** `outlook-local-mcp-preview`
+  (`c321c3b3-f04b-4b49-bc51-435776798635`) serves `preview.outlook-local-mcp.com` from
+  `http://localhost:8099`, so a locally built `site/dist` can be validated by external
+  tools that need a public URL. Start it with
+  `cloudflared tunnel run --token <token from the Cloudflare API>`.
+* **Credentials live in `site/.env`**, which is gitignored: `CLOUDFLARE_API_TOKEN`,
+  `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_ZONE_ID`, `PAGESPEED_API_KEY`. The token is
+  scoped to Tunnel:Edit, DNS:Edit, and Zone:Read on this zone only.
+* **PageSpeed Insights runs non-interactively** with `PAGESPEED_API_KEY` against the
+  preview hostname. Without a key the shared anonymous quota is exhausted and every call
+  fails; the key is free and needs no billing account.
+
+And, more importantly, what it must NOT conclude from them:
+
+* **Content-Type over the tunnel is not GitHub Pages' Content-Type.** The tunnel proxies
+  a local `python http.server`, so MIME types, headers, compression, and 404 handling are
+  ours, not the host's. FR-34's open question about `/index.md` is not answered by any
+  tunnel measurement.
+* **Performance over the tunnel is pessimistic.** Traffic routes edge to laptop instead
+  of edge to Fastly, which inflated Speed Index to 4.8 s against 2,253 ms locally.
+  Treat SEO, Accessibility, and Best Practices as meaningful; treat Performance as
+  indicative only.
+* **The proxy injects its own JavaScript.** Cloudflare's `email-decode.min.js` throws a
+  `TypeError` that Lighthouse charges to Best Practices, costing 0.04 on a page that
+  scores 1.00 locally. It will not exist on GitHub Pages.
+* **The page declares itself canonical elsewhere.** Canonical, `og:url`, sitemap `loc`,
+  and JSON-LD `url` are all hardcoded to the apex, so anything indexing-related measured
+  on the preview hostname is measuring a page that disclaims itself.
 
 ## Distillation
 
