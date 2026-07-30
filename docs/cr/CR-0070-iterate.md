@@ -400,8 +400,21 @@ collected until the site is deployed.
   millisecond. The libraries alone put the page at 2,393 ms before any of this site exists;
   1.00 needs 1,803 ms. Deleting every web font *and* all application code together reaches
   1,792 ms, which is the boundary — for a page with no content and no typography. The
-  application is not the problem at 29 KB; the motion libraries are, at 108.79 KB, and
-  nothing short of replacing them moves the score.
+  application is not the problem at 29 KB; the motion libraries are, at 108.79 KB.
+
+  **The final measurement changes the shape of the answer, and is the one worth keeping.**
+  "Replace GSAP with something lighter" turns out not to be sufficient either. With no
+  script element at all, the landing page audits at FCP 1.00, Speed Index 1.00, TBT 1.00,
+  CLS 1.00 and **LCP 0.98** — a weighted 0.995, which reaches 1.00 only by rounding. Put
+  any script back and it rounds to 0.99: a 20-byte stub and a 4.5 KB vanilla-JavaScript
+  layer were both measured, and both scored 0.99 with LCP unchanged at 1,803 ms.
+
+  So the target is not "a lighter framework". It is **zero JavaScript** — no tabs, no
+  accordions, no copy buttons, no mobile navigation, no motion — and even that holds 1.00
+  only on the rounding boundary. This is worth stating plainly because it reframes the
+  whole question: the gap between 0.97 and 1.00 was never a performance defect anyone
+  could fix, and chasing it further would have meant dismantling the page to win a
+  rounding decision.
 * **FR-36 amended accordingly, and tightened in every direction the evidence allows.**
   Accessibility, Best Practices and SEO go from "at least 95" to **100 on every page**;
   documentation-page Performance goes from "at least 95" to **100**; the landing page is

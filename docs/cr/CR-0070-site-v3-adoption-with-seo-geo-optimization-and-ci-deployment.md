@@ -471,6 +471,21 @@ flowchart TD
       render the motion design are 108.79 KB, and that alone is more than the budget for
       100. Nothing short of replacing them changes it.
 
+      **And replacing them is not sufficient either.** The last measurement settles what
+      100 would actually cost. With *no script element at all*, the landing page's audit
+      scores are FCP 1.00, Speed Index 1.00, TBT 1.00, CLS 1.00 — and **LCP 0.98**, at
+      1,803 ms. The weighted category is 0.995, which reaches 100 only by rounding. Put a
+      script back, of any size — a 20-byte stub and a 4.5 KB vanilla-JavaScript layer were
+      both measured, each with LCP unchanged at 1,803 ms — and the category rounds to 0.99.
+
+      So 100 on the landing page does not require a lighter framework. It requires the page
+      to ship **no JavaScript whatsoever**: no tabs, no accordions, no copy-to-clipboard, no
+      mobile navigation, no motion. And even then it holds 100 only on the rounding
+      boundary, with the LCP audit itself at 0.98. A requirement that can be met only by an
+      inert page, and only by rounding, is not describing a defect in this one; that is why
+      the landing page is held at 96 with metric budgets rather than to a figure the site
+      cannot occupy while remaining a site.
+
     The 96 floor is set one point below the measured 0.97 to absorb run-to-run variance,
     and the metric budgets above make the underlying numbers assertable in their own
     right, so a regression in LCP, CLS or TBT fails the gate even if the rounded category
