@@ -38,11 +38,24 @@ const distDir = process.argv[2] ?? 'site/dist'
  * Minimum no-JavaScript text length per page. A candidate build may publish more prose
  * but never less.
  *
- * These floors were measured on the pre-change build (commit 036219a) with the method
- * this script uses: `document.body.textContent.length` with JavaScript disabled. The
- * CR-0070 iteration ledger quotes 12,360 / 15,534 / 7,062 / 17,452 for the same build,
- * measured a different way; the two are not comparable term for term, so the floors here
- * are the ones this script can reproduce, taken from the unmodified build.
+ * These floors were measured on the pre-change build (commit 036219a) with the method this
+ * script uses: `document.body.textContent.length` with JavaScript disabled.
+ *
+ * The CR-0070 iteration ledger quotes a different set — 12,360 / 15,534 / 7,062 / 17,452 —
+ * and the difference was chased down rather than left as an unexplained mismatch. Three of
+ * the four are `innerText` measurements, and the current build exceeds all three:
+ * concepts 15,535 against 15,534, troubleshooting 17,501 against 17,452, quickstart 7,383
+ * against 7,062.
+ *
+ * The landing page's 12,360 cannot be reproduced by any method on either build:
+ * `innerText` gives 6,536 and `textContent` 11,853. `innerText` is much lower there
+ * because the page renders desktop and mobile branches of each section and hides one with
+ * `display: none`, which `innerText` correctly omits and a crawler reading the markup does
+ * not. The quoted figure most likely predates a copy change.
+ *
+ * Hence `textContent`, and hence floors this script can reproduce from the unmodified
+ * build. That is the assertion that actually matters — no prose was dropped — and it is
+ * measured the same way on both sides of the comparison.
  */
 const TEXT_FLOOR = {
   'index.html': 11853,
