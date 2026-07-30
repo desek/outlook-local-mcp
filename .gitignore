@@ -79,3 +79,10 @@ docs/research/cr-0060-token-economics/runs/
 # Lighthouse CI reports emitted by `lhci autorun` (site/lighthouserc.json upload
 # target). The thresholds config is committed; the per-run reports are not.
 /site/.lighthouseci/
+
+# Local secrets. Never commit: these files hold API tokens and credentials.
+# Anchored to the repository root and also matched at any depth, so a stray
+# .env in a subproject (site/, infra/) cannot slip through either.
+.env
+.env.*
+!.env.example
