@@ -76,3 +76,6 @@ docs/research/cr-0060-token-economics/runs/
 /site/troubleshooting.html
 # TypeScript incremental build cache emitted by `tsc -b`.
 /site/*.tsbuildinfo
+# Lighthouse CI reports emitted by `lhci autorun` (site/lighthouserc.json upload
+# target). The thresholds config is committed; the per-run reports are not.
+/site/.lighthouseci/

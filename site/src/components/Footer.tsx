@@ -52,9 +52,9 @@ export default function Footer() {
 
           {/* Column 2: Product */}
           <div>
-            <h4 className="font-sans text-label font-semibold tracking-[0.18em] text-white uppercase mb-5">
+            <h3 className="font-sans text-label font-semibold tracking-[0.18em] text-white uppercase mb-5">
               Product
-            </h4>
+            </h3>
             <ul className="space-y-3">
               {PRODUCT_LINKS.map((link) => (
                 <li key={link.label}>
@@ -72,9 +72,9 @@ export default function Footer() {
 
           {/* Column 3: Developer */}
           <div>
-            <h4 className="font-sans text-label font-semibold tracking-[0.18em] text-white uppercase mb-5">
+            <h3 className="font-sans text-label font-semibold tracking-[0.18em] text-white uppercase mb-5">
               Developer
-            </h4>
+            </h3>
             <ul className="space-y-3">
               {DEVELOPER_LINKS.map((link) => (
                 <li key={link.label}>
@@ -94,9 +94,9 @@ export default function Footer() {
 
           {/* Column 4: Reach Us */}
           <div className="col-span-2 lg:col-span-1">
-            <h4 className="font-sans text-label font-semibold tracking-[0.18em] text-white uppercase mb-5">
+            <h3 className="font-sans text-label font-semibold tracking-[0.18em] text-white uppercase mb-5">
               Built For
-            </h4>
+            </h3>
             <p className="text-sm text-white/50 font-sans leading-relaxed mb-5">
               Built for Claude, works with any MCP client.
               Connect your AI assistant to Microsoft Calendar and Mail
@@ -189,7 +189,7 @@ export default function Footer() {
               href="https://gigwhere.com"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-white/50 hover:text-brand-lime transition-colors duration-200"
+              className="text-white/50 underline underline-offset-2 hover:text-brand-lime transition-colors duration-200"
             >
               GigWhere
             </a>{' '}

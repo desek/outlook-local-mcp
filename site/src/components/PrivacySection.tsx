@@ -134,9 +134,9 @@ export default function PrivacySection() {
                     </svg>
                   </div>
                   <div>
-                    <h4 className="text-sm font-sans font-medium text-brand-dark mb-1">
+                    <h3 className="text-sm font-sans font-medium text-brand-dark mb-1">
                       {bullet.title}
-                    </h4>
+                    </h3>
                     <p className="text-sm text-gray-400 font-sans leading-relaxed">
                       {bullet.detail}
                     </p>

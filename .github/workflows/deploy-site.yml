@@ -54,6 +54,15 @@ jobs:
       - name: Run site tests if present
         run: pnpm --dir site run --if-present test
 
+      # The Lighthouse gate (FR-36 to FR-38): run Lighthouse on mobile emulation against
+      # the built dist/ and fail the workflow if any category falls below its threshold,
+      # BEFORE the publish step runs, so a regression blocks the deploy (AC-17, AC-19).
+      # Thresholds live in site/lighthouserc.json (a committed config, not ad-hoc flags),
+      # so a change to them shows up as a diff. lhci resolves Chrome from the runner's
+      # preinstalled browser; @lhci/cli is a site devDependency installed above.
+      - name: Lighthouse budget gate
+        run: pnpm --dir site run lighthouse
+
       # Publish dist/ to gh-pages using only the default GITHUB_TOKEN (FR-52). CNAME
       # and the crawler files are build outputs inside dist/, so a rebuild cannot
       # revert them (FR-54).
