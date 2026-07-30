@@ -1,8 +1,12 @@
+import { useId } from 'react'
 interface CapabilityCalendarProps {
   className?: string
 }
 
 export default function CapabilityCalendar({ className }: CapabilityCalendarProps) {
+  // Unique per instance, so the desktop and mobile copies of this SVG do not share ids.
+  const uid = useId()
+
   // Design system colors from index.css
   const C = {
     bg:       '#052424', // --color-brand-dark
@@ -101,7 +105,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
     >
       <defs>
         {/* Lime glow filter */}
-        <filter id="ccal-glow" x="-50%" y="-50%" width="200%" height="200%">
+        <filter id={`ccal-glow-${uid}`} x="-50%" y="-50%" width="200%" height="200%">
           <feGaussianBlur in="SourceGraphic" stdDeviation="2.5" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
@@ -110,7 +114,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
         </filter>
 
         {/* Scan line gradient */}
-        <linearGradient id="ccal-scan" x1="0" y1="0" x2="0" y2="1">
+        <linearGradient id={`ccal-scan-${uid}`} x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%"   stopColor={C.lime} stopOpacity="0" />
           <stop offset="40%"  stopColor={C.lime} stopOpacity="0.18" />
           <stop offset="60%"  stopColor={C.lime} stopOpacity="0.18" />
@@ -118,7 +122,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
         </linearGradient>
 
         {/* Clip to calendar grid area */}
-        <clipPath id="ccal-grid-clip">
+        <clipPath id={`ccal-grid-clip-${uid}`}>
           <rect x={gridX} y={gridY} width={gridWidth} height={gridHeight} />
         </clipPath>
       </defs>
@@ -127,10 +131,10 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
       <rect width="480" height="300" fill={C.bg} rx="8" />
 
       {/* ── 2. Subtle dot grid overlay ── */}
-      <pattern id="ccal-dots" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+      <pattern id={`ccal-dots-${uid}`} x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
         <circle cx="12" cy="12" r="0.8" fill={C.lime} opacity="0.07" />
       </pattern>
-      <rect width="480" height="300" fill="url(#ccal-dots)" rx="8" />
+      <rect width="480" height="300" fill={`url(#ccal-dots-${uid})`} rx="8" />
 
       {/* ── 3. Calendar card ── */}
       <rect
@@ -265,7 +269,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
                 rx="3"
                 fill={ev.color}
                 opacity="0.3"
-                filter="url(#ccal-glow)"
+                filter={`url(#ccal-glow-${uid})`}
               />
             )}
           </g>
@@ -276,8 +280,8 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
       <rect
         x={gridX} y={gridY}
         width={gridWidth} height="28"
-        fill="url(#ccal-scan)"
-        clipPath="url(#ccal-grid-clip)"
+        fill={`url(#ccal-scan-${uid})`}
+        clipPath={`url(#ccal-grid-clip-${uid})`}
       >
         <animate
           attributeName="y"
@@ -378,7 +382,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
         fontWeight="700"
         fill={C.lime}
         textAnchor="middle"
-        filter="url(#ccal-glow)"
+        filter={`url(#ccal-glow-${uid})`}
       >
         TODAY
       </text>
@@ -446,7 +450,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
         fontWeight="700"
         fill={C.lime}
         textAnchor="middle"
-        filter="url(#ccal-glow)"
+        filter={`url(#ccal-glow-${uid})`}
       >
         14
       </text>

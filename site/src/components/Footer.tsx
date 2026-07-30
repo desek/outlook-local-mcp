@@ -125,7 +125,7 @@ export default function Footer() {
                 href="https://github.com/desek/outlook-local-mcp"
                 target="_blank"
                 rel="noopener"
-                className="w-9 h-9 flex items-center justify-center rounded-md bg-white/[0.06] text-white/40 hover:text-brand-lime hover:bg-white/[0.1] transition-all duration-200"
+                className="w-9 h-9 flex items-center justify-center rounded-md bg-white/[0.06] text-white/60 hover:text-brand-lime hover:bg-white/[0.1] transition-all duration-200"
                 aria-label="GitHub"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
@@ -136,7 +136,7 @@ export default function Footer() {
                 href="https://x.com"
                 target="_blank"
                 rel="noopener"
-                className="w-9 h-9 flex items-center justify-center rounded-md bg-white/[0.06] text-white/40 hover:text-brand-lime hover:bg-white/[0.1] transition-all duration-200"
+                className="w-9 h-9 flex items-center justify-center rounded-md bg-white/[0.06] text-white/60 hover:text-brand-lime hover:bg-white/[0.1] transition-all duration-200"
                 aria-label="X (Twitter)"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -149,7 +149,7 @@ export default function Footer() {
 
         {/* ── Bottom bar ── */}
         <div className="mt-14 sm:mt-16 pt-6 border-t border-white/10 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <span className="text-xs text-white/30 font-sans">
+          <span className="text-xs text-white/50 font-sans">
             MIT License — outlook-local-mcp
           </span>
 
@@ -158,7 +158,7 @@ export default function Footer() {
             {(['macOS', 'Linux', 'Windows', 'Docker'] as const).map((p) => (
               <span
                 key={p}
-                className="font-mono text-[9px] tracking-wider text-white/30 uppercase border border-white/10 rounded px-2 py-0.5"
+                className="font-mono text-[9px] tracking-wider text-white/50 uppercase border border-white/10 rounded px-2 py-0.5"
               >
                 {p}
               </span>
@@ -169,7 +169,7 @@ export default function Footer() {
             href="https://github.com/desek/outlook-local-mcp"
             target="_blank"
             rel="noopener"
-            className="text-xs text-white/30 font-sans hover:text-brand-lime transition-colors duration-200"
+            className="text-xs text-white/50 font-sans hover:text-brand-lime transition-colors duration-200"
           >
             github.com/desek/outlook-local-mcp
           </a>
@@ -183,7 +183,7 @@ export default function Footer() {
             rel=nofollow or rel=sponsored), and the decorative heart sits outside the
             anchor and is aria-hidden so a screen reader does not announce "red heart".
           */}
-          <span className="text-xs text-white/30 font-sans">
+          <span className="text-xs text-white/50 font-sans">
             Support and testing by{' '}
             <a
               href="https://gigwhere.com"
@@ -197,7 +197,7 @@ export default function Footer() {
           </span>
 
           {/* Visible last-updated date, matching the JSON-LD dateModified (FR-45). */}
-          <span className="text-xs text-white/30 font-sans">
+          <span className="text-xs text-white/50 font-sans">
             Last updated <time dateTime={LAST_UPDATED_ISO}>{LAST_UPDATED_DISPLAY}</time>
           </span>
         </div>

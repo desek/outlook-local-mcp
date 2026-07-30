@@ -243,6 +243,83 @@ collected until the site is deployed.
   exercised, and wider viewports only give the container more room.
 * **Disposition:** kept
 
+### Attempt 3 — Accessibility and markup validity: contrast, duplicate SVG ids, div-in-button, orphan tabs
+
+* **State:** open
+* **Hypothesis:** the four bounded defects blocking the gate (contrast below AA,
+  duplicate SVG `defs` ids, `<div>` inside `<button>`, and `role="tab"` with no
+  associated panel) can each be fixed to an exact measured target without altering the
+  design, unblocking Accessibility 1.00 and zero real W3C errors independently of the
+  uncertain performance work.
+* **Surface touched:** a measurement harness under `.agents/scripts/`, plus
+  `site/src/index.css`, `site/src/components/{GettingStarted,ToolsReference,ConfigReference}Section.tsx`,
+  `site/src/components/DotGridOverlay.tsx`, `site/src/components/svg/Capability*.tsx`,
+  and Footer, Platform, Capabilities, Hero.
+* **The harness came first, because none of these were measurable.** Attempt 1 could not
+  capture wide viewports at all, and the CR's "no visual regression" criterion had no
+  instrument behind it. Six scripts now exist: deterministic screenshot capture, a
+  dependency-free PNG decoder and per-channel diff, W3C Nu validation that partitions
+  real errors from the checker's CSS-profile lag, an exhaustive DOM contrast audit, a
+  content-regression check, and a Lighthouse summariser.
+
+  Making capture deterministic was the whole difficulty, and it is worth recording why,
+  because the naive approach fails silently. Two captures of the *same* build differed
+  on 104 of 143 tiles. Four causes, each removed in turn:
+  1. `scroll-behavior: smooth` in `index.css` animates a programmatic scroll, so tiles
+     were captured mid-scroll. Fixed with `behavior: 'instant'`.
+  2. The canvases seed particles from `Math.random` and advance on `requestAnimationFrame`.
+     Fixed with a seeded PRNG and a virtual clock the harness pumps a fixed number of
+     frames.
+  3. `IntersectionObserver` and `ResizeObserver` deliver against real time, so the frame
+     on which a canvas started animating varied. Both replaced with synchronous versions
+     recomputed from geometry each pumped frame.
+  4. The residue was mid-flight GSAP reveal state. Capturing under
+     `prefers-reduced-motion: reduce` removes it, and every scroll-driven section already
+     has an explicit reduce branch that sets its final state, so this captures the
+     settled appearance rather than an arbitrary animation frame.
+
+  Two captures of the same build now differ on 0 of 135 tiles, worst tile 99.78% within
+  +/-2. That noise floor is what makes the +/-2 on >=99% criterion meaningful.
+* **What was changed, and why each:**
+  1. **Contrast.** The audit found 40 failing text elements, not the two the PSI report
+     named. `--color-gray-400` `#6f6f6f` -> `#6d6d6d` (4.54:1 on `#f0f0f0`, 5.17:1 on
+     white); the three `01`/`02`/`03` step numbers moved from `text-brand-lime` to the
+     `text-lime-dark` token the codebase already defines for light backgrounds (5.57:1);
+     `text-white/30` -> `/50` and `text-white/40` -> `/60` on the dark sections (5.02:1
+     and 6.63:1 at worst), which preserves the three-step visual hierarchy.
+  2. **Duplicate SVG ids.** 29 duplicates, from the desktop and mobile branches rendering
+     the same five SVG components plus the dot-grid overlay. Each component now derives
+     its ids from React's `useId`, which is stable across prerender and hydration.
+  3. **`<div>` inside `<button>`.** Both accordion triggers wrapped their label in a
+     `div`, which is flow content and invalid inside a button. Changed to `span`; because
+     Tailwind's `flex` sets the display property directly and flex items are blockified,
+     the layout is identical.
+  4. **Orphan `role="tab"`.** The install group had a panel but no `aria-controls` link
+     to it; the config group had no panel at all. Both groups now carry
+     `aria-controls`/`aria-labelledby` id pairs scoped by `useId`. A roving `tabindex`
+     was deliberately *not* added: it is part of the ARIA pattern but useless without
+     arrow-key handling, and adding it alone would make the unselected tabs unreachable
+     by keyboard, trading a validator message for a real regression.
+* **The duplicate ids were not a cosmetic validity issue.** The second instance's
+  `url(#id)` references were binding to the first instance's definitions, inside a
+  hidden subtree, so on mobile the Multi-Account diagram rendered with its three account
+  cards entirely invisible (only the dashed connectors and lock glyphs painted) and the
+  Zero-Config Auth diagram lost every card fill, border, glow and arrowhead. Mobile is
+  the viewport Lighthouse emulates and the one most visitors use. The screenshot diff is
+  what surfaced this: the fix "regressed" nine tiles, and the tiles turned out to be the
+  repair.
+* **Verification evidence:**
+  - W3C Nu real errors on `index.html`: 32 -> 0. The other three pages were already 0.
+    The 54 CSS-profile-lag messages per page (`@property`, `margin-trim`) are reported
+    separately and excluded, as the goal specifies.
+  - DOM contrast audit: 40 -> 0 failing text elements across 4 pages x 4 widths.
+  - Visual diff: the contrast change touched one tile beyond tolerance (the mobile
+    footer, 98.84%, which is the intended colour change); the id change corrected nine
+    tiles as described; the markup change moved nothing at all (0 of 135 failing).
+  - Content check: text without JavaScript, one `<h1>` per page, 10/10 `SeeDocs`
+    anchors, six crawler files and five Mermaid fences all hold.
+* **Disposition:** pending
+
 ## Carry-forward
 
 Items this session has identified but not actioned. They are not attempts and carry no

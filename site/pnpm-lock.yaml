@@ -48,6 +48,9 @@ importers:
       marked:
         specifier: ^18.0.7
         version: 18.0.7
+      puppeteer-core:
+        specifier: 24.43.1
+        version: 24.43.1(supports-color@5.5.0)
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3

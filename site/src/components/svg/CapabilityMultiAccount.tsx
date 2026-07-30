@@ -1,8 +1,12 @@
+import { useId } from 'react'
 interface Props {
   className?: string
 }
 
 export default function CapabilityMultiAccount({ className }: Props) {
+  // Unique per instance, so the desktop and mobile copies of this SVG do not share ids.
+  const uid = useId()
+
   return (
     <svg
       data-diagram="multi-account"
@@ -15,19 +19,19 @@ export default function CapabilityMultiAccount({ className }: Props) {
       {/* ── Definitions ── */}
       <defs>
         {/* Card shadow filter */}
-        <filter id="card-shadow" x="-10%" y="-10%" width="120%" height="130%">
+        <filter id={`card-shadow-${uid}`} x="-10%" y="-10%" width="120%" height="130%">
           <feDropShadow dx="0" dy="4" stdDeviation="6" floodColor="#000000" floodOpacity="0.5" />
         </filter>
         {/* Hub glow filter */}
-        <filter id="hub-glow" x="-20%" y="-20%" width="140%" height="140%">
+        <filter id={`hub-glow-${uid}`} x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="0" stdDeviation="8" floodColor="#abff02" floodOpacity="0.35" />
         </filter>
         {/* Lime dot glow */}
-        <filter id="dot-glow" x="-100%" y="-100%" width="300%" height="300%">
+        <filter id={`dot-glow-${uid}`} x="-100%" y="-100%" width="300%" height="300%">
           <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#abff02" floodOpacity="0.8" />
         </filter>
         {/* Dashed line pattern */}
-        <marker id="arrow" markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
+        <marker id={`arrow-${uid}`} markerWidth="6" markerHeight="6" refX="3" refY="3" orient="auto">
           <circle cx="3" cy="3" r="1.5" fill="#abff02" fillOpacity="0.6" />
         </marker>
       </defs>
@@ -36,7 +40,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
           Account Card 1 — top-left (work)
           rotate -8deg around its center
           ══════════════════════════════════════ */}
-      <g transform="rotate(-8, 85, 90)" filter="url(#card-shadow)">
+      <g transform="rotate(-8, 85, 90)" filter={`url(#card-shadow-${uid})`}>
         {/* Card body */}
         <rect x="18" y="42" width="134" height="82" rx="8" fill="#052424" />
         {/* Card top accent bar */}
@@ -53,7 +57,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
         <text x="72" y="73" fontFamily="monospace" fontSize="8.5" fill="#ffffff" fontWeight="500">work@company</text>
         <text x="72" y="84" fontFamily="monospace" fontSize="7.5" fill="#7f7f7f">.com</text>
         {/* Status row */}
-        <circle cx="30" cy="108" r="4" fill="#abff02" filter="url(#dot-glow)">
+        <circle cx="30" cy="108" r="4" fill="#abff02" filter={`url(#dot-glow-${uid})`}>
           <animate attributeName="r" values="4;5.5;4" dur="2.4s" repeatCount="indefinite" />
           <animate attributeName="fillOpacity" values="1;0.7;1" dur="2.4s" repeatCount="indefinite" />
         </circle>
@@ -67,7 +71,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
           Account Card 2 — center (personal)
           no rotation — front card
           ══════════════════════════════════════ */}
-      <g filter="url(#card-shadow)">
+      <g filter={`url(#card-shadow-${uid})`}>
         {/* Card body */}
         <rect x="56" y="130" width="134" height="82" rx="8" fill="#052424" />
         {/* Card top accent bar */}
@@ -79,7 +83,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
         <text x="116" y="155" fontFamily="monospace" fontSize="8.5" fill="#ffffff" fontWeight="500">personal@</text>
         <text x="116" y="166" fontFamily="monospace" fontSize="8.5" fill="#ffffff">outlook.com</text>
         {/* Status row */}
-        <circle cx="68" cy="196" r="4" fill="#abff02" filter="url(#dot-glow)">
+        <circle cx="68" cy="196" r="4" fill="#abff02" filter={`url(#dot-glow-${uid})`}>
           <animate attributeName="r" values="4;5.5;4" dur="2.8s" begin="0.4s" repeatCount="indefinite" />
           <animate attributeName="fillOpacity" values="1;0.7;1" dur="2.8s" begin="0.4s" repeatCount="indefinite" />
         </circle>
@@ -93,7 +97,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
           Account Card 3 — bottom-right (team)
           rotate +6deg
           ══════════════════════════════════════ */}
-      <g transform="rotate(6, 115, 265)" filter="url(#card-shadow)">
+      <g transform="rotate(6, 115, 265)" filter={`url(#card-shadow-${uid})`}>
         {/* Card body */}
         <rect x="48" y="228" width="134" height="82" rx="8" fill="#052424" />
         {/* Card top accent bar */}
@@ -110,7 +114,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
         <text x="114" y="249" fontFamily="monospace" fontSize="8.5" fill="#ffffff" fontWeight="500">team@org</text>
         <text x="114" y="260" fontFamily="monospace" fontSize="7.5" fill="#7f7f7f">.com</text>
         {/* Status row */}
-        <circle cx="60" cy="294" r="4" fill="#abff02" filter="url(#dot-glow)">
+        <circle cx="60" cy="294" r="4" fill="#abff02" filter={`url(#dot-glow-${uid})`}>
           <animate attributeName="r" values="4;5.5;4" dur="3.1s" begin="0.8s" repeatCount="indefinite" />
           <animate attributeName="fillOpacity" values="1;0.7;1" dur="3.1s" begin="0.8s" repeatCount="indefinite" />
         </circle>
@@ -132,7 +136,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
         strokeWidth="1"
         strokeOpacity="0.35"
         strokeDasharray="5 4"
-        markerEnd="url(#arrow)"
+        markerEnd={`url(#arrow-${uid})`}
       />
       {/* Line 2 — personal card to hub */}
       <line
@@ -142,7 +146,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
         strokeWidth="1"
         strokeOpacity="0.45"
         strokeDasharray="5 4"
-        markerEnd="url(#arrow)"
+        markerEnd={`url(#arrow-${uid})`}
       />
       {/* Line 3 — team card to hub */}
       <line
@@ -152,7 +156,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
         strokeWidth="1"
         strokeOpacity="0.35"
         strokeDasharray="5 4"
-        markerEnd="url(#arrow)"
+        markerEnd={`url(#arrow-${uid})`}
       />
 
       {/* ── Lock icon on line 1 ── */}
@@ -184,7 +188,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
       {/* ══════════════════════════════════════
           MCP Server Hub node
           ══════════════════════════════════════ */}
-      <g filter="url(#hub-glow)">
+      <g filter={`url(#hub-glow-${uid})`}>
         <rect x="294" y="138" width="120" height="66" rx="10" fill="#052424" stroke="#abff02" strokeWidth="1.5" />
         {/* Hub top label strip */}
         <rect x="294" y="138" width="120" height="20" rx="10" fill="#abff02" fillOpacity="0.12" />

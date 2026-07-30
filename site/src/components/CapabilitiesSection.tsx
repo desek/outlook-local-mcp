@@ -527,7 +527,7 @@ function CapabilityVisualPlaceholder({ index, label }: { index: number; label: s
           {String(index + 1).padStart(2, '0')}
         </span>
       </div>
-      <span className="font-mono text-label tracking-[0.18em] text-white/40 uppercase text-center">
+      <span className="font-mono text-label tracking-[0.18em] text-white/60 uppercase text-center">
         {label}
       </span>
       <span className="font-mono text-[9px] tracking-wider text-white/20 uppercase">

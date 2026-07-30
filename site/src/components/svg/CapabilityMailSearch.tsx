@@ -1,8 +1,12 @@
+import { useId } from 'react'
 interface CapabilityMailSearchProps {
   className?: string
 }
 
 export default function CapabilityMailSearch({ className }: CapabilityMailSearchProps) {
+  // Unique per instance, so the desktop and mobile copies of this SVG do not share ids.
+  const uid = useId()
+
   // Design system colors from index.css
   const C = {
     bg:       '#052424', // --color-brand-dark
@@ -56,7 +60,7 @@ export default function CapabilityMailSearch({ className }: CapabilityMailSearch
     >
       <defs>
         {/* Glow for lime highlight */}
-        <filter id="msLimeGlow" x="-20%" y="-40%" width="140%" height="180%">
+        <filter id={`msLimeGlow-${uid}`} x="-20%" y="-40%" width="140%" height="180%">
           <feGaussianBlur stdDeviation="2" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
@@ -64,7 +68,7 @@ export default function CapabilityMailSearch({ className }: CapabilityMailSearch
           </feMerge>
         </filter>
         {/* Pulse animation for matched row */}
-        <filter id="msMatchGlow" x="-5%" y="-30%" width="110%" height="160%">
+        <filter id={`msMatchGlow-${uid}`} x="-5%" y="-30%" width="110%" height="160%">
           <feGaussianBlur stdDeviation="1.5" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
@@ -145,7 +149,7 @@ export default function CapabilityMailSearch({ className }: CapabilityMailSearch
                 fill="none"
                 stroke={C.lime}
                 strokeWidth="1"
-                filter="url(#msMatchGlow)"
+                filter={`url(#msMatchGlow-${uid})`}
               >
                 <animate
                   attributeName="opacity"

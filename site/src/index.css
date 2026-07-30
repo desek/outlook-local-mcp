@@ -40,7 +40,7 @@
   --color-gray-900: #0a1010;   /* Code block backgrounds */
   --color-gray-800: #1a2a2a;   /* Secondary dark surfaces */
   --color-gray-600: #454742;   /* Mid-gray text */
-  --color-gray-400: #6f6f6f;   /* Body text on white (>=4.5:1 contrast on #fff, WCAG AA) */
+  --color-gray-400: #6d6d6d;   /* Body text on light surfaces (4.54:1 on #f0f0f0, 5.17:1 on #fff, WCAG AA) */
   --color-gray-200: #c2c2c2;   /* Eyebrow labels, muted text */
   --color-gray-100: #e8e8e8;   /* Divider lines */
 

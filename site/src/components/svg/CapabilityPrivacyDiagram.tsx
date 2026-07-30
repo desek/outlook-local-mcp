@@ -1,8 +1,12 @@
+import { useId } from 'react'
 interface Props {
   className?: string
 }
 
 export default function CapabilityPrivacyDiagram({ className }: Props) {
+  // Unique per instance, so the desktop and mobile copies of this SVG do not share ids.
+  const uid = useId()
+
   // Design tokens
   // --color-brand-lime:  #abff02
   // --color-brand-dark:  #052424
@@ -22,7 +26,7 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
     >
       <defs>
         {/* Lime glow filter */}
-        <filter id="lime-glow" x="-20%" y="-20%" width="140%" height="140%">
+        <filter id={`lime-glow-${uid}`} x="-20%" y="-20%" width="140%" height="140%">
           <feGaussianBlur stdDeviation="3" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
@@ -32,7 +36,7 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
 
         {/* Arrow marker — lime */}
         <marker
-          id="arrow-lime"
+          id={`arrow-lime-${uid}`}
           markerWidth="8"
           markerHeight="8"
           refX="6"
@@ -44,7 +48,7 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
 
         {/* Arrow marker — red */}
         <marker
-          id="arrow-red"
+          id={`arrow-red-${uid}`}
           markerWidth="8"
           markerHeight="8"
           refX="6"
@@ -55,13 +59,13 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
         </marker>
 
         {/* Gradient for data flow dots path */}
-        <linearGradient id="dot-grad" x1="0%" y1="0%" x2="100%" y2="0%">
+        <linearGradient id={`dot-grad-${uid}`} x1="0%" y1="0%" x2="100%" y2="0%">
           <stop offset="0%" stopColor="#abff02" />
           <stop offset="100%" stopColor="#abff02" stopOpacity="0.4" />
         </linearGradient>
 
         {/* Clip path for "Your Machine" box */}
-        <clipPath id="clip-machine">
+        <clipPath id={`clip-machine-${uid}`}>
           <rect x="12" y="60" width="258" height="300" rx="10" />
         </clipPath>
       </defs>
@@ -70,10 +74,10 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
       <rect width="640" height="400" fill="#0a1010" rx="12" />
 
       {/* Subtle dot grid */}
-      <pattern id="dot-grid" x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
+      <pattern id={`dot-grid-${uid}`} x="0" y="0" width="20" height="20" patternUnits="userSpaceOnUse">
         <circle cx="10" cy="10" r="0.8" fill="rgba(171,255,2,0.06)" />
       </pattern>
-      <rect width="640" height="400" fill="url(#dot-grid)" rx="12" />
+      <rect width="640" height="400" fill={`url(#dot-grid-${uid})`} rx="12" />
 
       {/* ══════════════════════════════════════════
           LEFT — "Your Machine" box
@@ -220,7 +224,7 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
         x2="141" y2="183"
         stroke="#abff02"
         strokeWidth="1.5"
-        markerEnd="url(#arrow-lime)"
+        markerEnd={`url(#arrow-lime-${uid})`}
         strokeOpacity="0.7"
       />
 
@@ -230,7 +234,7 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
         x2="141" y2="277"
         stroke="rgba(171,255,2,0.4)"
         strokeWidth="1"
-        markerEnd="url(#arrow-lime)"
+        markerEnd={`url(#arrow-lime-${uid})`}
         strokeDasharray="4 2"
       />
       <text
@@ -363,8 +367,8 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
         fill="none"
         stroke="#abff02"
         strokeWidth="1.8"
-        markerEnd="url(#arrow-lime)"
-        filter="url(#lime-glow)"
+        markerEnd={`url(#arrow-lime-${uid})`}
+        filter={`url(#lime-glow-${uid})`}
       />
       <text
         x="316" y="110"
@@ -423,8 +427,8 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
         fill="none"
         stroke="#abff02"
         strokeWidth="1.8"
-        markerEnd="url(#arrow-lime)"
-        filter="url(#lime-glow)"
+        markerEnd={`url(#arrow-lime-${uid})`}
+        filter={`url(#lime-glow-${uid})`}
       />
       <text
         x="354" y="213"
@@ -500,7 +504,7 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
         stroke="rgba(239,68,68,0.4)"
         strokeWidth="1.2"
         strokeDasharray="4 3"
-        markerEnd="url(#arrow-red)"
+        markerEnd={`url(#arrow-red-${uid})`}
       />
 
       {/* NO label on blocked arrow */}

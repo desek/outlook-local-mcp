@@ -148,14 +148,14 @@ export default function ToolsReferenceSection() {
           aria-expanded={isOpen}
           aria-controls="tools-reference-content"
         >
-          <div className="flex items-center gap-3">
+          <span className="flex items-center gap-3">
             {isOpen && (
-              <div className="w-0.5 h-6 bg-brand-lime rounded-full" />
+              <span className="w-0.5 h-6 bg-brand-lime rounded-full" />
             )}
             <span className="font-mono text-label font-semibold tracking-[0.18em] text-brand-dark uppercase">
               23 MCP Tools — View Full Reference
             </span>
-          </div>
+          </span>
           <span className={`text-brand-dark/40 transition-transform duration-200 ${isOpen ? 'rotate-45' : ''}`}>
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <line x1="12" y1="5" x2="12" y2="19" />

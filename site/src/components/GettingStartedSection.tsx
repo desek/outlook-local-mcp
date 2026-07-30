@@ -1,6 +1,24 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useId } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
+
+/**
+ * tabDomId builds a stable, document-unique id for one tab or panel of a tab group.
+ *
+ * The ARIA tabs pattern requires each tab to name its panel through `aria-controls` and
+ * each panel to name its tab through `aria-labelledby`, which means both need ids. Tab
+ * labels are prose ("Go Install", "Claude Desktop"), so they are slugified rather than
+ * used directly, and everything is scoped by the component instance's `useId` value so a
+ * second instance of the section cannot collide with the first.
+ *
+ * @param scope The component instance scope, from `useId`.
+ * @param group The tab group name, e.g. `install` or `config`.
+ * @param part  The part being identified: a tab label, or `panel`.
+ * @returns An id safe to use as an HTML id and in an IDREF attribute.
+ */
+function tabDomId(scope: string, group: string, part: string): string {
+  return `${scope}${group}-${part.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`
+}
 
 /* ── Install methods ── */
 const INSTALL_TABS = ['Go Install', 'Docker', 'Claude Desktop', 'Build from Source'] as const
@@ -56,6 +74,9 @@ export default function GettingStartedSection() {
   const eyebrowRef = useRef<HTMLSpanElement>(null)
   const [installTab, setInstallTab] = useState<InstallTab>('Go Install')
   const [configTab, setConfigTab] = useState<ConfigTab>('Claude Desktop')
+
+  // Scope for the tab and panel ids that wire `aria-controls` to `aria-labelledby`.
+  const tabScope = useId()
   const [copiedBlock, setCopiedBlock] = useState<string | null>(null)
 
   const handleCopy = useCallback(async (text: string, blockId: string) => {
@@ -111,7 +132,7 @@ export default function GettingStartedSection() {
               ═══════════════════════════════════ */}
           <div className="flex flex-col lg:flex-row lg:gap-16">
             <div className="lg:w-32 shrink-0 mb-4 lg:mb-0">
-              <span className="font-mono text-label font-semibold tracking-[0.18em] text-brand-lime">
+              <span className="font-mono text-label font-semibold tracking-[0.18em] text-lime-dark">
                 01
               </span>
               <h3 className="text-lg font-sans font-normal text-brand-dark mt-1">
@@ -126,7 +147,9 @@ export default function GettingStartedSection() {
                   <button
                     key={tab}
                     role="tab"
+                    id={tabDomId(tabScope, 'install', tab)}
                     aria-selected={installTab === tab}
+                    aria-controls={tabDomId(tabScope, 'install', 'panel')}
                     onClick={() => setInstallTab(tab)}
                     className={`px-3 py-1.5 font-mono text-[10px] sm:text-label tracking-wider uppercase rounded-md transition-colors duration-200 ${
                       installTab === tab
@@ -140,7 +163,12 @@ export default function GettingStartedSection() {
               </div>
 
               {/* Content panel */}
-              <div className="relative" role="tabpanel">
+              <div
+                className="relative"
+                role="tabpanel"
+                id={tabDomId(tabScope, 'install', 'panel')}
+                aria-labelledby={tabDomId(tabScope, 'install', installTab)}
+              >
                 {installContent.code ? (
                   <CodeBlock
                     code={installContent.code}
@@ -175,7 +203,7 @@ export default function GettingStartedSection() {
               ═══════════════════════════════════ */}
           <div className="flex flex-col lg:flex-row lg:gap-16">
             <div className="lg:w-32 shrink-0 mb-4 lg:mb-0">
-              <span className="font-mono text-label font-semibold tracking-[0.18em] text-brand-lime">
+              <span className="font-mono text-label font-semibold tracking-[0.18em] text-lime-dark">
                 02
               </span>
               <h3 className="text-lg font-sans font-normal text-brand-dark mt-1">
@@ -190,7 +218,9 @@ export default function GettingStartedSection() {
                   <button
                     key={tab}
                     role="tab"
+                    id={tabDomId(tabScope, 'config', tab)}
                     aria-selected={configTab === tab}
+                    aria-controls={tabDomId(tabScope, 'config', 'panel')}
                     onClick={() => setConfigTab(tab)}
                     className={`px-3 py-1.5 font-mono text-[10px] sm:text-label tracking-wider uppercase rounded-md transition-colors duration-200 ${
                       configTab === tab
@@ -203,13 +233,19 @@ export default function GettingStartedSection() {
                 ))}
               </div>
 
-              <CodeBlock
-                code={configContent}
-                blockId="config"
-                copied={copiedBlock === 'config'}
-                onCopy={handleCopy}
-                language="json"
-              />
+              <div
+                role="tabpanel"
+                id={tabDomId(tabScope, 'config', 'panel')}
+                aria-labelledby={tabDomId(tabScope, 'config', configTab)}
+              >
+                <CodeBlock
+                  code={configContent}
+                  blockId="config"
+                  copied={copiedBlock === 'config'}
+                  onCopy={handleCopy}
+                  language="json"
+                />
+              </div>
 
               {/* Quick config callouts */}
               <div className="mt-6 grid grid-cols-2 gap-3">
@@ -235,7 +271,7 @@ export default function GettingStartedSection() {
               ═══════════════════════════════════ */}
           <div className="flex flex-col lg:flex-row lg:gap-16">
             <div className="lg:w-32 shrink-0 mb-4 lg:mb-0">
-              <span className="font-mono text-label font-semibold tracking-[0.18em] text-brand-lime">
+              <span className="font-mono text-label font-semibold tracking-[0.18em] text-lime-dark">
                 03
               </span>
               <h3 className="text-lg font-sans font-normal text-brand-dark mt-1">
@@ -255,22 +291,22 @@ export default function GettingStartedSection() {
                   <span className="w-3 h-3 rounded-full bg-[#ef5350]" />
                   <span className="w-3 h-3 rounded-full bg-[#ffb300]" />
                   <span className="w-3 h-3 rounded-full bg-[#66bb6a]" />
-                  <span className="ml-2 text-[10px] text-white/30 font-mono">terminal</span>
+                  <span className="ml-2 text-[10px] text-white/50 font-mono">terminal</span>
                 </div>
                 <pre className="font-mono text-sm text-white/80 leading-relaxed overflow-x-auto">
                   <span className="text-gray-200">$</span> outlook-local-mcp{'\n'}
-                  <span className="text-white/40">INFO  </span>MCP server starting on stdio...{'\n'}
-                  <span className="text-white/40">INFO  </span>No accounts configured yet.{'\n'}
-                  <span className="text-white/40">INFO  </span>Authentication required for first account.{'\n'}
+                  <span className="text-white/60">INFO  </span>MCP server starting on stdio...{'\n'}
+                  <span className="text-white/60">INFO  </span>No accounts configured yet.{'\n'}
+                  <span className="text-white/60">INFO  </span>Authentication required for first account.{'\n'}
                   {'\n'}
                   <span className="text-brand-lime">To sign in, use a web browser to open</span>{'\n'}
                   <span className="text-brand-lime">https://aka.ms/devicelogin</span>{'\n'}
                   <span className="text-brand-lime">and enter the code: </span>
                   <span className="text-white font-semibold">ABCD-EFGH</span>{'\n'}
                   {'\n'}
-                  <span className="text-white/40">INFO  </span>Authentication successful.{'\n'}
-                  <span className="text-white/40">INFO  </span>Token cached in OS keychain (~90 day expiry).{'\n'}
-                  <span className="text-white/40">INFO  </span>
+                  <span className="text-white/60">INFO  </span>Authentication successful.{'\n'}
+                  <span className="text-white/60">INFO  </span>Token cached in OS keychain (~90 day expiry).{'\n'}
+                  <span className="text-white/60">INFO  </span>
                   <span className="text-brand-lime">Ready.</span> 23 tools registered.
                 </pre>
               </div>

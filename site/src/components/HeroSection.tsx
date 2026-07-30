@@ -171,7 +171,7 @@ export default function HeroSection() {
             <span className="font-mono text-label font-semibold tracking-[0.18em] text-white/50 uppercase">
               Scroll to explore
             </span>
-            <svg width="16" height="24" viewBox="0 0 16 24" fill="none" className="text-white/40">
+            <svg width="16" height="24" viewBox="0 0 16 24" fill="none" className="text-white/60">
               <path d="M8 4v16M8 20l-4-4M8 20l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
