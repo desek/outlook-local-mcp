@@ -542,11 +542,29 @@ Measured: **148 ms of Largest Contentful Paint on every page** (index 2,554 to 2
 concepts 1,652 to 1,503; quickstart 1,502 to 1,352; troubleshooting 1,651 to 1,502). No
 category score moved, on any page.
 
-It was reverted for one reason: `pyftsubset` is a Python tool, so the Node build would gain
-a Python plus `fonttools` plus `brotli` dependency, which CI does not have and which sits
-awkwardly against NFR-2's "no network access beyond the package registry". A JavaScript
-subsetter with a bundled harfbuzz (`subset-font` and similar) would avoid that entirely,
-and is the way to pick this up.
+It was first reverted because `pyftsubset` is a Python tool, so the Node build would gain a
+Python plus `fonttools` plus `brotli` dependency that CI does not have and that sits
+awkwardly against NFR-2's "no network access beyond the package registry".
+
+**It was then retried with `subset-font`, which wraps harfbuzz as WebAssembly and removes
+that objection entirely, and reverted again for a better reason.** Both subsetters change
+how the text rasterises. The failure signature is identical between them, to three decimal
+places on the worst tiles, so it is a property of subsetting these faces rather than of
+either tool.
+
+The important part is what the difference *is not*. Text geometry was measured in both
+builds and is identical: the first six paragraphs of `concepts.html` occupy the same
+rectangles to a hundredth of a pixel, and the document is the same 6,724 px tall. Nothing
+moves. What differs is the antialiasing along glyph edges, by up to 164/255 on individual
+subpixels, which is enough to put 109 of 135 tiles outside a +/-2 tolerance while being
+invisible at reading distance.
+
+That makes this a change-owner call rather than an agent one, and it is left open
+deliberately. The trade is **148 ms of Largest Contentful Paint on every page against
+slightly different glyph edge smoothing, with layout untouched**. The automated criterion
+this session was held to rejects it; a person looking at the two builds might reasonably
+accept it. Reinstating it is a small change if that is the decision: a `subset-font` call
+in a post-build step, plus the filename-hashing the reverted script already worked out.
 
 Two findings worth keeping, because both cost a full measure-and-diff cycle to find and are
 invisible without a pixel comparison:
