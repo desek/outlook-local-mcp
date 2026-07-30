@@ -245,7 +245,7 @@ collected until the site is deployed.
 
 ### Attempt 3 — Accessibility and markup validity: contrast, duplicate SVG ids, div-in-button, orphan tabs
 
-* **State:** open
+* **State:** settled
 * **Hypothesis:** the four bounded defects blocking the gate (contrast below AA,
   duplicate SVG `defs` ids, `<div>` inside `<button>`, and `role="tab"` with no
   associated panel) can each be fixed to an exact measured target without altering the
@@ -328,11 +328,11 @@ collected until the site is deployed.
     tiles as described; the markup change moved nothing at all (0 of 135 failing).
   - Content check: text without JavaScript, one `<h1>` per page, 10/10 `SeeDocs`
     anchors, six crawler files and five Mermaid fences all hold.
-* **Disposition:** pending
+* **Disposition:** kept
 
 ### Attempt 4 — Landing-page performance: the gate is unblocked, and 1.00 is shown to be out of reach
 
-* **State:** open
+* **State:** settled
 * **Hypothesis:** the landing page's Performance 0.93 and Cumulative Layout Shift 0.094
   can be closed by attacking what the Lighthouse report actually attributes them to,
   rather than by the DOM-size and unused-JavaScript figures the diagnostics headline.
@@ -436,11 +436,18 @@ collected until the site is deployed.
   visual diff against the pre-performance build is 0 of 135 tiles failing, so none of this
   changed what the site looks like. Hydration, tab switching and the injected bundle were
   checked directly in a browser with no console errors. `make ci` exits 0.
-* **Disposition:** pending
+* **Change-owner decision:** **accept 0.97 and keep FR-36 as amended.** The alternative was
+  put explicitly — rewrite the landing page to ship zero JavaScript, replacing the tabs,
+  accordions and mobile navigation with CSS-only equivalents, dropping the
+  copy-install-command button, and replacing GSAP and Lenis with CSS scroll-driven
+  animations — and was declined. So the landing page keeps its interaction and motion
+  design, the deploy gate passes at 0.97 against a 96 floor, and FR-36 carries the
+  measurement chain rather than an unexplained exception.
+* **Disposition:** kept
 
 ### Attempt 5 — Crawler surface: the agent list, and the rich-result claims
 
-* **State:** open
+* **State:** settled
 * **Hypothesis:** two of the carry-forward corrections from the SEO and GEO research are
   bounded enough to land now: FR-18's agent list, which is the only item in this session
   with a citation rationale behind it, and the CR's implied rich-result eligibility for
@@ -475,7 +482,7 @@ collected until the site is deployed.
   change-owner calls.
 * **Verification evidence:** the built `dist/robots.txt` carries the new content, the six
   crawler files are still present, and the content check passes unchanged.
-* **Disposition:** pending
+* **Disposition:** kept
 
 ## Carry-forward
 
@@ -559,12 +566,15 @@ moves. What differs is the antialiasing along glyph edges, by up to 164/255 on i
 subpixels, which is enough to put 109 of 135 tiles outside a +/-2 tolerance while being
 invisible at reading distance.
 
-That makes this a change-owner call rather than an agent one, and it is left open
-deliberately. The trade is **148 ms of Largest Contentful Paint on every page against
-slightly different glyph edge smoothing, with layout untouched**. The automated criterion
-this session was held to rejects it; a person looking at the two builds might reasonably
-accept it. Reinstating it is a small change if that is the decision: a `subset-font` call
-in a post-build step, plus the filename-hashing the reverted script already worked out.
+That made it a change-owner call rather than an agent one. The trade was put as **148 ms of
+Largest Contentful Paint on every page against slightly different glyph edge smoothing,
+with layout untouched**.
+
+**Decided: left out.** The change owner kept the strict no-visual-regression guarantee. The
+148 ms buys no score change on any page, and the documentation pages already sit inside
+their 1,700 ms budget with room. Reinstating it later is a small change if the trade ever
+becomes worth making: a `subset-font` call in a post-build step, plus the filename-hashing
+the reverted script already worked out.
 
 Two findings worth keeping, because both cost a full measure-and-diff cycle to find and are
 invisible without a pixel comparison:
