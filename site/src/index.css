@@ -176,3 +176,43 @@ body {
     padding-inline: var(--container-padding-x);
   }
 }
+
+/*
+ * Install command row (hero).
+ *
+ * The command is wider than its container at narrow widths, so its wrapper is a
+ * horizontal scroller. Three things have to hold at once:
+ *
+ * 1. The scrollbar must be unobtrusive against the dark block: thin, with a grey
+ *    thumb on a transparent track.
+ *
+ * 2. The copy button must stay on the same centre line as the text. A horizontal
+ *    scrollbar is laid out INSIDE the scroller's box, so the scroller grows taller
+ *    than the 44px button beside it. The row is `items-center`, which centres each
+ *    child independently, so the text rises by half the scrollbar height and the
+ *    button reads as sitting below it. Measured here: an 11px scrollbar produced a
+ *    5.8px offset. The fix is `padding-top` equal to the scrollbar height, which
+ *    restores symmetry between the space above the text and the scrollbar below it.
+ *
+ *    Two approaches that do NOT work were tried and measured first. A `min-height`
+ *    makes the box taller but leaves the scrollbar inside it, so the text still
+ *    centres above the scrollbar. Reserving the strip as `padding-bottom` and
+ *    cancelling it with a negative `margin-bottom` centres the margin box correctly
+ *    but pushes the visible text up by half the padding, which measured as the same
+ *    5.8px offset. Both failures are invisible unless the centres are measured.
+ *
+ * 3. Where the viewport is wide enough, the container should simply grow to fit the
+ *    command so no scrollbar appears at all. That is handled on the container with
+ *    `lg:w-fit`, not here; this element keeps `overflow-x: auto` at every width and
+ *    the scrollbar just never materialises once the content fits.
+ */
+.install-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: gray transparent;
+  /* Matches the scrollbar occupying the bottom of the content area, so the text
+     is centred against the element rather than against the space left above the
+     scrollbar. `--sb` is measured at runtime by useScrollbarHeight and is 0 both
+     without JavaScript and on overlay-scrollbar platforms, where no compensation
+     is wanted. */
+  padding-top: var(--sb, 0px);
+}

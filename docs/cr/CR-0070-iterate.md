@@ -180,6 +180,69 @@ collected until the site is deployed.
   is a change-owner decision, not an agent one.
 * **Disposition:** pending
 
+### Attempt 2 — Hero install command: thin scrollbar, aligned copy button, desktop expansion
+
+* **State:** open
+* **Hypothesis:** the change owner asked for three things on the hero install command
+  row: the `scrollbar-width: thin; scrollbar-color: gray transparent` treatment, the
+  copy button on the same centre line as the `go install` text (the scrollbar was
+  pushing the text up), and, where the viewport allows, the container growing to fit
+  the command so no scrollbar appears at all.
+* **Surface touched:** `site/src/index.css`, `site/src/use-scrollbar-height.ts` (new),
+  `site/src/components/HeroSection.tsx`.
+* **What was changed:**
+  1. `scrollbar-width: thin` and `scrollbar-color: gray transparent` on the scroller.
+  2. The container grows to fit at the `lg` breakpoint (`lg:w-fit lg:max-w-full`), so
+     the command stops overflowing and no scrollbar materialises on desktop.
+  3. `padding-top: var(--sb)` on the scroller, with `--sb` measured at runtime by a new
+     `useScrollbarHeight` hook.
+* **Two approaches measured and rejected before the third worked.** Both are recorded
+  because each looked correct and failed silently:
+  * **`min-height` on the scroller.** Makes the box taller but leaves the scrollbar
+    inside it, so the text still centres above the scrollbar. This had already been
+    established on the abandoned CR-0069 and was not retried here.
+  * **`padding-bottom` plus an equal negative `margin-bottom`.** The reasoning was that
+    flex centring measures the margin box, so reserving the strip as padding and
+    removing it from the margin box would centre the row as though the scrollbar were
+    absent. Measured: the offset stayed at **5.8px**, because the visible content sits
+    at the top of a box that now extends lower, so the text is pushed up by half the
+    padding instead. This is the approach the earlier CR-0069 ledger recommended, and
+    it is wrong for this geometry.
+  * **What actually works** is `padding-top` equal to the scrollbar height. The
+    scrollbar consumes the bottom of the content area, so matching padding above
+    restores symmetry and the text centres against the element rather than against the
+    space left above the scrollbar.
+* **Why the height is measured rather than hard-coded:** it is 11px on this machine, 0
+  wherever the platform uses overlay scrollbars, and 0 again once the content stops
+  overflowing. A fixed value would introduce the very offset it was meant to remove on
+  any of those. `useScrollbarHeight` publishes `offsetHeight - clientHeight` as `--sb`
+  and recomputes on resize. Without JavaScript it is absent and the padding resolves to
+  `0px`, which is exactly the pre-existing layout, never worse.
+* **Verification evidence:** measured in-page with a geometry probe comparing the
+  bounding-box centres of the `<code>` element and the copy button, across viewports.
+
+  | viewport | scrollbar height | padding-top applied | scrolls | centre delta |
+  |---|---|---|---|---|
+  | 1280 | 0 | 0px | no | **0.3px** |
+  | 1024 | 0 | 0px | no | **0.3px** |
+  | 900 | 11px | 11px | yes | **0.3px** (was 5.8) |
+  | 640 | 11px | 11px | yes | **0.3px** (was 5.8) |
+  | 500 | 11px | 11px | yes | **-0.8px** (was 5.8) |
+
+  All three requirements hold: the scrollbar is thin and grey-on-transparent where it
+  appears, the button sits within a pixel of the text centre at every width, and at the
+  `lg` breakpoint and above the container fits the command with no scrollbar at all.
+
+  `make ci` exits 0. No regression: text without JavaScript unchanged at 12,360 /
+  15,534 / 7,062 / 17,452 characters, one `<h1>` per page.
+* **Not verified:** wide-viewport screenshots (1440 and above) could not be captured.
+  Headless Chrome hangs under `--virtual-time-budget` because the scrub-driven parallax
+  keeps a `requestAnimationFrame` ticker alive so virtual time never exhausts, and
+  without the virtual clock `--dump-dom` fires before the probe's timeout. The
+  quantitative probe succeeded at 1024 and 1280, where the desktop path is already
+  exercised, and wider viewports only give the container more room.
+* **Disposition:** pending
+
 ## Carry-forward
 
 Items this session has identified but not actioned. They are not attempts and carry no

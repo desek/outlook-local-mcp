@@ -2,6 +2,7 @@ import { useRef, useState, useCallback } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import HeroBackground from './canvas/HeroBackground'
+import { useScrollbarHeight } from '../use-scrollbar-height'
 
 const INSTALL_CMD = 'go install github.com/desek/outlook-local-mcp/cmd/outlook-local-mcp@latest'
 
@@ -17,8 +18,11 @@ export default function HeroSection() {
   const subheadRef = useRef<HTMLParagraphElement>(null)
   const badgeRefs = useRef<(HTMLDivElement | null)[]>([])
   const installRef = useRef<HTMLDivElement>(null)
+  const scrollerRef = useRef<HTMLDivElement>(null)
   const scrollIndicatorRef = useRef<HTMLDivElement>(null)
   const [copied, setCopied] = useState(false)
+
+  useScrollbarHeight(scrollerRef)
 
   const handleCopy = useCallback(async () => {
     try {
@@ -110,14 +114,14 @@ export default function HeroSection() {
             {/* Install command block */}
             <div
               ref={installRef}
-              className="mt-8 sm:mt-10 w-full max-w-3xl"
+              className="mt-8 sm:mt-10 w-full max-w-3xl lg:w-fit lg:max-w-full"
             >
               <div
                 className="code-block flex items-center gap-3 px-4 py-3 sm:px-5 sm:py-4"
                 role="group"
                 aria-label="Install command"
               >
-                <div className="flex-1 min-w-0 overflow-x-auto">
+                <div ref={scrollerRef} className="install-scroller flex-1 min-w-0 overflow-x-auto">
                   <code
                     className="text-white/90 font-mono whitespace-nowrap"
                     style={{ fontSize: 'clamp(0.55rem, 2.2vw, 1rem)' }}
