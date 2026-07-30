@@ -110,6 +110,39 @@ async function capturePage(browser, origin, page, width) {
   await tab.setViewport({ width, height: TILE_HEIGHT, deviceScaleFactor: 1 })
   await tab.goto(`${origin}/${page}`, { waitUntil: 'networkidle0', timeout: 60_000 })
   await tab.evaluate(() => document.fonts.ready)
+
+  // Wait for React to have hydrated before pumping any frames. The landing page's client
+  // bundle is injected only after the browser reports its Largest Contentful Paint entry,
+  // so hydration completes at a time that varies from run to run; pumping before it lands
+  // starts the canvases at a different frame each time. Waiting here removed the last
+  // source of run-to-run variance, which had one canvas tile straddling the 99% threshold.
+  await tab
+    .waitForFunction(
+      () => {
+        const root = document.getElementById('root')
+        return !root || Object.keys(root).some((key) => key.startsWith('__react'))
+      },
+      { timeout: 30_000 },
+    )
+    .catch(() => {
+      // The documentation pages have no root to hydrate, and a page that never hydrates
+      // is still worth capturing: it is what a visitor with broken JavaScript sees.
+    })
+
+  // Freeze SVG SMIL animations. The capability diagrams animate their connector dashes
+  // and cursors with <animate> and <animateMotion>, which run on the SVG document
+  // timeline rather than on requestAnimationFrame, so neither the virtual clock nor
+  // reduced-motion emulation touches them. Pausing each root and pinning its clock to a
+  // fixed time is what makes those tiles reproducible; without it one tile sat astride
+  // the 99% threshold and failed on roughly half of otherwise identical captures.
+  await tab.evaluate(() => {
+    for (const svg of document.querySelectorAll('svg')) {
+      if (typeof svg.pauseAnimations !== 'function') continue
+      svg.pauseAnimations()
+      svg.setCurrentTime(0)
+    }
+  })
+
   await tab.evaluate((frames) => window.__pump(frames), FRAMES_PER_STEP)
 
   const height = await tab.evaluate(() => document.documentElement.scrollHeight)

@@ -451,10 +451,25 @@ flowchart TD
       The font measurements close off the obvious alternative. Deleting every web font
       outright, which is far past anything acceptable, still leaves the page at 0.99;
       subsetting them properly to the 111 glyphs the site actually uses buys 148 ms and
-      leaves the score unmoved at 0.97. So no font strategy reaches 100 either. With
-      fonts perfectly optimised the bundle would still need to fall to roughly 27 KB
-      gzipped — React alone is about 45 KB — which is the same conclusion by a different
-      route: the animation stack is the constraint, and nothing else on the page is.
+      leaves the score unmoved at 0.97. So no font strategy reaches 100 either.
+
+      **The floor was then measured directly rather than inferred.** A build whose entry
+      imports React, ReactDOM, GSAP, ScrollTrigger and Lenis and hydrates a component
+      returning a single empty `<div>` — no site, no components, no content — is
+      **108.79 KB gzipped**, which is 590 ms of transfer at the emulated throughput. The
+      five capability diagrams, the largest single piece of application markup, account
+      for only 9.3 KB of the shipped 137.6 KB; all of the site's own code is 29 KB.
+
+      That gives an exact model, and it reproduces the measurements to within a
+      millisecond: LCP is 1,803 ms of page floor plus 4.34 ms per KB of bundle. 108.79 KB
+      of libraries alone therefore puts the landing page at 2,393 ms before a single line
+      of this site's code or content is added, and 100 needs 1,803 ms. Deleting every web
+      font *and* every line of application code together lands at 1,792 ms — the boundary,
+      for a page with no content and no typography.
+
+      The conclusion is not that the application is heavy. It is 29 KB. The libraries that
+      render the motion design are 108.79 KB, and that alone is more than the budget for
+      100. Nothing short of replacing them changes it.
 
     The 96 floor is set one point below the measured 0.97 to absorb run-to-run variance,
     and the metric budgets above make the underlying numbers assertable in their own

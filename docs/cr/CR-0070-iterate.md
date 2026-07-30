@@ -278,8 +278,18 @@ collected until the site is deployed.
      has an explicit reduce branch that sets its final state, so this captures the
      settled appearance rather than an arbitrary animation frame.
 
-  Two captures of the same build now differ on 0 of 135 tiles, worst tile 99.78% within
-  +/-2. That noise floor is what makes the +/-2 on >=99% criterion meaningful.
+  A fifth cause surfaced later and is recorded here with the others, because it is the one
+  that nearly slipped through. The capability diagrams animate their connector dashes and
+  cursors with SVG `<animate>` and `<animateMotion>`, which run on the SVG document
+  timeline rather than on `requestAnimationFrame` — so neither the virtual clock nor
+  reduced-motion emulation touched them. It left one tile sitting astride the threshold at
+  98.77% to 99.17% across identical builds, failing on roughly half of runs. Pausing each
+  SVG root and pinning its clock (`pauseAnimations`, `setCurrentTime(0)`) fixed it.
+
+  Three captures of the same build now differ on 0 of 135 tiles with a worst tile of
+  **99.989%**, against a threshold of 99%. That margin is what makes the +/-2 on >=99%
+  criterion meaningful; at the earlier 98.8% floor the instrument could not distinguish a
+  small regression from its own noise, and said so only intermittently.
 * **What was changed, and why each:**
   1. **Contrast.** The audit found 40 failing text elements, not the two the PSI report
      named. `--color-gray-400` `#6f6f6f` -> `#6d6d6d` (4.54:1 on `#f0f0f0`, 5.17:1 on
@@ -375,9 +385,23 @@ collected until the site is deployed.
   conclusion was not an artefact of looking only at the bundle. Removing all five faces
   outright — well past anything acceptable — reaches 1,952 ms and **0.99**, still not
   1.00. Subsetting them properly (94 KB to 43 KB, Carry-forward records why it was
-  reverted) buys 148 ms and leaves the score at 0.97. Both roads end in the same place:
-  with fonts perfectly optimised the bundle would still have to fall to roughly 27 KB,
-  and React alone is about 45 KB.
+  reverted) buys 148 ms and leaves the score at 0.97.
+
+  **Two guesses about the bundle were then checked and one was wrong.** The five capability
+  diagrams looked like the obvious dead weight, being the largest piece of markup on the
+  page; removing them from the client bundle turns out to save **9.3 KB**, or 40 ms. And
+  the library floor, measured rather than estimated by building an entry that imports
+  React, ReactDOM, GSAP, ScrollTrigger and Lenis and hydrates a component returning one
+  empty `<div>`, is **108.79 KB gzipped**. The site's own code is 29 KB of the 137.6 KB
+  shipped.
+
+  That closes the question arithmetically. LCP here is 1,803 ms of page floor plus 4.34 ms
+  per KB of bundle, a model that reproduces every measurement above to within a
+  millisecond. The libraries alone put the page at 2,393 ms before any of this site exists;
+  1.00 needs 1,803 ms. Deleting every web font *and* all application code together reaches
+  1,792 ms, which is the boundary — for a page with no content and no typography. The
+  application is not the problem at 29 KB; the motion libraries are, at 108.79 KB, and
+  nothing short of replacing them moves the score.
 * **FR-36 amended accordingly, and tightened in every direction the evidence allows.**
   Accessibility, Best Practices and SEO go from "at least 95" to **100 on every page**;
   documentation-page Performance goes from "at least 95" to **100**; the landing page is
