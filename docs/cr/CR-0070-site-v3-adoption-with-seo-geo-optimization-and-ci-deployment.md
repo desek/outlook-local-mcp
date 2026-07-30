@@ -174,7 +174,7 @@ GitHub Pages is a static host with no request-time logic: it sets
 Verified against the live project page 2026-07-30.
 
 That splits the Markdown representation from the mechanism that would serve it from
-the same URL. Emitting `/index.md` as a build output (FR-30 to FR-34) needs no
+the same URL. Emitting `/index.md` as a build output (FR-31 to FR-35) needs no
 infrastructure and works on plain Pages today, which is the whole of what this CR
 requires. Negotiating on `Accept` needs edge code, and the practical option is a
 Cloudflare Worker, which requires switching the zone back from DNS-only to proxied
@@ -279,159 +279,178 @@ flowchart TD
 3. The build **MUST** use pnpm with a committed `pnpm-lock.yaml`, and the pnpm
    version **MUST** remain pinned in `.mise.toml`.
 4. `site/node_modules` and `site/dist` **MUST** be gitignored.
-5. Mock Service Worker **MUST NOT** be a dependency of the site, and rendering
+5. The `data/` rule in `.gitignore` **MUST** be anchored to `/data/` before anything
+   is added under `site/`. Unanchored it matches at any depth, so
+   `git check-ignore site/src/data/foo.ts` currently resolves to `.gitignore:32`,
+   meaning a `site/**/data/` directory would be silently excluded from commits. This
+   defect occurred on CR-0069 and was found only when a later phase discovered an
+   earlier phase's modules had never been committed.
+6. Mock Service Worker **MUST NOT** be a dependency of the site, and rendering
    **MUST NOT** be gated on any awaited runtime call.
-6. The deployed output **MUST NOT** contain a base path that disagrees with the
+7. The deployed output **MUST NOT** contain a base path that disagrees with the
    FR-1 decision. Absolute `github.com/desek/outlook-local-mcp/...` URLs are
    permitted and are not base paths.
 
 **Pre-rendering**
 
-7. The built document **MUST** contain the page's full textual content with
+8. The built document **MUST** contain the page's full textual content with
    JavaScript disabled.
-8. Pre-rendering **MUST** be performed at build time by `react-dom/server` without
+9. Pre-rendering **MUST** be performed at build time by `react-dom/server` without
    requiring a headless browser, so the build needs no network access beyond the
    package registry.
-9. Every pre-rendered page **MUST** contain exactly one `<h1>`.
-10. Components that touch browser-only APIs (`window`, `document`, canvas, GSAP,
+10. Every pre-rendered page **MUST** contain exactly one `<h1>`.
+11. Components that touch browser-only APIs (`window`, `document`, canvas, GSAP,
     Lenis, `IntersectionObserver`) **MUST** be guarded so the server render
     succeeds, and **MUST NOT** be rendered in a way that leaves content hidden if
     hydration never happens.
-11. Rendering **MUST** fail the build loudly rather than emit a document with an
+12. Rendering **MUST** fail the build loudly rather than emit a document with an
     empty root.
 
 **Documentation publication**
 
-12. The site **MUST** publish `docs/concepts.md`, `docs/quickstart.md`, and
+13. The site **MUST** publish `docs/concepts.md`, `docs/quickstart.md`, and
     `docs/troubleshooting.md` as crawlable HTML pages at stable URLs.
-13. Those pages **MUST** be generated from the Markdown at build time. The Markdown
+14. Those pages **MUST** be generated from the Markdown at build time. The Markdown
     **MUST** remain the single source of truth and **MUST NOT** be duplicated into
     `site/`.
-14. Heading anchors referenced by verb `SeeDocs` values **MUST** resolve in the
-    published HTML, so deep links from `system.help` output work.
-15. The build **MUST** fail, naming the missing file, if a consumed documentation
+15. Heading anchors referenced by verb `SeeDocs` values **MUST** resolve in the
+    published HTML, so deep links from `system.help` output work. The anchor slugs
+    **MUST** be generated with the repository's own algorithm, `headingToAnchor` in
+    `internal/tools/verb_metadata_test.go` (lowercase, keep `a-z`, `0-9`, and `-`, map
+    spaces to hyphens, drop everything else), and **MUST** honour explicit `{#anchor}`
+    overrides. A Markdown renderer's default slugger **MUST NOT** be relied on: it
+    will not necessarily agree, and a disagreement breaks every deep link silently.
+    This was a real defect during CR-0069 and had to be fixed by matching the
+    algorithm explicitly.
+16. The build **MUST** fail, naming the missing file, if a consumed documentation
     file is renamed or removed.
 
 **Crawler-facing files**
 
-16. `robots.txt` **MUST** be served at the site root, allowing full crawl and
+17. `robots.txt` **MUST** be served at the site root, allowing full crawl and
     declaring the sitemap URL.
-17. `robots.txt` **MUST NOT** disallow `GPTBot`, `ClaudeBot`, `PerplexityBot`,
+18. `robots.txt` **MUST NOT** disallow `GPTBot`, `ClaudeBot`, `PerplexityBot`,
     `Google-Extended`, or `OAI-SearchBot`.
-18. `sitemap.xml` **MUST** be served at the site root, generated by the build from
+19. `sitemap.xml` **MUST** be served at the site root, generated by the build from
     the actual page list, with absolute URLs matching the FR-1 origin and a
     `lastmod` value.
-19. The repository-root `llms.txt` **MUST** be served at the site root, copied at
+20. The repository-root `llms.txt` **MUST** be served at the site root, copied at
     build time so the two cannot diverge.
 
 **SEO metadata**
 
-20. Every page **MUST** contain a `<link rel="canonical">` with its absolute URL.
-21. Every page **MUST** contain Open Graph metadata: `og:title`, `og:description`,
+21. Every page **MUST** contain a `<link rel="canonical">` with its absolute URL.
+22. Every page **MUST** contain Open Graph metadata: `og:title`, `og:description`,
     `og:type`, `og:url`, `og:image`, and `og:site_name`.
-22. Every page **MUST** contain Twitter card metadata: `twitter:card` set to
+23. Every page **MUST** contain Twitter card metadata: `twitter:card` set to
     `summary_large_image`, `twitter:title`, `twitter:description`, and
     `twitter:image`.
-23. Every image **MUST** carry descriptive `alt` text.
-24. Web fonts **MUST** be self-hosted. The current build makes four requests to
+24. Every image **MUST** carry descriptive `alt` text.
+25. Web fonts **MUST** be self-hosted. The current build makes four requests to
     Google-hosted fonts, which both blocks rendering and transmits the visitor's IP
     address to a third party.
 
 **Build provenance**
 
-25. Every published page **MUST** carry build provenance in the pre-rendered HTML,
+26. Every published page **MUST** carry build provenance in the pre-rendered HTML,
     identifying at minimum the commit SHA the site was built from, the build
     timestamp in UTC, and the workflow run that produced it.
-26. Provenance **MUST** be machine-readable, not only a rendered string: it **MUST**
+27. Provenance **MUST** be machine-readable, not only a rendered string: it **MUST**
     appear as `<meta>` tags in the head so a crawler or a support conversation can
     read it without executing JavaScript.
-27. The build **MUST** emit `/build-info.json` at the site root containing the same
+28. The build **MUST** emit `/build-info.json` at the site root containing the same
     provenance fields, so it can be fetched directly.
-28. Provenance values **MUST** be injected by the build from the CI environment and
+29. Provenance values **MUST** be injected by the build from the CI environment and
     **MUST NOT** be committed to the repository as literals, so they cannot drift
     from the artifact they describe.
-29. A local build with no CI environment **MUST** still succeed, marking provenance
+30. A local build with no CI environment **MUST** still succeed, marking provenance
     explicitly as a local build rather than fabricating a commit or run identifier.
 
 **Markdown representation**
 
-30. The build **MUST** emit a Markdown representation of the landing page at
+31. The build **MUST** emit a Markdown representation of the landing page at
     `/index.md`. Only the landing page is in scope; extending this to the
     documentation and other pages is deferred.
-31. `/index.md` **MUST** be generated from the same source as the landing page HTML,
+32. `/index.md` **MUST** be generated from the same source as the landing page HTML,
     so the two cannot describe different content. It **MUST NOT** be hand-authored.
-32. Diagrams that exist as SVG components on the landing page **MUST** be rendered as
+33. Diagrams that exist as SVG components on the landing page **MUST** be rendered as
     Mermaid fenced code blocks in `/index.md`, not as image references and not
     omitted. This applies to the five capability and privacy diagrams.
-33. `/index.md` **MUST** be reachable as a static file at the apex origin. The
+34. `/index.md` **MUST** be reachable as a static file at the apex origin. The
     response `Content-Type` is whatever GitHub Pages' MIME mapping assigns to `.md`,
     which cannot be overridden: Pages permits no custom response headers. The
     implementation **MUST** verify the served value after the first deploy and record
     it, because it is currently unverified. `text/plain` is an acceptable outcome for
     this CR, since the content is still consumable; guaranteeing `text/markdown`
     requires the edge layer and is deferred with content negotiation.
-34. `robots.txt` and `llms.txt` **MUST** both advertise `/index.md`, so a client that
+35. `robots.txt` and `llms.txt` **MUST** both advertise `/index.md`, so a client that
     cannot negotiate can still discover it.
 
 **Lighthouse and Core Web Vitals**
 
-35. A Lighthouse run against the built site **MUST** score at least 95 in
+36. A Lighthouse run against the built site **MUST** score at least 95 in
     Performance, at least 95 in Accessibility, at least 95 in Best Practices, and
     100 in SEO, measured on mobile emulation.
-36. Lighthouse **MUST** run in CI against the built output, and the workflow **MUST**
+37. Lighthouse **MUST** run in CI against the built output, and the workflow **MUST**
     fail if any category falls below its threshold.
-37. The thresholds **MUST** be recorded in a committed configuration file rather than
+38. The thresholds **MUST** be recorded in a committed configuration file rather than
     passed as ad-hoc command arguments, so a regression is visible as a diff.
 
 **GEO**
 
-38. Every page **MUST** contain JSON-LD structured data valid under schema.org,
+39. Every page **MUST** contain JSON-LD structured data valid under schema.org,
     present in the pre-rendered head.
-39. The landing page **MUST** include a `SoftwareApplication` entity with `name`,
+40. The landing page **MUST** include a `SoftwareApplication` entity with `name`,
     `description`, `applicationCategory`, `operatingSystem`, `license`,
     `codeRepository`, `programmingLanguage`, `downloadUrl`, and `softwareVersion`.
-40. The landing page **MUST** include a `FAQPage` entity covering at minimum: what
+41. The landing page **MUST** include a `FAQPage` entity covering at minimum: what
     the project is, whether an Entra ID app registration is required, whether data
     leaves the user's machine, which Outlook features are supported, and how to
     connect it to Claude Desktop.
-41. The quickstart page **MUST** include a `HowTo` entity mirroring
+42. The quickstart page **MUST** include a `HowTo` entity mirroring
     `docs/quickstart.md`.
-42. An `Organization` entity **MUST** express the GigWhere acknowledgement as a real
+43. An `Organization` entity **MUST** express the GigWhere acknowledgement as a real
     property (`sponsor` or `contributor`), not only as footer text.
-43. The page structure **MUST** support question-form headings with answer-first
+44. The page structure **MUST** support question-form headings with answer-first
     section openings, meaning each section owns its own heading element and its lead
     paragraph is addressable. Writing that copy is deferred (see "Deferred to a
     follow-up CR"); this CR delivers the structure it needs, not the wording.
-44. Every page **MUST** display a last-updated date, with a matching JSON-LD
+45. Every page **MUST** display a last-updated date, with a matching JSON-LD
     `dateModified`.
 
 **GigWhere backlink**
 
-45. The site footer **MUST** contain a link to `https://gigwhere.com` present as a
+46. The site footer **MUST** contain a link to `https://gigwhere.com` present as a
     literal `<a href>` in the pre-rendered HTML, not injected by JavaScript.
-46. That link **MUST NOT** carry `rel="nofollow"` or `rel="sponsored"`.
-47. `README.md` **MUST** carry the same acknowledgement, with wording matching the
-    footer.
+47. The acknowledgement **MUST** thank GigWhere for support and testing and **MUST**
+    end with a heart emoji, for example "Support and testing by GigWhere ❤️".
+48. That link **MUST NOT** carry `rel="nofollow"` or `rel="sponsored"`, and the anchor
+    text **MUST** be the GigWhere name so the link text carries the brand rather than
+    the emoji. The heart **MUST** sit outside the anchor and **MUST** be marked
+    `aria-hidden`, since it is decorative and a screen reader announcing "red heart"
+    adds nothing to the acknowledgement.
+49. `README.md` **MUST** carry the same acknowledgement, with wording and emoji
+    matching the footer.
 
 **CI deployment**
 
-48. A GitHub Actions workflow **MUST** build `site/` and publish the output to the
+50. A GitHub Actions workflow **MUST** build `site/` and publish the output to the
     `gh-pages` branch on push to `main` when files under `site/` or `docs/` change.
-49. The workflow **MUST** be the only mechanism that writes to `gh-pages`, and the
+51. The workflow **MUST** be the only mechanism that writes to `gh-pages`, and the
     branch **MUST NOT** be hand-edited.
-50. The workflow **MUST NOT** require any secret beyond the default `GITHUB_TOKEN`.
-51. The workflow **MUST** run the site's checks before publishing, and **MUST NOT**
+52. The workflow **MUST NOT** require any secret beyond the default `GITHUB_TOKEN`.
+53. The workflow **MUST** run the site's checks before publishing, and **MUST NOT**
     publish if any fail.
-52. `CNAME`, `robots.txt`, `sitemap.xml`, and `llms.txt` **MUST** be build outputs
+54. `CNAME`, `robots.txt`, `sitemap.xml`, and `llms.txt` **MUST** be build outputs
     rather than files placed on `gh-pages` by hand, so a rebuild cannot revert them.
-53. `extension/manifest.json` `homepage` **MUST** be `https://outlook-local-mcp.com`.
+55. `extension/manifest.json` `homepage` **MUST** be `https://outlook-local-mcp.com`.
 
 ### Non-Functional Requirements
 
 1. The site **MUST** achieve Largest Contentful Paint under 2.5 seconds, Cumulative
    Layout Shift under 0.1, and Interaction to Next Paint under 200 milliseconds,
    measured on mobile. These are the field thresholds behind the Lighthouse
-   Performance score required by FR-35 and are stated separately because a passing
+   Performance score required by FR-36 and are stated separately because a passing
    category score does not by itself guarantee each metric is within budget.
 2. The build **MUST** complete with no network access beyond the package registry.
 3. The site **MUST NOT** load third-party analytics, trackers, or any third-party
@@ -486,7 +505,7 @@ Two structural items are also deferred, distinct from the copy work above:
   to proxied. That reintroduces the concerns that made DNS-only correct in the first
   place: SSL/TLS must be Full (strict) rather than Flexible, Cloudflare's managed
   Content Signals file must not be allowed to occupy `/robots.txt`, and Bot Fight
-  Mode must not challenge the AI crawlers FR-17 deliberately admits. Deferring it
+  Mode must not challenge the AI crawlers FR-18 deliberately admits. Deferring it
   keeps this CR entirely on plain Pages with no Cloudflare change and no blocking
   dependency.
 * **Markdown for the documentation and comparison pages.** This CR emits `/index.md`
@@ -585,7 +604,7 @@ this ships.
 * **Serve the documentation as raw Markdown only.** Rejected as a replacement for
   HTML: no structured data, no canonical, no heading semantics, and weak retrieval
   relative to semantic HTML. Serving Markdown *alongside* HTML is a different
-  proposition and is what FR-30 to FR-34 require.
+  proposition and is what FR-31 to FR-35 require.
 
 ### How to serve the Markdown representation
 
@@ -594,8 +613,8 @@ follows; the first is what this CR adopts.
 
 * **Parallel `.md` paths with no negotiation.** Emit `/index.md` and `/docs/*.md` and
   advertise them in `robots.txt` and `llms.txt`. Zero infrastructure, works on plain
-  Pages, and satisfies FR-30 to FR-34. A client sending `Accept: text/markdown` to `/` still
-  receives HTML, which is the limitation this CR accepts. This is what FR-30 to FR-34
+  Pages, and satisfies FR-31 to FR-35. A client sending `Accept: text/markdown` to `/` still
+  receives HTML, which is the limitation this CR accepts. This is what FR-31 to FR-35
   require and it is all that is in scope here.
 * **Cloudflare Worker in front of Pages (deferred).** A Worker inspects
   `Accept`, rewrites to the `.md` variant when Markdown is preferred, and sets
@@ -604,7 +623,7 @@ follows; the first is what this CR adopts.
   the concerns that made DNS-only correct before: SSL/TLS mode must be Full (strict)
   and not Flexible, Cloudflare's managed Content Signals `robots.txt` must not be
   allowed to occupy `/robots.txt`, and Bot Fight Mode must not challenge the AI
-  crawlers FR-17 deliberately admits. Note the v3 source arrived with a `.wrangler`
+  crawlers FR-18 deliberately admits. Note the v3 source arrived with a `.wrangler`
   directory, so a Worker was evidently once contemplated for this project.
 * **Move hosting off Pages entirely** (Cloudflare Pages, or any host with
   request-time logic). Rejected for this CR. It would make negotiation trivial, but
@@ -651,7 +670,7 @@ layered on.
 
 **Phase 1: Adopt and track.** Anchor the `data/` rule in `.gitignore` to `/data/`
 FIRST, before adding anything under `site/`: unanchored it matches at any depth and
-would silently ignore `site/**/data/` (see "Carried forward from CR-0069"). Then move
+would silently ignore `site/**/data/` (FR-5). Then move
 `site-v3/` to `site/`, remove the `/site-v3/` ignore entry, add `site/node_modules`
 and `site/dist`, and confirm with `git status` that every intended file is actually
 staged. Set `base` to `/` and emit
@@ -771,7 +790,8 @@ output plus a post-deploy live check.
 | `site/tests/metadata.test.ts` | `requiredEntitiesPresent` | Asserts `SoftwareApplication`, `FAQPage`, `Organization` on the landing page and `HowTo` on quickstart | `dist` | Present |
 | `site/tests/metadata.test.ts` | `everyImageHasAltText` | Asserts no `<img>` without `alt` | All pages | None |
 | `site/tests/metadata.test.ts` | `noThirdPartyResourceHosts` | Asserts no third-party resource requests, fonts included | All pages | None |
-| `site/tests/content.test.ts` | `gigwhereBacklinkDofollow` | Asserts a literal pre-rendered `<a href="https://gigwhere.com">` without nofollow or sponsored | `dist/index.html` | Present |
+| `site/tests/content.test.ts` | `gigwhereBacklinkDofollow` | Asserts a literal pre-rendered `<a href="https://gigwhere.com">` without nofollow or sponsored, with the GigWhere name as anchor text | `dist/index.html` | Present |
+| `site/tests/content.test.ts` | `gigwhereAcknowledgementWording` | Asserts the acknowledgement thanks GigWhere for support and testing and ends with a heart emoji marked aria-hidden outside the anchor | `dist/index.html` | Matches |
 | `site/tests/provenance.test.ts` | `provenanceMetaPresent` | Asserts commit, build time, and run meta tags in every pre-rendered head | All pages | Present |
 | `site/tests/provenance.test.ts` | `buildInfoMatchesMeta` | Asserts `/build-info.json` agrees with the meta tags | `dist` | Equal |
 | `site/tests/provenance.test.ts` | `localBuildIsLabelled` | Asserts a build with no CI env marks provenance local rather than fabricating values | Built without CI env | Labelled local |
@@ -790,8 +810,35 @@ output plus a post-deploy live check.
 | CI (Lighthouse) | n/a | Runs Lighthouse on mobile emulation against the built site and fails below threshold | `dist` | Performance, Accessibility, Best Practices at least 95; SEO 100 |
 
 The test runner **MUST** build before asserting, and **MUST NOT** assert against a
-pre-existing `dist`. A suite that can pass against stale output is worse than no
-suite, because it is trusted.
+pre-existing `dist`. The reason is worth stating because the failure is invisible:
+CR-0069's harness initially built only when `dist` was **absent**, so the realistic
+sequence of editing a source file and running the tests asserted against the previous
+build and reported everything green. It was caught only by injecting a known-bad
+string into the source, running the tests alone, and observing that they still passed.
+A suite that can pass against stale output is worse than no suite, because it is
+trusted.
+
+`.agents/scripts/verify-site-deploy.sh` already exists on the abandoned `dev/cr-0069`
+branch and **MUST** be adapted rather than rewritten. Its design is the part worth
+keeping: **local** checks that need no network and therefore run in CI (for example
+asserting `extension/manifest.json` `homepage` is the apex while `support` stays a
+GitHub URL), split from **live** checks behind a `--live` flag that only make sense
+post-deploy (the apex serves 200 with no project-page base path in the body, `www`
+redirects to the apex, and each crawler file serves 200). Extend the live side to
+cover `/index.md`, recording its served `Content-Type` per FR-34, and the provenance
+endpoint.
+
+Three of the assertions below are carried from CR-0069 by name because they target
+defects the v3 source actually contains or traps it walked into: `noRenderGatingAwait`,
+`noMswProductionDependency`, and `docsAnchorsPreserved`.
+
+Verification that cannot run in CI **MUST** be labelled rather than left ambiguous,
+using the three buckets CR-0069's validation settled on: **fixed**, **justified as
+non-CI-gatable** (live measurement or human judgement), and **owner action** (requires
+console access nobody in CI has). In this CR, NFR-1 and the Lighthouse live
+measurement, AC-21, AC-22, and AC-24 fall into the latter two. Labelling them stops a
+live-only or human-only check from either reading as an unmet requirement or being
+quietly dropped.
 
 ### Tests to Modify
 
@@ -912,14 +959,18 @@ Then the build succeeds
   And the provenance values identify the build as local rather than naming a commit or run
 ```
 
-### AC-12: The GigWhere backlink is crawlable and dofollow
+### AC-12: The GigWhere backlink is crawlable, dofollow, and correctly worded
 
 ```gherkin
 Given the site has been built
 When the pre-rendered landing page HTML is inspected without executing JavaScript
 Then it contains an anchor with href https://gigwhere.com
-  And that anchor carries neither rel=nofollow nor rel=sponsored
-  And README.md contains the same acknowledgement wording
+  And the anchor text is the GigWhere name
+  And the surrounding acknowledgement thanks GigWhere for support and testing
+  And the acknowledgement ends with a heart emoji
+  And the heart sits outside the anchor and is marked aria-hidden
+  And the anchor carries neither rel=nofollow nor rel=sponsored
+  And README.md contains the same wording and emoji
 ```
 
 ### AC-13: No third-party resource is loaded
@@ -1114,10 +1165,20 @@ the motion and canvas layers only on the client, so the server render never
 executes browser code. Content must never be hidden pending hydration: the
 pre-rendered markup is the source of truth for what a crawler sees, and CSS or
 script that hides it until hydration defeats the whole CR. AC-2 and AC-3 exist to
-catch exactly that. One concrete mechanism to avoid is documented under "Carried
-forward from CR-0069": `gsap.from` hides its target the moment it is called and only
-restores it when its trigger fires, so on an element with no scroll distance to travel
-it hides the content permanently.
+catch exactly that.
+
+One concrete mechanism has already caused this failure on this project and v3 drives
+its motion the same way. `gsap.from` applies its hidden start state the instant it is
+called and restores it only when its trigger fires. Called on an element with no
+scroll distance to travel, for example anything above the fold or any element when the
+viewport is taller than the document, the trigger never fires and the element stays
+invisible permanently. CR-0069's iteration session hit exactly this: the hero headline
+was hidden and still hidden after a 45 second settle. Two mitigations came out of it
+and both apply here: restrict hidden-start animations to elements genuinely below the
+fold, and add a safety sweep that clears opacity and transform on anything still
+transparent after a short delay. Under pre-rendering the stakes are higher than they
+were then, because hidden content defeats the pre-rendering this CR exists to
+deliver.
 
 ### Risk 2: Pre-rendered markup diverges from hydrated markup
 
@@ -1157,7 +1218,7 @@ fails CI rather than shipping dead deep links.
 **Impact:** medium
 **Mitigation:** two representations of the same page is two things to keep in step,
 and the failure is silent: a model reading the Markdown would be told something the
-HTML no longer says. FR-31 requires both to be generated from one source rather than
+HTML no longer says. FR-32 requires both to be generated from one source rather than
 maintained in parallel, and `markdownMatchesHtmlContent` asserts equivalence of
 headings and body text on every build. Hand-authoring the Markdown is the specific
 thing to avoid.
@@ -1171,7 +1232,7 @@ thing to avoid.
 value is currently unverified, and could not be verified while authoring: no `.md`
 file is reachable on the existing deployment, because Pages excludes dot-prefixed
 paths and nothing else on `gh-pages` qualifies. A client filtering strictly on
-`text/markdown` may therefore reject it. FR-33 requires the value be verified and
+`text/markdown` may therefore reject it. FR-34 requires the value be verified and
 recorded after the first deploy rather than assumed, and accepts `text/plain` for this
 CR since the content is still consumable. Guaranteeing the header needs the edge
 layer, which is deferred.
@@ -1210,7 +1271,7 @@ the crawler files build outputs removes the incentive for the most likely edits,
 **Mitigation:** the current build is 448 KB of JavaScript (137 KB gzipped) plus
 70 KB of CSS (12.9 KB gzipped), and GSAP, Lenis, and several canvas components are
 all client-side. Pre-rendering improves perceived load but does not reduce bundle
-size, and FR-35 sets a hard Performance floor of 95 that a 448 KB bundle may not
+size, and FR-36 sets a hard Performance floor of 95 that a 448 KB bundle may not
 clear on mobile emulation. Code-split the motion layer off the critical path, and
 treat the first Lighthouse run as a measurement rather than a formality: it is the
 step most likely to expose real work, which is why it has its own phase.
@@ -1223,8 +1284,8 @@ step most likely to expose real work, which is why it has its own phase.
   deferred, so every requirement here is satisfiable on plain GitHub Pages with no
   Cloudflare change.
 * Reuses artifacts from the abandoned `dev/cr-0069`: `.agents/scripts/verify-site-deploy.sh`
-  is adapted rather than rewritten, and two of its test assertions are carried by
-  name. See "Carried forward from CR-0069".
+  is adapted rather than rewritten, and three of its test assertions are carried by
+  name. See the Test Strategy.
 * A follow-up CR **MUST** correct the deferred copy. This CR should not be considered
   finished work on the site's content, only on its foundation.
 * Depends on CR-0065 for the documentation governance rules that decide what is
@@ -1286,110 +1347,18 @@ Cloudflare zone. Deferring the mechanism leaves this CR with no blocking depende
 and nothing to change outside the repository, while still delivering the thing that
 carries the value, which is the content in a form a model can read.
 
-## Carried forward from CR-0069
-
-CR-0069 was abandoned, but it was implemented, validated, and iterated on before that
-happened, and its branch retains real artifacts and hard-won detail. Everything below
-was checked against `dev/cr-0069` rather than recalled, and each item is either a
-requirement here or a concrete trap the implementation will otherwise walk into.
-
-### A live landmine in `.gitignore`
-
-`.gitignore` line 32 on this branch is an **unanchored `data/`** rule, intended for
-the Docker volume at `./data/auth`. It matches at any depth, so
-`git check-ignore site/src/data/foo.ts` confirms it would silently ignore a
-`site/**/data/` directory. On CR-0069 this went unnoticed until a later phase found
-that a previous phase's data modules had never been committed, which would have
-failed CI for missing source. Phase 1 **MUST** anchor the rule to `/data/`, as
-`dev/cr-0069` did, before adding anything under `site/`.
-
-### Two tests worth carrying by name
-
-CR-0069's suite ended up with two assertions this CR's Test Strategy did not have,
-both aimed squarely at defects the v3 source actually contains:
-
-* `noRenderGatingAwait` asserts that nothing is awaited before the first render. This
-  is the exact defect in v3's `main.tsx`, and it is the defect that took the previous
-  site down. A requirement (FR-5) without a test is a comment.
-* `noMswProductionDependency` asserts MSW is absent from the dependency tree, not
-  merely absent from the built output. The output-level check passes as soon as tree
-  shaking removes it; the dependency-level check is what stops it coming back.
-
-Both **MUST** be added to the Test Strategy alongside the existing rows.
-
-### The documentation-anchor slug algorithm is a trap
-
-FR-14 requires verb `SeeDocs` anchors to resolve in published HTML. A Markdown
-renderer's default slugger will not necessarily agree with the repository's own. The
-authoritative algorithm is `headingToAnchor` in
-`internal/tools/verb_metadata_test.go`: lowercase, keep `a-z`, `0-9`, and `-`, map
-spaces to hyphens, drop everything else. CR-0069's implementation had to match it
-explicitly and also handle explicit `{#anchor}` overrides. The site build **MUST**
-reuse that algorithm rather than trusting the renderer's default, or every deep link
-from `system.help` breaks silently.
-
-### `verify-site-deploy.sh` already exists
-
-`dev/cr-0069` carries `.agents/scripts/verify-site-deploy.sh`, and its design should
-be adopted rather than reinvented: it splits **local checks** that need no network and
-run in CI (for example asserting `extension/manifest.json` `homepage` is the apex
-while `support` stays a GitHub URL) from **live checks** behind a `--live` flag that
-only make sense post-deploy (apex serves 200 with no project-page base path in the
-body, `www` redirects to the apex, and the crawler files each serve 200). That split
-is what lets the same script gate CI and verify a deployment. Adapt it; extend the
-live checks to cover `/index.md` and the provenance endpoint.
-
-### The test harness must rebuild, and this was proven the hard way
-
-The Test Strategy already requires building before asserting. The reason is worth
-recording, because the failure is invisible. CR-0069's harness initially built only
-when `dist` was **absent**, so the realistic sequence of editing a source file and
-running the tests asserted against the previous build and reported everything green.
-It was caught only by injecting a known-bad string into the source, running the tests
-alone, and observing that they still passed. The fix was to rebuild unconditionally,
-which was cheap because the build is fast. A suite that can pass against stale output
-is worse than no suite, because it is trusted.
-
-### `gsap.from` strands anything it cannot animate back
-
-Directly relevant to Phase 3 and Risk 1. `gsap.from` applies its hidden start state
-the instant it is called, and only restores it when its trigger fires. Called on an
-element with no scroll distance to travel, for example anything above the fold or any
-element when the viewport is taller than the document, the trigger never fires and the
-element stays invisible permanently. CR-0069's iteration session hit this: the hero
-headline was hidden and still hidden after a 45 second settle. Two mitigations came
-out of it, and both apply here because v3 drives its motion with GSAP: restrict
-hidden-start animations to elements that are actually below the fold, and add a
-safety sweep that clears opacity and transform on anything still transparent after a
-short delay. In a pre-rendered site the stakes are higher than they were then, because
-hidden content defeats the pre-rendering this CR exists to deliver.
-
-### Label what cannot be gated in CI
-
-CR-0069's validation report ended at zero FAIL, PARTIAL, and GAP only after
-classifying the residue honestly, in three buckets worth reusing: **fixed**,
-**justified as non-CI-gatable** (live measurements and manual copy review), and
-**owner actions** (console access nobody in CI has). Applying the same labels here
-avoids the failure mode where a live-only or human-only check sits in a CR looking
-like an unmet requirement, or worse, gets quietly dropped. NFR-1, AC-17, AC-22, and
-AC-24 in this CR are of that kind and are marked accordingly.
-
-### One artifact deliberately not carried
-
-`dev/cr-0069` also holds `.agents/scripts/capture-legacy-site-reference.sh`, which
-reconstructs the pre-migration page from the `gh-pages` build output. It existed
-because CR-0069 required 1:1 fidelity to a page that could no longer be viewed. This
-CR adopts v3 as authored and has no fidelity-to-legacy requirement, so the script is
-not needed. It is noted only because the technique, reconstructing a reference and
-measuring against it numerically, would be the starting point if visual regression
-testing is ever wanted.
-
 ## Related Items
 
-* Supersedes: CR-0069 (abandoned; branch `dev/cr-0069` retains the CR, its
-  validation report, its iteration ledger, and two reusable scripts under
-  `.agents/scripts/`). Specific detail carried across is listed under "Carried
-  forward from CR-0069"; that branch is worth reading before starting Phase 3.
+* Supersedes: CR-0069 (abandoned). Branch `dev/cr-0069` retains that CR, its
+  validation report, its iteration ledger, and two scripts under `.agents/scripts/`.
+  Its detail is folded into the requirements, phases, risks, and Test Strategy here
+  rather than kept as an appendix, and the branch is worth reading before starting
+  Phase 3. One artifact is deliberately not carried:
+  `capture-legacy-site-reference.sh`, which reconstructed the pre-migration page
+  because CR-0069 required 1:1 fidelity to a page that could no longer be viewed.
+  This CR adopts v3 as authored and has no such requirement. The technique,
+  reconstructing a reference and measuring against it numerically, would be the
+  starting point if visual regression testing is ever wanted.
 * Related change requests: CR-0060 (domain-aggregated tools), CR-0065
   (documentation architecture), CR-0068 (tool definition quality)
 * Issue: [#26](https://github.com/desek/outlook-local-mcp/issues/26)
@@ -1412,17 +1381,17 @@ Three properties drive retrieval, and the first is a precondition for the others
 
 1. **The content must exist without JavaScript.** Most retrieval pipelines fetch and
    parse rather than render. The v3 build currently emits zero characters of body
-   text without JavaScript, so today it has nothing to retrieve. FR-7.
+   text without JavaScript, so today it has nothing to retrieve. FR-8.
 2. **Claims must be self-contained and specific.** "Four aggregate MCP tools
    dispatching 42 verbs across calendar, mail, account, and system, 33 of them
    registered in the default gated configuration" survives extraction. "Powerful
    Outlook integration" does not. Deferred to the copy CR; this one delivers the
    pre-rendered surface those claims will sit in.
 3. **Structure must match the question.** Question-form headings with answer-first
-   sentences align the retrievable unit with the query. FR-43 delivers the structure;
+   sentences align the retrievable unit with the query. FR-44 delivers the structure;
    the wording is deferred.
 4. **Diagrams must carry meaning, not pixels.** An SVG flattens to nothing a model can
-   use. FR-32 re-expresses the five capability and privacy diagrams as Mermaid in
+   use. FR-33 re-expresses the five capability and privacy diagrams as Mermaid in
    `/index.md`, which is the one place this CR improves what a model can quote rather
    than only how easily it can reach it.
 
@@ -1430,7 +1399,7 @@ Three properties drive retrieval, and the first is a precondition for the others
 
 Any managed `robots.txt` that restricts AI training and grounding is reasonable for
 a publisher monetising page views and actively harmful here, because this project's
-users arrive through exactly the assistants such a file would restrict. FR-17 makes
+users arrive through exactly the assistants such a file would restrict. FR-18 makes
 the choice explicit so a future infrastructure change does not silently reintroduce
 it. This is not hypothetical: while the site was proxied through Cloudflare, its
 managed Content Signals `robots.txt` occupied that path.
