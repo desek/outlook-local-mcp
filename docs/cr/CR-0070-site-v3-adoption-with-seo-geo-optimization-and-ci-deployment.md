@@ -315,9 +315,10 @@ flowchart TD
     `site/`.
 15. Heading anchors referenced by verb `SeeDocs` values **MUST** resolve in the
     published HTML, so deep links from `system.help` output work. The anchor slugs
-    **MUST** be generated with the repository's own algorithm, `headingToAnchor` in
-    `internal/tools/verb_metadata_test.go` (lowercase, keep `a-z`, `0-9`, and `-`, map
-    spaces to hyphens, drop everything else), and **MUST** honour explicit `{#anchor}`
+    **MUST** be generated with the repository's own algorithm, the production
+    `headingToAnchor` in `internal/tools/get_docs.go` (lowercase, keep `a-z`, `0-9`,
+    and `-`, map spaces to hyphens, drop everything else; a byte-identical mirror
+    exists in `internal/tools/verb_metadata_test.go`), and **MUST** honour explicit `{#anchor}`
     overrides. A Markdown renderer's default slugger **MUST NOT** be relied on: it
     will not necessarily agree, and a disagreement breaks every deep link silently.
     This was a real defect during CR-0069 and had to be fixed by matching the
@@ -611,8 +612,8 @@ this ships.
 GitHub Pages cannot branch on an `Accept` header. The options were weighed as
 follows; the first is what this CR adopts.
 
-* **Parallel `.md` paths with no negotiation.** Emit `/index.md` and `/docs/*.md` and
-  advertise them in `robots.txt` and `llms.txt`. Zero infrastructure, works on plain
+* **Parallel `.md` paths with no negotiation.** Emit `/index.md` and
+  advertise it in `robots.txt` and `llms.txt`. Zero infrastructure, works on plain
   Pages, and satisfies FR-31 to FR-35. A client sending `Accept: text/markdown` to `/` still
   receives HTML, which is the limitation this CR accepts. This is what FR-31 to FR-35
   require and it is all that is in scope here.
@@ -732,8 +733,7 @@ flowchart LR
     subgraph P4["Phase 4: Crawler surface and Markdown"]
         D1["robots, sitemap, llms.txt"] --> D2["canonical, OG, Twitter, JSON-LD"]
         D2 --> D3["GigWhere link and property"]
-        D3 --> D4["Markdown twins, SVG to Mermaid"]
-        D4 --> D5["Accept negotiation layer"]
+        D3 --> D4["Landing-page index.md, SVG to Mermaid"]
     end
     subgraph P5["Phase 5: Lighthouse and registration"]
         E1["Committed thresholds, CI gate"] --> E2["Close the measured gap"]
@@ -1292,7 +1292,7 @@ step most likely to expose real work, which is why it has its own phase.
   published to the web and what stays repository-only.
 * Depends on CR-0060 and CR-0068 for the accurate description of the tool surface.
 * Requires GitHub Pages to remain on branch-based deployment from `gh-pages`.
-* Requires a Google account with Search Console access for AC-20.
+* Requires a Google account with Search Console access for AC-24.
 * Supersedes CR-0069, which was abandoned. That CR and its iteration ledger remain
   on branch `dev/cr-0069`; nothing from it is merged.
 
@@ -1426,3 +1426,54 @@ documents should be corrected to match as they are adopted.
 CR-0069 exists as a committed document on `dev/cr-0069` and will not be merged.
 Reusing the identifier would put two different documents under one ID in the same
 repository's history, so this CR takes 0070 and the gap is intentional.
+
+<!-- review-summary -->
+## Review Summary (CR Reviewer)
+
+Reviewed 2026-07-30 against branch `dev/site-v3`. 55 Functional Requirements, 5
+Non-Functional Requirements, 24 Acceptance Criteria, 10 Risks.
+
+### Findings by category
+
+* **Cross-reference defects: 1.** Dependencies cited "Search Console access for
+  AC-20"; AC-20 governs build outputs not being reverted by a rebuild, while the
+  Search Console criterion is AC-24. All other `FR-n`, `AC-n`, `NFR-n`, and `Risk n`
+  cross-references were re-verified end to end and point at the requirement they
+  name (the renumbering to 1-55 / 1-24 is internally consistent).
+* **Contradiction / scope defects: 2.** (a) The Implementation Flow diagram Phase 4
+  contained a `D5 "Accept negotiation layer"` node, contradicting the deferral of
+  content negotiation and Phase 4's own statement that "Content negotiation is not
+  part of this phase." (b) The adopted "Parallel `.md` paths" option in Alternative
+  Approaches said "Emit `/index.md` and `/docs/*.md`", overstating scope past
+  FR-31's landing-page-only mandate and the "Markdown representations beyond
+  `/index.md`" Out-of-Scope entry.
+* **Drift: 1.** FR-15 cited the anchor algorithm as `headingToAnchor` in
+  `internal/tools/verb_metadata_test.go` (a test helper). The authoritative
+  production implementation is `internal/tools/get_docs.go:headingToAnchor`, which
+  governs the embedded-docs anchors the site must match; the test file holds a
+  byte-identical mirror. Repointed the citation to the production function.
+* **Ambiguity: 0.** All 55 FRs, 5 NFRs, and 24 ACs use RFC-2119 MUST / MUST NOT;
+  no weak "should / may / appropriate / as needed" language in any requirement or AC.
+* **Convention compliance: pass.** No dashed em-dashes in prose. Both flowchart
+  diagrams quote punctuated node labels; the sequence-diagram Note text is plain
+  ASCII. All cited paths verified present: `docs/{concepts,quickstart,
+  troubleshooting}.md`, `docs/reference/architecture.md`, `docs/embed_test.go`,
+  `llms.txt`, `PRIVACY.md`, `CONTRIBUTING.md`, `.mise.toml` (pnpm 11.18.0),
+  `extension/manifest.json` (`homepage` currently the GitHub URL, `support` the
+  issues URL, matching the Test Strategy). CR-0060/0065/0068/0069 all exist.
+  FR-5's `.gitignore:32` `data/` claim confirmed by `git check-ignore`.
+
+### Fixes applied
+
+1. AC-20 → AC-24 in the Dependencies Search Console line.
+2. Removed the `Accept negotiation layer` node from the Phase 4 flowchart and
+   relabelled `D4` to "Landing-page index.md, SVG to Mermaid".
+3. Alternative Approaches: "Emit `/index.md` and `/docs/*.md` and advertise them" →
+   "Emit `/index.md` and advertise it".
+4. FR-15 anchor-algorithm citation repointed to `internal/tools/get_docs.go`, noting
+   the test-file mirror.
+
+### Unresolved (human decision)
+
+None.
+<!-- /review-summary -->
