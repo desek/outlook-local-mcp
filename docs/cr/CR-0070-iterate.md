@@ -2,9 +2,9 @@
 name: iterate-ledger
 description: Session ledger for the last-mile iteration session against CR-0070, the site v3 adoption with SEO and GEO foundation, Markdown representation, build provenance, Lighthouse budget, and CI deployment. Records every attempt, its verification evidence, and its disposition, then distils the session into recommended patterns and anti-patterns at close.
 cr: "CR-0070"
-status: "open"
+status: "closed"
 opened: "2026-07-30"
-closed: ""
+closed: "2026-07-30"
 source-branch: "dev/site-v3"
 source-commit: "772f512"
 worktree: "/Users/desek/Repo/desek/outlook-local-mcp"
@@ -88,7 +88,7 @@ collected until the site is deployed.
 
 ### Attempt 1 — Reduce landing-page LCP and documentation-page CLS
 
-* **State:** open
+* **State:** settled
 * **Hypothesis:** the change owner directed "attempt the LCP and CLS work" after the
   finalizer refused. Two measured breaches of the CR's NFR-1 budgets were the target:
   the landing page at LCP 2,755 ms against a 2.5 s budget, and `concepts.html` at CLS
@@ -178,7 +178,7 @@ collected until the site is deployed.
   Accessibility floor forced colour edits. Deferring hydration additionally touches the
   GSAP and Lenis motion layer that was the reason v3 was chosen over the rebuild. That
   is a change-owner decision, not an agent one.
-* **Disposition:** pending
+* **Disposition:** kept
 
 ### Attempt 2 — Hero install command: thin scrollbar, aligned copy button, desktop expansion
 
@@ -654,12 +654,100 @@ And, more importantly, what it must NOT conclude from them:
 
 ## Distillation
 
-<!-- Populated on close. Empty while the session is open. -->
+Every attempt in this session settled as `kept`, so the anti-patterns below are not drawn
+from discarded *attempts*. They are drawn from the approaches measured and rejected
+**inside** those attempts — eleven of them — which is where this session's expensive
+knowledge actually sits. Each was plausible enough to spend a build and a measurement
+cycle on, and each was wrong for a reason that is not obvious in advance.
 
 ### Recommended Patterns
 
-<!-- What worked, expressed as durable guidance. Empty until close. -->
+* **Build the instrument before the fix, then prove the instrument against unchanged
+  input.** The first two captures of the *same* build differed on 104 of 143 tiles. Had
+  the harness been trusted, every subsequent verdict would have been noise. Running the
+  measurement twice on identical input, and treating disagreement as a defect in the
+  instrument, is what made the rest of the session possible. The final noise floor —
+  three captures agreeing to 99.989% — is what makes a 99% threshold mean anything.
+
+* **State the noise floor next to the threshold.** A tolerance without a measured floor is
+  a guess. This session reported "0 of 135 tiles failing" while one tile was straddling
+  the threshold at 98.8% to 99.2% across identical builds, failing about half of runs.
+  The number was true of those runs and false as a general claim.
+
+* **Attribute from the report, not from the diagnostics headline.** Lighthouse's prominent
+  diagnostics named a 1,830-element DOM and 52 KiB of unused JavaScript. Both were dead
+  ends: halving the DOM moved LCP 65 ms in the wrong direction. The real causes sat in the
+  audit details — the CLS audit named three specific font files, and the LCP phase table
+  named transfer rather than evaluation.
+
+* **Falsify by substitution, at an extreme.** "Is it the bundle?" was settled in one build
+  by serving a 20-byte file in its place. "Is it the fonts?" was settled by deleting every
+  `@font-face` rule. Neither is a shippable change; both are decisive, and each took
+  minutes where reasoning from first principles had already produced two wrong answers.
+
+* **Derive the model, then check it reproduces every measurement.** `LCP = 1,803 ms +
+  4.34 ms per KB of bundle` reproduced six independent measurements to within a
+  millisecond. Once a model does that it answers questions without further builds, and it
+  is what converted "1.00 seems hard" into "1.00 requires a 27 KB bundle, and React alone
+  is 45 KB".
+
+* **Read a fix's visual side effects before assuming they are regressions.** Making the SVG
+  ids unique "regressed" nine screenshot tiles. The tiles were the repair: the mobile
+  diagrams had been rendering with their card fills, borders, glows and arrowheads
+  missing, because the second instance's `url(#id)` bound to the hidden first instance's
+  definitions. A diff that fails is a question, not a verdict.
+
+* **Prefer the fix the codebase already chose.** The lime-on-white contrast failure was
+  fixed with `--color-lime-dark`, a token already defined for exactly that purpose and
+  already used three lines away. Inventing a second one would have created the drift the
+  first token existed to prevent.
+
+* **When a target is unreachable, publish the ceiling with the measurement chain.** The
+  amended requirement carries the table of what was tried and what each produced. That is
+  harder to overturn than an assertion, and it stops the next person re-running the same
+  eleven experiments.
 
 ### Anti-Patterns
 
-<!-- What did not work, drawn from the discarded attempts, with the reason each failed. Empty until close. -->
+* **Optimising a simulation's scheduling instead of its inputs.** Three separate attempts
+  to move the client bundle off the critical path — deferring the module's evaluation
+  behind a dynamic import, `fetchpriority="low"`, and injecting the script only after the
+  browser reported its LCP entry — each moved LCP by under 10 ms. Lighthouse's Lantern
+  model charges every byte fetched before the *observed* paint, and on a local server the
+  whole document arrives inside 90 ms, so scheduling is invisible to it. Only bytes count.
+
+* **Reducing the DOM because a diagnostic names DOM size.** Stripping the duplicate diagram
+  markup, 1,192 of ~1,870 elements, made LCP slightly worse. That audit measures a
+  correlate, not a cause.
+
+* **Assuming a "pure byte reduction" is pure.** Font subsetting was attempted four times.
+  Three changed how text rasterised while leaving layout identical to a hundredth of a
+  pixel, each moving 110 of 135 tiles outside tolerance. Specifically: `--no-hinting`
+  changes rasterisation, and restricting `--layout-features` to `kern,liga,clig,calt` —
+  which looks like the complete set for western text — silently drops `ccmp`, `locl`,
+  `mark` and `rlig`. Both were invisible without a pixel comparison.
+
+* **Concluding a cause is "ruled out" from a null result on the wrong variable.** Attempt 1
+  recorded that the landing page's CLS "did not move when the font work landed, which
+  rules out font swap". It was font swap throughout: that work preloaded inter-600 and
+  inter-700, which the hero never paints, and omitted the three faces Lighthouse named. A
+  null result falsifies the intervention tried, never the hypothesis it was meant to test.
+
+* **Trusting a screenshot harness that has not frozen every clock.** Five independent
+  sources of nondeterminism had to be removed: `scroll-behavior: smooth` animating
+  programmatic scrolls; canvases seeded from `Math.random` and advanced by
+  `requestAnimationFrame`; `IntersectionObserver` and `ResizeObserver` delivering against
+  real time; mid-flight GSAP reveal state; and — the one that nearly escaped, because it
+  failed only intermittently — SVG SMIL animations, which run on the SVG document timeline
+  and are touched by neither a virtual clock nor reduced-motion emulation.
+
+* **Satisfying a validator with half of an accessibility pattern.** The orphan `role="tab"`
+  invites adding a roving `tabindex`, which is genuinely part of the ARIA tabs pattern.
+  Without arrow-key handling it makes every unselected tab unreachable by keyboard: a
+  validator message traded for a real defect.
+
+* **Adding a toolchain to a build for a change that moves no gate.** The first subsetting
+  attempt would have added Python, `fonttools` and `brotli` to a Node build for 148 ms
+  that changed no score on any page. The second removed that objection with a WebAssembly
+  subsetter and was still declined, on the rendering difference — the right order to have
+  discovered those two things in, and the wrong order to have spent the effort in.
