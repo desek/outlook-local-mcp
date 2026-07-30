@@ -182,7 +182,7 @@ collected until the site is deployed.
 
 ### Attempt 2 — Hero install command: thin scrollbar, aligned copy button, desktop expansion
 
-* **State:** open
+* **State:** settled
 * **Hypothesis:** the change owner asked for three things on the hero install command
   row: the `scrollbar-width: thin; scrollbar-color: gray transparent` treatment, the
   copy button on the same centre line as the `go install` text (the scrollbar was
@@ -241,13 +241,56 @@ collected until the site is deployed.
   without the virtual clock `--dump-dom` fires before the probe's timeout. The
   quantitative probe succeeded at 1024 and 1280, where the desktop path is already
   exercised, and wider viewports only give the container more room.
-* **Disposition:** pending
+* **Disposition:** kept
 
 ## Carry-forward
 
 Items this session has identified but not actioned. They are not attempts and carry no
 disposition; they are recorded here so they survive the session and can be routed at
 close.
+
+### TODO: reconcile CR-0070 against the SEO and GEO research
+
+`.agents/explore/2026-07-30-seo-geo-state-of-the-art.md` (105 agents, 23 sources, 25
+claims adversarially verified) contradicts several requirements this CR implemented.
+Recorded here so the corrections are not lost; they belong in the CR text and, for the
+first item, in shipped code.
+
+* **FR-18's agent list is wrong, and this is the one that costs citations.** Vendors
+  separate training tokens from retrieval-for-citation tokens. `GPTBot` and `ClaudeBot`
+  are **training only**; naming them is a training-consent decision, not a citation
+  lever. The citation-relevant agents are missing: `ChatGPT-User`, `Claude-User`,
+  `Claude-SearchBot`, and, since Applebot renders, `Applebot-Extended`. Our shipped
+  `robots.txt` uses a bare `User-agent: *` with `Allow: /`, so nothing is blocked
+  today, but the comment naming the wrong five agents is misleading documentation.
+* **`FAQPage` is deprecated** (notice 2026-05-07, tooling support removed June 2026)
+  and **`HowTo` was retired in 2023**. Both are mandated by FR-41 and FR-42 and both
+  are shipped. They have no rich-result value. Keep them only on a speculative
+  LLM-parsing rationale and say so in the CR rather than implying eligibility.
+* **`SoftwareApplication` cannot qualify for a rich result here.** Google requires
+  `aggregateRating` or `review`, and self-publishing a rating violates its
+  self-serving review policy. AC-8's Rich Results Test assertion will never pass for
+  it and is now partly meaningless for `FAQPage`.
+* **The Lighthouse gate has no GEO justification.** Zero claims connecting performance
+  to AI citation survived verification. FR-36 to FR-38 and NFR-1 are perfectly well
+  justified on user-experience and classic-SEO grounds; the CR should simply not imply
+  a GEO rationale.
+* **`llms.txt` and `/index.md` are neither justified nor condemned.** Google is
+  explicitly neutral, a 300k-domain study found no clear effect, and no other vendor
+  has addressed them. The CR's Motivation currently asserts a "structural advantage no
+  amount of metadata provides", which the evidence does not support. Soften to a stated
+  bet. The Mermaid conversion retains its first-principles argument.
+* **Possible missing requirement:** ChatGPT Search draws on the Bing index, so
+  robots.txt permission is necessary but not sufficient. Phase 5 covers Search Console
+  and Bing registration but not IndexNow submission.
+* **Strategic open question worth more than any on-page tactic:** for a niche
+  open-source developer tool, discovery may flow through MCP-server registries and
+  GitHub, Hacker News, and Reddit co-occurrence rather than the project site. The
+  research could not settle it, and it may dominate everything in this CR.
+
+Pre-rendering is confirmed as the highest-value requirement, which validates the CR's
+central thesis, with the honesty caveat that the evidence is third-party edge telemetry
+rather than vendor confirmation and should be cited as such.
 
 ### TODO: fold metrics tracking into the project so regressions are visible
 
