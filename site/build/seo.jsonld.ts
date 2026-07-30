@@ -6,7 +6,7 @@
  *
  *  - the landing page: SoftwareApplication (nine named properties), FAQPage (the five
  *    named topics), and Organization expressing the GigWhere acknowledgement as a real
- *    `sponsor` property;
+ *    `contributor` property;
  *  - the quickstart page: HowTo mirroring docs/quickstart.md, plus a WebPage;
  *  - the concepts and troubleshooting pages: a TechArticle.
  *
@@ -23,13 +23,18 @@ import { canonicalUrl, type PageKey, type PageSeo } from './seo.pages'
 /** The public source repository, reused across several entity properties. */
 const REPO = 'https://github.com/desek/outlook-local-mcp'
 
-/** The GigWhere site, acknowledged as a sponsor in the Organization entity (FR-43). */
+/** The GigWhere site, acknowledged as a contributor in the Organization entity (FR-43). */
 const GIGWHERE = 'https://gigwhere.com'
 
 /**
- * organization is the publisher Organization entity. It names GigWhere as a `sponsor`
- * so the acknowledgement is a first-class structured-data property and not only footer
- * text (FR-43).
+ * organization is the publisher Organization entity. It names GigWhere as a
+ * `contributor` so the acknowledgement is a first-class structured-data property and
+ * not only footer text (FR-43).
+ *
+ * `contributor` rather than `sponsor` is deliberate: GigWhere contributed time and
+ * testing support, not money or goods, and schema.org `sponsor` denotes support
+ * through a pledge, promise, or financial contribution. Structured data is read as
+ * fact by generative engines, so the property has to match the actual relationship.
  */
 function organization(): Record<string, unknown> {
   return {
@@ -37,7 +42,7 @@ function organization(): Record<string, unknown> {
     name: 'Outlook Local MCP',
     url: SITE_ORIGIN,
     logo: `${SITE_ORIGIN}/icon.png`,
-    sponsor: {
+    contributor: {
       '@type': 'Organization',
       name: 'GigWhere',
       url: GIGWHERE,

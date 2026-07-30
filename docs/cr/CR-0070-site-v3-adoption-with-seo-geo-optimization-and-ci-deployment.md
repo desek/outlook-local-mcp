@@ -96,8 +96,10 @@ observable rather than inferred.
   carries no meaning to a model once flattened.
 * There is no Lighthouse budget, so performance, accessibility, and SEO regressions
   would ship unnoticed.
-* An acknowledgement backlink to `https://gigwhere.com` is owed for testing support
-  and for providing the domain.
+* An acknowledgement backlink to `https://gigwhere.com` is owed for the time and
+  testing support GigWhere contributed. No goods or payment were involved: the domain
+  was bought by the change owner. This matters for two decisions below, the
+  structured-data property in FR-43 and the dofollow requirement in FR-48.
 
 ## Current State
 
@@ -411,7 +413,11 @@ flowchart TD
 42. The quickstart page **MUST** include a `HowTo` entity mirroring
     `docs/quickstart.md`.
 43. An `Organization` entity **MUST** express the GigWhere acknowledgement as a real
-    property (`sponsor` or `contributor`), not only as footer text.
+    property, not only as footer text. It **MUST** be `contributor` rather than
+    `sponsor`: GigWhere contributed time and testing support, not money or goods, and
+    schema.org `sponsor` denotes support "through a pledge, promise, or financial
+    contribution". Structured data is read by generative engines as fact, so an
+    inaccurate property is worse here than in prose.
 44. The page structure **MUST** support question-form headings with answer-first
     section openings, meaning each section owns its own heading element and its lead
     paragraph is addressable. Writing that copy is deferred (see "Deferred to a
@@ -425,7 +431,11 @@ flowchart TD
     literal `<a href>` in the pre-rendered HTML, not injected by JavaScript.
 47. The acknowledgement **MUST** thank GigWhere for support and testing and **MUST**
     end with a heart emoji, for example "Support and testing by GigWhere ❤️".
-48. That link **MUST NOT** carry `rel="nofollow"` or `rel="sponsored"`, and the anchor
+48. That link **MUST NOT** carry `rel="nofollow"` or `rel="sponsored"`. This is
+    sound rather than merely convenient: search-engine guidance reserves those for
+    links given in exchange for payment or goods, and nothing was exchanged here. The
+    acknowledgement is editorial gratitude for contributed time, so a plain editorial
+    link is the accurate signal. The anchor
     text **MUST** be the GigWhere name so the link text carries the brand rather than
     the emoji. The heart **MUST** sit outside the anchor and **MUST** be marked
     `aria-hidden`, since it is decorative and a screen reader announcing "red heart"
@@ -935,7 +945,7 @@ Then the test reports no errors
 Given the site has been built
 When the landing page is inspected
 Then SoftwareApplication, FAQPage, and Organization entities are present
-  And the Organization entity expresses the GigWhere acknowledgement as a property
+  And the Organization entity expresses the GigWhere acknowledgement as a contributor property
 And when the quickstart page is inspected
 Then a HowTo entity is present
 ```
