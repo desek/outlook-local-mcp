@@ -11,7 +11,7 @@ source-branch: dev/site-v3
 source-commit: b3e79ba
 ---
 
-# Site v3 Adoption with SEO and GEO Optimization, GigWhere Backlink, and CI Deployment to gh-pages
+# Site v3 Adoption: SEO and GEO Foundation, Markdown Representation, Build Provenance, Lighthouse Budget, and CI Deployment to gh-pages
 
 ## Change Summary
 
@@ -20,8 +20,15 @@ never been in version control. A separately developed v3 of the design now exist
 and is judged materially better than what the repository can produce, so it becomes
 the site. This change request brings that source under version control, adds a
 GitHub Actions workflow that builds and publishes it to the `gh-pages` branch,
-pre-renders it so its content exists without JavaScript, adds the full SEO and GEO
-surface, and adds a visible acknowledgement backlink to `https://gigwhere.com`.
+pre-renders it so its content exists without JavaScript, adds the SEO and GEO
+foundation, emits a Markdown representation of every page served under content
+negotiation, stamps build provenance into the artifact, and adds a visible
+acknowledgement backlink to `https://gigwhere.com`.
+
+This CR is deliberately scoped to **foundation, not wording**. Correcting the site's
+factual copy is deferred to a follow-up CR; see "Deferred to a follow-up CR" below
+for what that leaves knowingly wrong on the live site and why that trade is
+acceptable.
 
 The dominant technical problem is that the v3 build emits a document whose body is
 `<div id="root"></div>` and nothing else: **zero characters of text without
@@ -59,15 +66,19 @@ Three specific gaps motivate this change:
   reviewable, which is the governance defect this CR closes by vendoring the source
   and moving deployment into CI.
 
-The v3 source also carries factual errors that must not ship. Its meta description
-claims "23 MCP tools", and `ARCHITECTURE.md` sections 9 and 10 are built around a
-"23 TOOLS" accordion grouped into Account, Diagnostics, Calendar, and Mail. There
-is no Diagnostics domain. Since CR-0060 the surface has been four aggregate domain
-tools; the registry currently defines 42 verbs (calendar 15, mail 13, account 7,
-system 7, each count including that domain's `help` verb), of which 33 are
-registered in the default gated configuration. A wrong number on a page a
-generative engine quotes verbatim is worse than a vague one, because the error then
-propagates into answers this project cannot correct.
+A fourth driver is specific to how models consume pages. HTML is a lossy carrier for
+a retrieval pipeline: the parser has to strip presentation to recover meaning, and
+diagrams drawn as SVG carry no meaning at all once flattened. Serving a Markdown
+representation of each page, with the SVG diagrams re-expressed as Mermaid, hands a
+model the content in the form it would otherwise have to reconstruct, and Mermaid in
+particular turns a decorative diagram into something a model can read, quote, and
+reason about. That is a structural advantage no amount of metadata provides.
+
+Provenance is the last gap. Nothing currently identifies which commit produced the
+live site. That matters most exactly when it is hardest to get: a user reporting that
+the site is wrong, or a contributor asking whether a deploy landed. Stamping the
+commit, the build time, and the workflow run into the artifact makes the answer
+observable rather than inferred.
 
 ## Change Drivers
 
@@ -78,7 +89,12 @@ propagates into answers this project cannot correct.
 * The website source is not under version control, so the live site cannot be
   reviewed or reproduced.
 * Deployment is a manual push from a developer machine, with no CI path.
-* The published tool count and category model are factually wrong.
+* Nothing identifies which commit produced the live site, so a deploy cannot be
+  confirmed and a report about the site cannot be tied to an artifact.
+* HTML is a lossy carrier for retrieval, and the site's diagrams are SVG, which
+  carries no meaning to a model once flattened.
+* There is no Lighthouse budget, so performance, accessibility, and SEO regressions
+  would ship unnoticed.
 * An acknowledgement backlink to `https://gigwhere.com` is owed for testing support
   and for providing the domain.
 
@@ -123,10 +139,11 @@ control**, because `site-v3/` is ignored. Adopting the source carries them forwa
   `pnpm` field from `package.json` and warns when one is present.
 * **Toolchain bumped** to the latest release in each requested major.
 
-### Deployment target: the state changed under us
+### Deployment target: apex domain, temporarily disabled
 
-The custom domain has been **removed** since CR-0069 was abandoned. Verified
-2026-07-30:
+The custom domain is currently **not configured**, but only because it was disabled
+temporarily so the previous site could be inspected. The Cloudflare configuration was
+never changed. Verified 2026-07-30:
 
 | Item | State |
 |---|---|
@@ -137,12 +154,32 @@ The custom domain has been **removed** since CR-0069 was abandoned. Verified
 | Pages source | `gh-pages` branch, path `/`, `build_type: legacy` |
 | `https_enforced` | `true` |
 
-The consequence is load-bearing. The site is currently served from a GitHub Pages
-**project page**, where GitHub maps the branch root to the `/outlook-local-mcp/`
-subpath. The v3 source shipped `base: '/outlook-local-mcp/'`, which is correct for
-exactly that arrangement and wrong for an apex domain. The working copy was changed
-to `base: '/'` with a `public/CNAME` while the apex was still configured; that
-change now mismatches reality and must be reconciled by the decision in FR-1.
+DNS is intact and still points at GitHub Pages: the apex A records resolve to all
+four `185.199.{108,109,110,111}.153`, `www` CNAMEs to `desek.github.io`, and requests
+reach GitHub directly (`Server: GitHub.com`, no `cf-ray`), so the zone remains
+DNS-only. Re-enabling the Pages custom domain is therefore the only infrastructure
+step, and no DNS change is required.
+
+The base path still matters and is worth stating explicitly, because it is the defect
+that took the site down once already. The 2026-04-06 build works at github.io only
+because its `base: '/outlook-local-mcp/'` happens to match the project-page subpath
+that GitHub serves the branch root at. Under the apex domain the site moves to `/`
+and that prefix stops resolving. FR-1 fixes `base` at `/` accordingly.
+
+### Content negotiation is not something GitHub Pages can do
+
+Relevant because FR-34 requires it. Pages is a static host with no request-time
+logic: it sets `Vary: Accept-Encoding` and nothing else, and cannot branch on an
+`Accept` header. Verified against the live project page 2026-07-30.
+
+The Markdown representation itself is therefore split from the negotiation that
+serves it. Emitting `.md` files as build outputs (FR-30 to FR-33, FR-35) needs no
+infrastructure and works on plain Pages today, which is why those requirements stand
+alone and are the foundation. True `Accept`-based negotiation (FR-34) needs code at
+the edge, and the implementation choice carries a trade-off recorded under
+Alternative Approaches: a Cloudflare Worker can do it, but only if the zone is
+switched back from DNS-only to proxied, which reintroduces the SSL-mode and managed
+`robots.txt` concerns that made DNS-only the right call previously.
 
 ### Current State Diagram
 
@@ -224,15 +261,18 @@ flowchart TD
 
 **Deployment target and adoption**
 
-1. The change owner **MUST** decide the deployment target before implementation
-   starts, and the decision **MUST** be recorded in this CR. The two options are
-   mutually exclusive and each fixes several downstream values:
-   * **Apex custom domain** `outlook-local-mcp.com`: `base` is `/`,
-     `site/public/CNAME` contains the apex, the Pages custom domain is
-     reconfigured, and DNS is re-pointed. All absolute URLs use the apex.
-   * **GitHub Pages project page** `desek.github.io/outlook-local-mcp/`: `base` is
-     `/outlook-local-mcp/`, no `CNAME` is emitted, and all absolute URLs use the
-     project-page origin.
+1. The site **MUST** be served from the apex custom domain
+   `https://outlook-local-mcp.com`. This is settled, not open: the custom domain was
+   disabled only temporarily so the previous site could be inspected, and the
+   Cloudflare configuration was never changed. Verified 2026-07-30: the apex A
+   records still resolve to all four `185.199.{108,109,110,111}.153`, `www` still
+   CNAMEs to `desek.github.io`, and requests reach GitHub directly
+   (`Server: GitHub.com`, no `cf-ray`), so the zone remains DNS-only. Consequently:
+   * `base` **MUST** be `/`.
+   * `site/public/CNAME` **MUST** contain `outlook-local-mcp.com`.
+   * Every absolute URL **MUST** use the apex origin.
+   * The only infrastructure step is re-enabling the Pages custom domain, which was
+     removed by `gh-pages` commit `c12b6c5`. No DNS change is required.
 2. The repository **MUST** contain the website source at `site/` under version
    control, and the `/site-v3/` entry **MUST** be removed from `.gitignore`.
 3. The build **MUST** use pnpm with a committed `pnpm-lock.yaml`, and the pnpm
@@ -296,72 +336,100 @@ flowchart TD
     Google-hosted fonts, which both blocks rendering and transmits the visitor's IP
     address to a third party.
 
-**Factual accuracy**
+**Build provenance**
 
-25. No published page **MUST** contain the strings "23 MCP tools", "23 tools", or
-    "23 MCP TOOLS", nor describe a "Diagnostics" tool domain.
-26. Published tool facts **MUST** state four aggregate domain tools (`calendar`,
-    `mail`, `account`, `system`) and the current verb counts: 42 registered in
-    total, 33 in the default gated configuration, with per-domain counts of
-    calendar 15, mail 13, account 7, and system 7.
-27. Where a per-domain count reflects a fully-enabled configuration, the page
-    **MUST** state the gating alongside it.
-28. Every numeric or capability claim on the site **MUST** be verifiable against the
-    code or the published documentation, and any claim that cannot be substantiated
-    **MUST** be removed rather than softened into ambiguity.
-29. No page **MUST** contain an absolute or unfalsifiable security claim. Concretely,
-    the server exposes no network-reachable service and runs no persistent listener,
-    but interactive browser sign-in briefly binds a loopback-only port to receive
-    the OAuth redirect, and enabling OpenTelemetry adds an outbound OTLP connection.
-    Claims in this area **MUST** reflect that.
+25. Every published page **MUST** carry build provenance in the pre-rendered HTML,
+    identifying at minimum the commit SHA the site was built from, the build
+    timestamp in UTC, and the workflow run that produced it.
+26. Provenance **MUST** be machine-readable, not only a rendered string: it **MUST**
+    appear as `<meta>` tags in the head so a crawler or a support conversation can
+    read it without executing JavaScript.
+27. The build **MUST** emit `/build-info.json` at the site root containing the same
+    provenance fields, so it can be fetched directly.
+28. Provenance values **MUST** be injected by the build from the CI environment and
+    **MUST NOT** be committed to the repository as literals, so they cannot drift
+    from the artifact they describe.
+29. A local build with no CI environment **MUST** still succeed, marking provenance
+    explicitly as a local build rather than fabricating a commit or run identifier.
+
+**Markdown representation**
+
+30. The build **MUST** emit a Markdown representation of every published page at a
+    parallel path (for example `/index.md` alongside `/`, and
+    `/docs/concepts.md` alongside `/docs/concepts`).
+31. The Markdown representation **MUST** be generated from the same source as the
+    HTML, so the two cannot describe different content.
+32. Diagrams that exist as SVG components in the site **MUST** be rendered as
+    Mermaid fenced code blocks in the Markdown representation, not as image
+    references or omitted. This applies to the five capability and privacy diagrams.
+33. The Markdown representation **MUST** be served with
+    `Content-Type: text/markdown`.
+34. The site **MUST** serve the Markdown representation when a client requests a page
+    with `Accept: text/markdown`, returning the HTML representation otherwise, and
+    **MUST** set `Vary: Accept` on any negotiated response.
+35. `robots.txt` and `llms.txt` **MUST** advertise the Markdown paths so a crawler
+    that does not negotiate can still discover them.
+
+**Lighthouse and Core Web Vitals**
+
+36. A Lighthouse run against the built site **MUST** score at least 95 in
+    Performance, at least 95 in Accessibility, at least 95 in Best Practices, and
+    100 in SEO, measured on mobile emulation.
+37. Lighthouse **MUST** run in CI against the built output, and the workflow **MUST**
+    fail if any category falls below its threshold.
+38. The thresholds **MUST** be recorded in a committed configuration file rather than
+    passed as ad-hoc command arguments, so a regression is visible as a diff.
 
 **GEO**
 
-30. Every page **MUST** contain JSON-LD structured data valid under schema.org,
+39. Every page **MUST** contain JSON-LD structured data valid under schema.org,
     present in the pre-rendered head.
-31. The landing page **MUST** include a `SoftwareApplication` entity with `name`,
+40. The landing page **MUST** include a `SoftwareApplication` entity with `name`,
     `description`, `applicationCategory`, `operatingSystem`, `license`,
     `codeRepository`, `programmingLanguage`, `downloadUrl`, and `softwareVersion`.
-32. The landing page **MUST** include a `FAQPage` entity covering at minimum: what
+41. The landing page **MUST** include a `FAQPage` entity covering at minimum: what
     the project is, whether an Entra ID app registration is required, whether data
     leaves the user's machine, which Outlook features are supported, and how to
     connect it to Claude Desktop.
-33. The quickstart page **MUST** include a `HowTo` entity mirroring
+42. The quickstart page **MUST** include a `HowTo` entity mirroring
     `docs/quickstart.md`.
-34. An `Organization` entity **MUST** express the GigWhere acknowledgement as a real
+43. An `Organization` entity **MUST** express the GigWhere acknowledgement as a real
     property (`sponsor` or `contributor`), not only as footer text.
-35. Section headings **MUST** be phrased as questions where the section answers one,
-    and each section **MUST** open with a self-contained declarative sentence before
-    elaborating.
-36. Every page **MUST** display a last-updated date, with a matching JSON-LD
+44. The page structure **MUST** support question-form headings with answer-first
+    section openings, meaning each section owns its own heading element and its lead
+    paragraph is addressable. Writing that copy is deferred (see "Deferred to a
+    follow-up CR"); this CR delivers the structure it needs, not the wording.
+45. Every page **MUST** display a last-updated date, with a matching JSON-LD
     `dateModified`.
 
 **GigWhere backlink**
 
-37. The site footer **MUST** contain a link to `https://gigwhere.com` present as a
+46. The site footer **MUST** contain a link to `https://gigwhere.com` present as a
     literal `<a href>` in the pre-rendered HTML, not injected by JavaScript.
-38. That link **MUST NOT** carry `rel="nofollow"` or `rel="sponsored"`.
-39. `README.md` **MUST** carry the same acknowledgement, with wording matching the
+47. That link **MUST NOT** carry `rel="nofollow"` or `rel="sponsored"`.
+48. `README.md` **MUST** carry the same acknowledgement, with wording matching the
     footer.
 
 **CI deployment**
 
-40. A GitHub Actions workflow **MUST** build `site/` and publish the output to the
+49. A GitHub Actions workflow **MUST** build `site/` and publish the output to the
     `gh-pages` branch on push to `main` when files under `site/` or `docs/` change.
-41. The workflow **MUST** be the only mechanism that writes to `gh-pages`, and the
+50. The workflow **MUST** be the only mechanism that writes to `gh-pages`, and the
     branch **MUST NOT** be hand-edited.
-42. The workflow **MUST NOT** require any secret beyond the default `GITHUB_TOKEN`.
-43. The workflow **MUST** run the site's checks before publishing, and **MUST NOT**
+51. The workflow **MUST NOT** require any secret beyond the default `GITHUB_TOKEN`.
+52. The workflow **MUST** run the site's checks before publishing, and **MUST NOT**
     publish if any fail.
-44. `CNAME`, `robots.txt`, `sitemap.xml`, and `llms.txt` **MUST** be build outputs
+53. `CNAME`, `robots.txt`, `sitemap.xml`, and `llms.txt` **MUST** be build outputs
     rather than files placed on `gh-pages` by hand, so a rebuild cannot revert them.
-45. `extension/manifest.json` `homepage` **MUST** point at the FR-1 origin.
+54. `extension/manifest.json` `homepage` **MUST** be `https://outlook-local-mcp.com`.
 
 ### Non-Functional Requirements
 
 1. The site **MUST** achieve Largest Contentful Paint under 2.5 seconds, Cumulative
    Layout Shift under 0.1, and Interaction to Next Paint under 200 milliseconds,
-   measured by PageSpeed Insights on mobile.
+   measured on mobile. These are the field thresholds behind the Lighthouse
+   Performance score required by FR-36 and are stated separately because a passing
+   category score does not by itself guarantee each metric is within budget.
 2. The build **MUST** complete with no network access beyond the package registry.
 3. The site **MUST NOT** load third-party analytics, trackers, or any third-party
    resource that transmits visitor data, consistent with `PRIVACY.md`.
@@ -385,6 +453,40 @@ flowchart TD
 * `CONTRIBUTING.md`: Node and pnpm toolchain, site commands, `gh-pages` rule.
 * GitHub repository settings and DNS, if FR-1 selects the apex domain.
 
+## Deferred to a follow-up CR
+
+Copy correction is explicitly out of this CR. The change owner scoped this one to
+foundation: pre-rendering, the crawler surface, the Markdown representation,
+provenance, Lighthouse, and CI deployment. Wording comes next.
+
+What that leaves knowingly wrong on the live site, recorded here so it is not
+rediscovered as a surprise:
+
+* The meta description claims **"23 MCP tools"**.
+* `ToolsReferenceSection` is built around a **"23 TOOLS"** accordion grouped into
+  Account, **Diagnostics**, Calendar, and Mail. There is no Diagnostics domain.
+* `ConfigReferenceSection` advertises **"15 CONFIGURATION VARIABLES"**, a figure
+  nobody has verified against `internal/config`.
+* Section copy is not answer-shaped and headings are not question-form.
+* Security phrasing inherited from the earlier site includes absolute claims that do
+  not survive checking, such as no listening ports and credentials never leaving the
+  machine. Interactive browser sign-in binds a loopback port, and enabling
+  OpenTelemetry adds an outbound OTLP connection.
+
+The accurate figures, for the follow-up CR to use: four aggregate domain tools
+(`calendar`, `mail`, `account`, `system`) and 42 registered verbs, 33 in the default
+gated configuration, with per-domain counts of calendar 15, mail 13, account 7, and
+system 7, each including that domain's `help` verb.
+
+**The cost of deferring is real and worth naming.** This CR's entire thesis is that
+generative engines quote page claims verbatim, and it makes the site substantially
+easier to retrieve: pre-rendered, negotiable as Markdown, structured with JSON-LD.
+That amplifies whatever the page says, including the parts that are wrong. Deferral
+is a sequencing choice the change owner is entitled to make, and the foundation is
+genuinely the harder half, but the follow-up should land close behind rather than
+drift, because the window in which the wrong numbers are being indexed opens the day
+this ships.
+
 ## Scope Boundaries
 
 ### In Scope
@@ -393,8 +495,12 @@ flowchart TD
 * Pre-rendering the single page and the documentation pages.
 * Crawler files, canonical and social metadata, JSON-LD.
 * Self-hosting the fonts.
-* Correcting the stale tool facts and the security claims.
-* Question-form headings and answer-first section copy.
+* Build provenance in the HTML head and at `/build-info.json`.
+* A Markdown representation of every page, with SVG diagrams as Mermaid, served
+  under `Accept` negotiation.
+* A Lighthouse budget enforced in CI.
+* Re-enabling the Pages custom domain.
+* The structural groundwork question-form headings need, without writing them.
 * The GigWhere backlink, in the footer and `README.md`.
 * The CI build-and-deploy workflow.
 * A test suite covering the build-output guarantees.
@@ -405,14 +511,16 @@ flowchart TD
 
 * **Redesign.** The v3 design is adopted as authored. Layout, typography, and colour
   changes are deferred.
-* **Reproducing `ARCHITECTURE.md` sections 9 and 10 as authored.** Those are the
-  "23 TOOLS" and "15 CONFIGURATION VARIABLES" accordions. Their content model is
-  wrong (FR-25) and per-verb reference is owned by the verb registry and rendered
-  by `system.help`, so publishing a second copy to the web would create a competing
-  source of truth. Whether to publish a registry-generated equivalent is a separate
-  decision under its own CR. The existing `ToolsReferenceSection` and
-  `ConfigReferenceSection` components **MUST** either be corrected to the accurate
-  model or removed; they **MUST NOT** ship as authored.
+* **All copy correction**, including the tool counts, the Diagnostics category, the
+  configuration-variable count, answer-shaped section openings, question-form
+  heading wording, and the inherited absolute security claims. See "Deferred to a
+  follow-up CR".
+* **Deciding the fate of `ToolsReferenceSection` and `ConfigReferenceSection`.**
+  Whether a per-verb reference belongs on the site at all is a governance question,
+  since that content is owned by the verb registry and rendered by `system.help`,
+  and answering it means rewriting the sections. Both are carried across unchanged
+  and both are pre-rendered like every other section; correcting or removing them
+  belongs to the copy CR.
 * **Three.js.** `ARCHITECTURE.md` Asset 10 specifies `@react-three/fiber` for the
   brand-reveal particles. What was built is a canvas implementation and neither
   Three.js package is a dependency. The canvas implementation stands; adopting
@@ -449,8 +557,34 @@ flowchart TD
   worth recording that `vite-react-ssg` pins `react-router-dom` to 6.x, and React
   Router 7 breaks its build outright, so that route would have imported a dependency
   conflict along with two moderate advisories that cannot be patched.
-* **Serve the documentation as raw Markdown.** Rejected. No structured data, no
-  canonical, no heading semantics, and weak retrieval relative to semantic HTML.
+* **Serve the documentation as raw Markdown only.** Rejected as a replacement for
+  HTML: no structured data, no canonical, no heading semantics, and weak retrieval
+  relative to semantic HTML. Serving Markdown *alongside* HTML under negotiation is a
+  different proposition and is what FR-30 to FR-35 require.
+
+### How to serve the Markdown representation
+
+GitHub Pages cannot branch on an `Accept` header, so FR-34 needs a decision. The
+options, in the order they should be considered:
+
+* **Parallel `.md` paths with no negotiation.** Emit `/index.md` and `/docs/*.md` and
+  advertise them in `robots.txt` and `llms.txt`. Zero infrastructure, works on plain
+  Pages, and satisfies FR-30 to FR-33 and FR-35. It does not satisfy FR-34, because
+  a client sending `Accept: text/markdown` to `/` still receives HTML. This is the
+  mandatory foundation regardless of what is chosen for negotiation.
+* **Cloudflare Worker in front of Pages (recommended for FR-34).** A Worker inspects
+  `Accept`, rewrites to the `.md` variant when Markdown is preferred, and sets
+  `Vary: Accept`. It is the only option that satisfies FR-34 literally. The cost is
+  that the zone must move from DNS-only back to proxied, which reintroduces exactly
+  the concerns that made DNS-only correct before: SSL/TLS mode must be Full (strict)
+  and not Flexible, Cloudflare's managed Content Signals `robots.txt` must not be
+  allowed to occupy `/robots.txt`, and Bot Fight Mode must not challenge the AI
+  crawlers FR-17 deliberately admits. Note the v3 source arrived with a `.wrangler`
+  directory, so a Worker was evidently once contemplated for this project.
+* **Move hosting off Pages entirely** (Cloudflare Pages, or any host with
+  request-time logic). Rejected for this CR. It would make negotiation trivial, but
+  it discards a working, free, already-configured deployment target and turns a
+  scoped change into a migration.
 
 ## Impact Assessment
 
@@ -490,17 +624,19 @@ records that.
 Five phases, ordered so the site is tracked and deployable before discovery work is
 layered on.
 
-**Phase 1: Adopt, track, and settle the target.** Record the FR-1 decision. Move
-`site-v3/` to `site/`, remove the `/site-v3/` ignore entry, add `site/node_modules`
-and `site/dist`. Set `base` to match the FR-1 decision and emit `CNAME` only if the
-apex was chosen. Self-host the Inter and Geist Mono fonts and remove the
-Google-hosted links. Confirm MSW is absent and that nothing is awaited before the
-first render. Build and verify locally.
+**Phase 1: Adopt and track.** Move `site-v3/` to `site/`, remove the `/site-v3/`
+ignore entry, add `site/node_modules` and `site/dist`. Set `base` to `/` and emit
+`site/public/CNAME` containing the apex. Self-host the Inter and Geist Mono fonts and
+remove the Google-hosted links. Confirm MSW is absent and that nothing is awaited
+before the first render. Build and verify locally.
 
-**Phase 2: CI deployment.** Add `.github/workflows/deploy-site.yml` building `site/`
-with pnpm and publishing to `gh-pages` on push to `main` affecting `site/` or
-`docs/`, using only `GITHUB_TOKEN`. Wire the site's checks in as a pre-publish gate.
-Record in `CONTRIBUTING.md` that `gh-pages` is CI-managed.
+**Phase 2: CI deployment and provenance.** Add
+`.github/workflows/deploy-site.yml` building `site/` with pnpm and publishing to
+`gh-pages` on push to `main` affecting `site/` or `docs/`, using only
+`GITHUB_TOKEN`. Wire the site's checks in as a pre-publish gate. Inject build
+provenance from the CI environment into the head and `/build-info.json`, with a
+local-build fallback. Re-enable the Pages custom domain. Record in
+`CONTRIBUTING.md` that `gh-pages` is CI-managed.
 
 **Phase 3: Pre-rendering and documentation pages.** Add a `react-dom/server`
 pre-render step that renders the app to HTML at build time and injects it into
@@ -510,40 +646,49 @@ narrative docs and emitting one page each as separate Vite entries, preserving
 heading anchors. Verify full text without JavaScript and exactly one `<h1>` per
 page.
 
-**Phase 4: Crawler surface and metadata.** Add `robots.txt`, the `llms.txt` copy
-step, and a sitemap generator driven by the emitted page list. Add canonical, Open
-Graph, Twitter card, and JSON-LD (`SoftwareApplication`, `FAQPage`, `HowTo`,
-`Organization`). Add last-updated dates and `dateModified`. Add the GigWhere footer
-link and its JSON-LD property.
+**Phase 4: Crawler surface, metadata, and the Markdown representation.** Add
+`robots.txt`, the `llms.txt` copy step, and a sitemap generator driven by the emitted
+page list. Add canonical, Open Graph, Twitter card, and JSON-LD
+(`SoftwareApplication`, `FAQPage`, `HowTo`, `Organization`). Add last-updated dates
+and `dateModified`. Add the GigWhere footer link and its JSON-LD property. Emit a
+Markdown representation of every page, converting the five SVG diagrams to Mermaid
+fences, advertise the paths in `robots.txt` and `llms.txt`, and add the negotiation
+layer chosen under Alternative Approaches.
 
-**Phase 5: Content accuracy, references, and registration.** Correct every stale
-tool fact and security claim. Decide and act on `ToolsReferenceSection` and
-`ConfigReferenceSection`. Rewrite headings into question form with answer-first
-openings. Add the `README.md` acknowledgement. Set `extension/manifest.json`
-`homepage` and the repository `homepageUrl`. Register in Search Console and Bing,
-submit the sitemap, and file the Change of Address if the apex was chosen.
+**Phase 5: Lighthouse budget, references, and registration.** Add the committed
+Lighthouse threshold configuration and wire Lighthouse into the workflow as a
+failing gate. Close whatever gap the first run exposes, which is where the
+performance work actually lands. Add the `README.md` acknowledgement. Set
+`extension/manifest.json` `homepage` and the repository `homepageUrl` to the apex.
+Register in Search Console and Bing, submit the sitemap, and file the Change of
+Address from the `desek.github.io` property. Copy correction is not part of this
+phase; see "Deferred to a follow-up CR".
 
 ### Implementation Flow
 
 ```mermaid
 flowchart LR
     subgraph P1["Phase 1: Adopt"]
-        A1["Decide FR-1 target"] --> A2["site-v3 to site/, tracked"]
-        A2 --> A3["base and CNAME, self-host fonts"]
+        A1["site-v3 to site/, tracked"] --> A2["base slash, CNAME apex"]
+        A2 --> A3["Self-host fonts"]
     end
-    subgraph P2["Phase 2: CI"]
+    subgraph P2["Phase 2: CI and provenance"]
         B1["deploy-site.yml"] --> B2["Checks gate publish"]
+        B2 --> B3["Provenance meta and build-info.json"]
+        B3 --> B4["Re-enable Pages custom domain"]
     end
     subgraph P3["Phase 3: Pre-render"]
         C1["react-dom/server prerender"] --> C2["Guard browser-only components"]
         C2 --> C3["Docs pages as Vite entries"]
     end
-    subgraph P4["Phase 4: Crawler surface"]
+    subgraph P4["Phase 4: Crawler surface and Markdown"]
         D1["robots, sitemap, llms.txt"] --> D2["canonical, OG, Twitter, JSON-LD"]
         D2 --> D3["GigWhere link and property"]
+        D3 --> D4["Markdown twins, SVG to Mermaid"]
+        D4 --> D5["Accept negotiation layer"]
     end
-    subgraph P5["Phase 5: Accuracy"]
-        E1["Fix tool and security claims"] --> E2["Question-form headings"]
+    subgraph P5["Phase 5: Lighthouse and registration"]
+        E1["Committed thresholds, CI gate"] --> E2["Close the measured gap"]
         E2 --> E3["Manifest, README, Search Console"]
     end
     P1 --> P2 --> P3 --> P4 --> P5
@@ -595,16 +740,23 @@ output plus a post-deploy live check.
 | `site/tests/metadata.test.ts` | `requiredEntitiesPresent` | Asserts `SoftwareApplication`, `FAQPage`, `Organization` on the landing page and `HowTo` on quickstart | `dist` | Present |
 | `site/tests/metadata.test.ts` | `everyImageHasAltText` | Asserts no `<img>` without `alt` | All pages | None |
 | `site/tests/metadata.test.ts` | `noThirdPartyResourceHosts` | Asserts no third-party resource requests, fonts included | All pages | None |
-| `site/tests/content.test.ts` | `noStaleToolClaims` | Asserts absence of `23 MCP tools`, `23 tools`, `5 domains`, `Diagnostics` as a domain | `dist` | Zero matches |
-| `site/tests/content.test.ts` | `noAbsoluteSecurityClaim` | Asserts absence of unfalsifiable security phrasing | `dist` | Zero matches |
 | `site/tests/content.test.ts` | `gigwhereBacklinkDofollow` | Asserts a literal pre-rendered `<a href="https://gigwhere.com">` without nofollow or sponsored | `dist/index.html` | Present |
+| `site/tests/provenance.test.ts` | `provenanceMetaPresent` | Asserts commit, build time, and run meta tags in every pre-rendered head | All pages | Present |
+| `site/tests/provenance.test.ts` | `buildInfoMatchesMeta` | Asserts `/build-info.json` agrees with the meta tags | `dist` | Equal |
+| `site/tests/provenance.test.ts` | `localBuildIsLabelled` | Asserts a build with no CI env marks provenance local rather than fabricating values | Built without CI env | Labelled local |
+| `site/tests/markdown.test.ts` | `everyPageHasMarkdownTwin` | Asserts a `.md` counterpart exists for every emitted HTML page | `dist` | Set equality |
+| `site/tests/markdown.test.ts` | `markdownMatchesHtmlContent` | Asserts the Markdown carries the same headings and body text as its HTML twin | Both representations | Equivalent |
+| `site/tests/markdown.test.ts` | `svgDiagramsBecomeMermaid` | Asserts each of the five SVG diagrams appears as a Mermaid fence, not an image or omission | `dist/**/*.md` | Mermaid fences |
+| `site/tests/markdown.test.ts` | `markdownPathsAdvertised` | Asserts `robots.txt` and `llms.txt` reference the Markdown paths | `dist` | Present |
+| `site/tests/lighthouse.test.ts` | `thresholdsConfigCommitted` | Asserts the Lighthouse threshold config exists and declares all four categories | Config file | Present |
 | `site/tests/content.test.ts` | `lastUpdatedMatchesJsonLd` | Asserts the visible date equals JSON-LD `dateModified` | All pages | Equal |
 | `site/tests/sitemap.test.ts` | `sitemapCoversAllPages` | Asserts set equality between emitted HTML pages and sitemap entries | `dist`, `sitemap.xml` | Equal |
 | `site/tests/sitemap.test.ts` | `sitemapUsesTargetOrigin` | Asserts every `<loc>` uses the FR-1 origin | `sitemap.xml` | All match |
 | `site/tests/docs-pages.test.ts` | `docsAnchorsPreserved` | Asserts every registry `SeeDocs` anchor resolves in published HTML | Registry values, `dist` | All resolve |
 | `site/tests/docs-pages.test.ts` | `docsProseNotDuplicated` | Asserts `site/` contains no copy of the narrative Markdown prose | `site/` tree | Absent |
 | `site/tests/build-failure.test.ts` | `missingDocFailsBuild` | Asserts the build exits non-zero naming a renamed doc file | Renamed fixture | Non-zero, named |
-| `.agents/scripts/verify-site-deploy.sh` | n/a | Post-deploy live check of status codes, redirects, and crawler files | Live site | All pass |
+| `.agents/scripts/verify-site-deploy.sh` | n/a | Post-deploy live check of status codes, redirects, crawler files, provenance, and `Accept: text/markdown` negotiation | Live site | All pass |
+| CI (Lighthouse) | n/a | Runs Lighthouse on mobile emulation against the built site and fails below threshold | `dist` | Performance, Accessibility, Best Practices at least 95; SEO 100 |
 
 The test runner **MUST** build before asserting, and **MUST NOT** assert against a
 pre-existing `dist`. A suite that can pass against stale output is worse than no
@@ -622,13 +774,14 @@ Not applicable. The v3 source ships no tests, so there is nothing to retire.
 
 ## Acceptance Criteria
 
-### AC-1: The deployment target is decided and consistent
+### AC-1: The apex origin is applied consistently
 
 ```gherkin
-Given the FR-1 decision is recorded in this CR
+Given the apex domain is the deployment target per FR-1
 When the site is built
-Then the base path, the CNAME presence, and every absolute URL match that decision
-  And no artifact references the other option's origin
+Then base is / and no asset reference carries a project-page prefix
+  And CNAME contains outlook-local-mcp.com
+  And every absolute URL uses the apex origin
 ```
 
 ### AC-2: Content exists without JavaScript
@@ -709,24 +862,23 @@ And when the quickstart page is inspected
 Then a HowTo entity is present
 ```
 
-### AC-10: Published facts are accurate
+### AC-10: Build provenance is present and machine-readable
 
 ```gherkin
-Given the MCP surface is four aggregate domain tools with 42 registered verbs, 33 in the default gated configuration
-When any published page is inspected
-Then the strings "23 MCP tools", "23 tools", and "5 domains" appear nowhere
-  And no page describes a Diagnostics tool domain
-  And any per-domain count that reflects a fully-enabled configuration states its gating
+Given the site has been built in CI
+When any published page's pre-rendered head is inspected
+Then it contains meta tags naming the commit SHA, the UTC build timestamp, and the workflow run
+And when /build-info.json is fetched
+Then it returns the same values as the meta tags
 ```
 
-### AC-11: No unfalsifiable security claim is published
+### AC-11: A local build declares itself as local
 
 ```gherkin
-Given the server binds a loopback port during interactive browser sign-in
-  And enabling OpenTelemetry adds an outbound OTLP connection
-When any published page is inspected
-Then no page claims the server has no attack surface, no listening ports, or that credentials never leave the machine
-  And network claims state their qualifications
+Given no CI environment variables are present
+When the site is built locally
+Then the build succeeds
+  And the provenance values identify the build as local rather than naming a commit or run
 ```
 
 ### AC-12: The GigWhere backlink is crawlable and dofollow
@@ -748,7 +900,48 @@ Then no reference targets a host other than the site's own origin
   And the Inter and Geist Mono fonts are served from the site
 ```
 
-### AC-14: CI is the only path to gh-pages
+### AC-14: A Markdown representation exists for every page
+
+```gherkin
+Given the site has been built
+When the output is inspected
+Then every published HTML page has a Markdown counterpart at a parallel path
+  And each Markdown file is served with Content-Type text/markdown
+  And robots.txt and llms.txt advertise the Markdown paths
+```
+
+### AC-15: SVG diagrams appear as Mermaid in Markdown
+
+```gherkin
+Given a page contains one of the five SVG capability or privacy diagrams
+When that page's Markdown representation is inspected
+Then the diagram appears as a Mermaid fenced code block
+  And it is not an image reference and not omitted
+```
+
+### AC-16: Content negotiation returns the requested representation
+
+```gherkin
+Given the negotiation layer is deployed
+When a page is requested with Accept: text/markdown
+Then the response body is the Markdown representation
+  And Content-Type is text/markdown
+  And the response carries Vary: Accept
+And when the same page is requested with Accept: text/html
+Then the response body is the HTML representation
+```
+
+### AC-17: Lighthouse thresholds are enforced in CI
+
+```gherkin
+Given the Lighthouse thresholds are recorded in a committed configuration file
+When the deploy workflow runs Lighthouse against the built site on mobile emulation
+Then Performance, Accessibility, and Best Practices each score at least 95
+  And SEO scores 100
+  And the workflow fails if any category falls below its threshold
+```
+
+### AC-18: CI is the only path to gh-pages
 
 ```gherkin
 Given a contributor changes a file under site/ and merges to main
@@ -758,7 +951,7 @@ Then gh-pages reflects the new build
   And the workflow used no secret beyond GITHUB_TOKEN
 ```
 
-### AC-15: Failing checks block publication
+### AC-19: Failing checks block publication
 
 ```gherkin
 Given a site check fails
@@ -767,7 +960,7 @@ Then the workflow fails
   And gh-pages is not updated
 ```
 
-### AC-16: Build outputs cannot be reverted by a rebuild
+### AC-20: Build outputs cannot be reverted by a rebuild
 
 ```gherkin
 Given CNAME, robots.txt, sitemap.xml, and llms.txt are emitted by the build
@@ -775,16 +968,16 @@ When the workflow rebuilds and republishes
 Then all four are present in gh-pages with their intended content
 ```
 
-### AC-17: The site is reachable at the decided target
+### AC-21: The site is reachable at the decided target
 
 ```gherkin
-Given the workflow has published and Pages has rebuilt
-When the FR-1 target URL is requested
+Given the workflow has published, the Pages custom domain is re-enabled, and Pages has rebuilt
+When https://outlook-local-mcp.com/ is requested
 Then it returns 200 over HTTPS
   And every referenced asset returns 200
 ```
 
-### AC-18: Core Web Vitals thresholds are met
+### AC-22: Core Web Vitals thresholds are met
 
 ```gherkin
 Given the site is live
@@ -794,7 +987,7 @@ Then Largest Contentful Paint is under 2.5 seconds
   And Interaction to Next Paint is under 200 milliseconds
 ```
 
-### AC-19: Reduced motion is honoured
+### AC-23: Reduced motion is honoured
 
 ```gherkin
 Given a visitor has prefers-reduced-motion set to reduce
@@ -803,14 +996,14 @@ Then scroll-driven and looping animation does not run
   And all content remains visible and legible
 ```
 
-### AC-20: Search engines are notified
+### AC-24: Search engines are notified
 
 ```gherkin
 Given the site is live and the sitemap is served
 When Google Search Console and Bing Webmaster Tools are configured
 Then the property is verified in both
   And sitemap.xml is submitted to both
-  And if the apex domain was chosen, a Change of Address is filed from the project-page property
+  And a Change of Address is filed from the desek.github.io property
 ```
 
 ## Quality Standards Compliance
@@ -907,10 +1100,13 @@ rather than computing it during render.
 **Impact:** high
 **Mitigation:** this defect has already occurred once on this project and took the
 live site down; it is also the reason the current 2026-04-06 build works at
-github.io. FR-1 forces the decision up front and AC-1 asserts internal consistency
-across the base path, the `CNAME`, and every absolute URL. Note the direction of
-travel matters: moving to the apex requires reconfiguring the Pages custom domain
-and DNS, since `CNAME` was deleted by `c12b6c5`.
+github.io. FR-1 fixes `base` at `/` for the apex and AC-1 asserts consistency across
+the base path, the `CNAME`, and every absolute URL. The infrastructure step is small
+because DNS was never changed: only the Pages custom domain deleted by `c12b6c5`
+needs re-enabling. The sequencing risk is the reverse of last time, though. Deploying
+`base: '/'` while the custom domain is still disabled would serve a broken site at
+github.io, so the custom domain must be re-enabled as part of the same change rather
+than after it.
 
 ### Risk 4: The site build breaks on a documentation change
 
@@ -921,17 +1117,42 @@ for `SeeDocs` links. AC-7 requires a loud failure on a missing file, and
 `docsAnchorsPreserved` cross-checks every registry anchor, so an anchor rename
 fails CI rather than shipping dead deep links.
 
-### Risk 5: The stale content model is reproduced rather than corrected
+### Risk 5: The Markdown representation drifts from the HTML
 
 **Likelihood:** medium
-**Impact:** high
-**Mitigation:** the wrong facts are not incidental, they are structural: whole
-sections are built around a "23 TOOLS" accordion and a Diagnostics category.
-`ToolsReferenceSection` and `ConfigReferenceSection` are named explicitly in Scope
-Boundaries as must-correct-or-remove, and `noStaleToolClaims` fails the build
-output if any of the strings survive.
+**Impact:** medium
+**Mitigation:** two representations of the same page is two things to keep in step,
+and the failure is silent: a model reading the Markdown would be told something the
+HTML no longer says. FR-31 requires both to be generated from one source rather than
+maintained in parallel, and `markdownMatchesHtmlContent` asserts equivalence of
+headings and body text on every build. Hand-authoring the Markdown is the specific
+thing to avoid.
 
-### Risk 6: Fonts remain third-party
+### Risk 6: The negotiation layer reintroduces the Cloudflare proxy problems
+
+**Likelihood:** medium
+**Impact:** medium
+**Mitigation:** FR-34 cannot be satisfied on plain Pages, and the recommended
+implementation is a Worker, which requires proxying the zone. Proxying is what
+previously forced Flexible SSL (an unencrypted origin hop), let Cloudflare's managed
+Content Signals file occupy `/robots.txt`, and risked Bot Fight Mode challenging the
+AI crawlers FR-17 deliberately admits. If the Worker path is taken, SSL/TLS must be
+Full (strict), the managed `robots.txt` must be disabled, and bot protection must be
+verified against `GPTBot` and `ClaudeBot` before it is considered done. The static
+`.md` paths under FR-30 to FR-33 and FR-35 work without any of this, so the
+foundation is not blocked on resolving it.
+
+### Risk 7: Deferred copy is amplified rather than merely postponed
+
+**Likelihood:** high
+**Impact:** medium
+**Mitigation:** this CR makes the site markedly easier to retrieve and quote while
+leaving known-wrong facts in place, so the effect of deferral is not neutral. The
+wrong figures are enumerated under "Deferred to a follow-up CR" together with the
+correct ones, so the follow-up starts from a list rather than a rediscovery, and the
+recommendation is that it lands close behind this CR rather than drifting.
+
+### Risk 8: Fonts remain third-party
 
 **Likelihood:** low
 **Impact:** medium
@@ -939,7 +1160,7 @@ output if any of the strings survive.
 visitor IPs, which contradicts `PRIVACY.md`. `noThirdPartyResourceHosts` asserts
 their absence so a reintroduction fails CI.
 
-### Risk 7: gh-pages is hand-edited after the workflow exists
+### Risk 9: gh-pages is hand-edited after the workflow exists
 
 **Likelihood:** medium
 **Impact:** low
@@ -948,22 +1169,29 @@ their absence so a reintroduction fails CI.
 the crawler files build outputs removes the incentive for the most likely edits, and
 `CONTRIBUTING.md` states the rule.
 
-### Risk 8: Bundle weight regresses Core Web Vitals
+### Risk 10: Bundle weight blocks the Lighthouse budget
 
 **Likelihood:** medium
 **Impact:** medium
 **Mitigation:** the current build is 448 KB of JavaScript (137 KB gzipped) plus
 70 KB of CSS (12.9 KB gzipped), and GSAP, Lenis, and several canvas components are
 all client-side. Pre-rendering improves perceived load but does not reduce bundle
-size. Code-split the motion layer so it is not on the critical path, and measure
-against NFR-1 rather than assuming.
+size, and FR-36 sets a hard Performance floor of 95 that a 448 KB bundle may not
+clear on mobile emulation. Code-split the motion layer off the critical path, and
+treat the first Lighthouse run as a measurement rather than a formality: it is the
+step most likely to expose real work, which is why it has its own phase.
 
 ## Dependencies
 
-* **Blocking:** the FR-1 deployment-target decision. It fixes the base path, the
-  `CNAME`, and every absolute URL, and cannot be deferred past Phase 1.
-* If the apex is chosen, requires access to the Cloudflare DNS zone and the GitHub
-  Pages settings to reconfigure the custom domain deleted by `c12b6c5`.
+* **Blocking:** the implementation choice for the FR-34 negotiation layer, since a
+  Worker requires proxying the Cloudflare zone and that has consequences recorded
+  under Risk 6. The static Markdown paths are not blocked on it.
+* Requires GitHub Pages settings access to re-enable the custom domain deleted by
+  `c12b6c5`. No DNS change is required: the zone was never modified.
+* If the Worker path is chosen for FR-34, requires Cloudflare access to proxy the
+  zone and configure SSL/TLS, the managed `robots.txt`, and bot protection.
+* A follow-up CR **MUST** correct the deferred copy. This CR should not be considered
+  finished work on the site's content, only on its foundation.
 * Depends on CR-0065 for the documentation governance rules that decide what is
   published to the web and what stays repository-only.
 * Depends on CR-0060 and CR-0068 for the accurate description of the tool surface.
@@ -976,12 +1204,12 @@ against NFR-1 rather than assuming.
 
 | Phase | Effort | Notes |
 |-------|--------|-------|
-| Phase 1: Adopt, track, settle target | 3 to 5 hours | Font self-hosting is most of it |
-| Phase 2: CI deployment | 2 to 3 hours | |
+| Phase 1: Adopt and track | 3 to 5 hours | Font self-hosting is most of it |
+| Phase 2: CI deployment and provenance | 3 to 5 hours | Includes re-enabling the custom domain |
 | Phase 3: Pre-render and docs pages | 10 to 18 hours | Widest variance; depends entirely on how the motion and canvas layers tolerate server rendering |
-| Phase 4: Crawler surface and metadata | 5 to 7 hours | |
-| Phase 5: Content accuracy and registration | 6 to 9 hours | Copy rewriting and the reference-section decision dominate |
-| **Total** | **26 to 42 hours** | |
+| Phase 4: Crawler surface, metadata, Markdown | 8 to 12 hours | The SVG to Mermaid conversion and the negotiation layer are the new weight |
+| Phase 5: Lighthouse budget and registration | 4 to 10 hours | Range is wide because the first Lighthouse run decides how much performance work the 448 KB bundle needs |
+| **Total** | **28 to 50 hours** | Copy correction is excluded and deferred |
 
 ## Decision Outcome
 
@@ -1001,6 +1229,22 @@ with its React Router 6 pin.
 Phasing puts adoption and CI first so the site is tracked, reviewable, and
 deployable before the highest-uncertainty work begins, and so the pre-rendering
 risk cannot block getting the source under version control.
+
+Copy correction is deferred at the change owner's direction, which makes this CR a
+foundation change rather than a finished site. That is a coherent split: the
+foundation is the harder and more structural half, and it is what every later content
+change depends on. The trade it accepts is that the site becomes easier to retrieve
+and quote before its facts are right, which is why the wrong figures are enumerated
+rather than left to be rediscovered, and why Risk 7 recommends the follow-up land
+close behind.
+
+The Markdown representation is treated as a first-class output rather than a
+convenience. HTML forces a retrieval pipeline to reconstruct meaning from
+presentation, and an SVG diagram carries none at all once flattened; emitting Mermaid
+turns those diagrams into something a model can quote and reason about. The
+representation is separated from the negotiation that serves it because the former is
+static and free while the latter needs edge code, so the foundation ships either
+way.
 
 ## Related Items
 
