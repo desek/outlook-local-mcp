@@ -57,3 +57,10 @@ docs/research/cr-0060-token-economics/runs/
 
 # Claude Code agent worktrees
 /.claude/worktrees/
+
+# Vendored website source under evaluation, copied from
+# ../experiments/saas-anything/output/outlook-local-mcp-v3. Held out of version
+# control deliberately: it is a reference copy being assessed, not yet the
+# project's site. Promote it by moving it to a tracked path and removing this
+# entry, rather than by committing it in place from here.
+/site-v3/
