@@ -97,6 +97,60 @@ function findFont(stem) {
 
 const STYLESHEET_LINK = /<link\b[^>]*\brel="stylesheet"[^>]*\bhref="(\/assets\/[^"]+\.css)"[^>]*>/g
 
+/** Matches the module script tag Vite emits for a page's client entry. */
+const MODULE_SCRIPT = /<script type="module"[^>]*\bsrc="(\/assets\/[^"]+\.js)"[^>]*><\/script>/
+
+/**
+ * Rewrites the landing page's module script into a bootstrap that injects it after load.
+ *
+ * The landing page's client bundle is 137 KB gzipped: React, GSAP, ScrollTrigger, Lenis
+ * and the component tree. None of it is needed to read the page — the root is
+ * pre-rendered, so the full content, styles and fonts are on screen without it — but as a
+ * `<script>` in the document it is discovered during the initial parse and competes for
+ * bandwidth with the HTML and the fonts that the first render actually needs.
+ *
+ * Measured on Lighthouse mobile: with the tag in the document the landing page's simulated
+ * Largest Contentful Paint is 2,555 ms and Performance 0.96; with the script absent
+ * entirely it is 1,803 ms and 1.00. The 750 ms gap is almost exactly the bundle's download
+ * time at the emulated 1,475 Kbps. Neither `fetchpriority="low"` nor deferring *execution*
+ * inside the module changes it, because the cost is the transfer, not the evaluation.
+ *
+ * So the transfer is moved behind the main content's paint. The rule the bootstrap applies
+ * is causal rather than a tuned delay: it waits for the browser to report a Largest
+ * Contentful Paint entry — the moment the page's main content is actually on screen — and
+ * then for the first idle period, and only then requests the bundle. On a slow connection
+ * that is exactly the behaviour wanted: nothing competes with the content a visitor is
+ * waiting to read. On a fast one it costs a few milliseconds.
+ *
+ * The trade-off is real and worth stating plainly: the motion layer, the copy-to-clipboard
+ * buttons, the tabs and the accordions stay inert until the injected script arrives. All of
+ * the page's text, styling and layout are present throughout, because the root is
+ * pre-rendered; what is delayed is behaviour, not content.
+ *
+ * Two fallbacks, so the page cannot end up permanently inert: `load` triggers the same path
+ * for browsers without LCP reporting, and a timeout bounds the idle wait.
+ *
+ * @param html  The page HTML, after CSS inlining.
+ * @param pageName  The page being transformed, for diagnostics.
+ * @returns The HTML with the script tag replaced by the bootstrap.
+ */
+function deferClientScript(html, pageName) {
+  const match = html.match(MODULE_SCRIPT)
+  if (!match) {
+    fail(`no <script type="module"> found in dist/${pageName} to defer; the build output changed shape`)
+  }
+  const bootstrap =
+    `<script>(function(){var done=false;` +
+    `var load=function(){if(done)return;done=true;` +
+    `var s=document.createElement('script');s.type='module';s.crossOrigin='anonymous';` +
+    `s.src=${JSON.stringify(match[1])};document.head.appendChild(s)};` +
+    `var soon=function(){('requestIdleCallback'in window)?requestIdleCallback(load,{timeout:2000}):setTimeout(load,200)};` +
+    `try{new PerformanceObserver(function(list,obs){if(list.getEntries().length){obs.disconnect();soon()}})` +
+    `.observe({type:'largest-contentful-paint',buffered:true})}catch(e){}` +
+    `addEventListener('load',soon,{once:true});setTimeout(soon,3000)})()</script>`
+  return html.replace(MODULE_SCRIPT, bootstrap)
+}
+
 /**
  * Inlines the stylesheet and injects the given font preloads into one page.
  * Returns the transformed HTML. Fails the build if a referenced stylesheet cannot
@@ -121,10 +175,26 @@ function optimisePage(html, pageName, fontStems) {
   return preloads ? withCss.replace('</title>', `</title>\n    ${preloads}`) : withCss
 }
 
-const HERO_FONTS = ['inter-latin-400-normal', 'inter-latin-600-normal', 'inter-latin-700-normal']
+// The landing page's above-the-fold band is the hero: the <h1> and subhead in Inter, and
+// the badge row, install command and nav button in Geist Mono. Lighthouse attributed the
+// whole of the page's 0.094 Cumulative Layout Shift to three fonts arriving late —
+// inter-500, geist-mono-400 and geist-mono-600 — none of which this list previously named,
+// while it preloaded inter-600 and inter-700, which the hero does not paint at all.
+const HERO_FONTS = [
+  'inter-latin-400-normal',
+  'inter-latin-500-normal',
+  'geist-mono-latin-400-normal',
+  'geist-mono-latin-600-normal',
+]
 const DOC_FONTS = ['inter-latin-400-normal', 'geist-mono-latin-400-normal']
 
-writeFileSync(indexPath, optimisePage(injected, 'index.html', HERO_FONTS), 'utf8')
+// Only the landing page's script is deferred. The documentation pages' entry is 26 bytes
+// (it exists solely so Vite bundles the stylesheet for them), so there is nothing to move.
+writeFileSync(
+  indexPath,
+  deferClientScript(optimisePage(injected, 'index.html', HERO_FONTS), 'index.html'),
+  'utf8',
+)
 
 for (const page of ['concepts.html', 'quickstart.html', 'troubleshooting.html']) {
   const path = resolve(siteRoot, `dist/${page}`)

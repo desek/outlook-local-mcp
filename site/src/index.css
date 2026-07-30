@@ -132,6 +132,27 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/*
+ * The five capability diagrams account for 1,192 of the landing page's ~1,870 elements,
+ * and every one of them sits below the fold, in a section the visitor may never reach.
+ * Styling, laying out and painting them was the largest single cost before First
+ * Contentful Paint.
+ *
+ * `content-visibility: auto` lets the browser skip that work until the diagram is near
+ * the viewport. It is applied to the <svg> elements rather than to their sections
+ * deliberately: each diagram is sized entirely by its container (`w-full h-full`), so
+ * skipping its subtree cannot change the document's height, and the scroll-driven
+ * pinning that ScrollTrigger measures at load is left exactly as it was. Applying the
+ * same property to a section would collapse that section to its intrinsic-size
+ * placeholder and move every pinned trigger below it.
+ *
+ * The diagrams stay in the DOM, so a crawler reading the page without JavaScript sees
+ * no change; only the rendering of their internals is deferred.
+ */
+svg[data-diagram] {
+  content-visibility: auto;
+}
+
 /* Custom utilities */
 @utility container-page {
   width: 100%;

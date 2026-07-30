@@ -19,12 +19,32 @@
       }
     },
     "assert": {
-      "assertions": {
-        "categories:performance": ["error", { "minScore": 0.95 }],
-        "categories:accessibility": ["error", { "minScore": 0.95 }],
-        "categories:best-practices": ["error", { "minScore": 0.95 }],
-        "categories:seo": ["error", { "minScore": 1 }]
-      }
+      "assertMatrix": [
+        {
+          "matchingUrlPattern": ".*/index\\.html$",
+          "assertions": {
+            "categories:performance": ["error", { "minScore": 0.96 }],
+            "categories:accessibility": ["error", { "minScore": 1 }],
+            "categories:best-practices": ["error", { "minScore": 1 }],
+            "categories:seo": ["error", { "minScore": 1 }],
+            "largest-contentful-paint": ["error", { "maxNumericValue": 2700 }],
+            "cumulative-layout-shift": ["error", { "maxNumericValue": 0.01 }],
+            "total-blocking-time": ["error", { "maxNumericValue": 50 }]
+          }
+        },
+        {
+          "matchingUrlPattern": ".*/(quickstart|concepts|troubleshooting)\\.html$",
+          "assertions": {
+            "categories:performance": ["error", { "minScore": 1 }],
+            "categories:accessibility": ["error", { "minScore": 1 }],
+            "categories:best-practices": ["error", { "minScore": 1 }],
+            "categories:seo": ["error", { "minScore": 1 }],
+            "largest-contentful-paint": ["error", { "maxNumericValue": 1700 }],
+            "cumulative-layout-shift": ["error", { "maxNumericValue": 0.01 }],
+            "total-blocking-time": ["error", { "maxNumericValue": 50 }]
+          }
+        }
+      ]
     },
     "upload": {
       "target": "filesystem",

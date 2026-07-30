@@ -320,6 +320,118 @@ collected until the site is deployed.
     anchors, six crawler files and five Mermaid fences all hold.
 * **Disposition:** pending
 
+### Attempt 4 — Landing-page performance: the gate is unblocked, and 1.00 is shown to be out of reach
+
+* **State:** open
+* **Hypothesis:** the landing page's Performance 0.93 and Cumulative Layout Shift 0.094
+  can be closed by attacking what the Lighthouse report actually attributes them to,
+  rather than by the DOM-size and unused-JavaScript figures the diagnostics headline.
+* **Surface touched:** `site/build/prerender.mjs`, `site/src/index.css`,
+  `site/src/main.tsx`, `site/lighthouserc.json`.
+* **What was changed, and why each:**
+  1. **The above-the-fold font preloads were the wrong four.** Lighthouse attributed the
+     *whole* of the 0.094 CLS to three fonts arriving late: inter-500, geist-mono-400 and
+     geist-mono-600. The preload list named none of them, and did preload inter-600 and
+     inter-700, which the hero never paints. Corrected to the four the hero actually uses.
+     **CLS 0.094 to 0.000 exactly**, and Performance 0.93 to 0.95.
+
+     This also corrects attempt 1's attribution, which recorded that the CLS "has no
+     attributable element and did not move when the font work landed, which rules out font
+     swap". It was font swap; the earlier run simply preloaded the wrong faces, so the
+     shift did not move and the cause looked excluded.
+  2. **`content-visibility: auto` on the five capability diagrams.** They are 1,192 of the
+     page's ~1,870 elements and all below the fold. Applied to the `<svg>` elements rather
+     than to a section: each is sized entirely by its container, so skipping its subtree
+     cannot change document height or move the pinned ScrollTrigger measurements. Main
+     thread Rendering 488 ms to 80 ms, Style and Layout 518 ms to 437 ms, TBT 26 ms to
+     8 ms, Performance 0.95 to 0.96.
+  3. **The client bundle is fetched after the main content has painted.** The landing
+     page's `<script type="module">` is rewritten by the pre-render step into a bootstrap
+     that waits for the browser's Largest Contentful Paint entry, then for idle, and only
+     then requests the bundle. Performance 0.96 to 0.97. The trade-off is stated in the
+     code: the tabs, accordions, copy buttons and motion layer are inert until it arrives.
+     Every word, style and layout is present throughout, because the root is pre-rendered.
+* **Why 1.00 and LCP 1,700 ms are not reachable, measured rather than argued.** Four
+  hypotheses were tested and three were falsified:
+
+  | change | LCP | verdict |
+  |---|---|---|
+  | defer the module's *evaluation* (dynamic import after paint) | 2,557 ms | no effect |
+  | `fetchpriority="low"` on the script tag | 2,570 ms | no effect |
+  | halve the DOM (strip the duplicate diagram markup) | 2,619 ms | no effect |
+  | serve a 20-byte bundle, everything else identical | **1,803 ms** | **the lever** |
+
+  Largest Contentful Paint here is a function of bytes on the critical path and nothing
+  else reachable: 1,803 ms of floor, plus 750 ms for the bundle's 137 KB at the emulated
+  1,475 Kbps. Lantern charges every byte fetched before the observed paint, and on a local
+  server the whole document arrives inside 90 ms, so no amount of scheduling removes it.
+
+  1,700 ms is therefore below the floor the page has with *no JavaScript at all*, and
+  100 in Performance needs the bundle down to roughly 20 KB — which means removing the
+  GSAP and Lenis motion design that CR-0070 adopted v3 in order to keep. That is a
+  product decision for the change owner, not a defect.
+* **FR-36 amended accordingly, and tightened in every direction the evidence allows.**
+  Accessibility, Best Practices and SEO go from "at least 95" to **100 on every page**;
+  documentation-page Performance goes from "at least 95" to **100**; the landing page is
+  held at **96** against a measured 0.97. Per-page budgets for LCP, CLS and TBT are now
+  asserted in their own right, so a regression fails the gate even when the rounded
+  category score does not move. NFR-1 and AC-22 are untouched: they are *field*
+  thresholds measured live by PageSpeed Insights, not this lab figure.
+* **Verification evidence:** `pnpm --dir site run lighthouse` **exits 0**.
+
+  | page | perf | was | LCP ms | was | CLS | was | TBT ms |
+  |---|---|---|---|---|---|---|---|
+  | index.html | **0.97** | 0.93 | 2,554 | 2,565 | **0.000** | 0.094 | 11 |
+  | quickstart.html | 1.00 | 1.00 | 1,502 | 1,502 | 0.000 | 0.000 | 0 |
+  | concepts.html | 1.00 | 1.00 | 1,652 | 1,652 | 0.000 | 0.000 | 0 |
+  | troubleshooting.html | 1.00 | 1.00 | 1,651 | 1,652 | 0.000 | 0.000 | 0 |
+
+  Accessibility, Best Practices and SEO are 1.00 on all four pages. W3C Nu real errors
+  are 0 on all four. The contrast audit is 0 failures across 4 pages x 4 widths. The
+  visual diff against the pre-performance build is 0 of 135 tiles failing, so none of this
+  changed what the site looks like. Hydration, tab switching and the injected bundle were
+  checked directly in a browser with no console errors. `make ci` exits 0.
+* **Disposition:** pending
+
+### Attempt 5 — Crawler surface: the agent list, and the rich-result claims
+
+* **State:** open
+* **Hypothesis:** two of the carry-forward corrections from the SEO and GEO research are
+  bounded enough to land now: FR-18's agent list, which is the only item in this session
+  with a citation rationale behind it, and the CR's implied rich-result eligibility for
+  entities that cannot produce one.
+* **Surface touched:** `site/public/robots.txt`, and FR-18, FR-41, FR-42, AC-4 and AC-8 of
+  CR-0070.
+* **What was changed, and why each:**
+  1. **`robots.txt` named the wrong agents.** It told a future maintainer not to disallow
+     `GPTBot`, `ClaudeBot` and `Google-Extended`, which are **training-consent** tokens
+     and have no bearing on whether the project is cited, while omitting every
+     **retrieval-for-citation** agent: `ChatGPT-User`, `OAI-SearchBot`, `Claude-User`,
+     `Claude-SearchBot`, `Perplexity-User` and `Applebot`. Nothing was ever blocked — the
+     file is a bare `User-agent: *` with `Allow: /` — so this was misleading documentation
+     rather than a live defect, but it is documentation whose whole purpose is to stop
+     someone adding a costly `Disallow` later. The file now sets out the two classes
+     separately, and notes that ChatGPT Search draws on the Bing index, so permission here
+     is necessary but not sufficient. FR-18 and AC-4 were rewritten to match, and record
+     what the earlier list got wrong.
+  2. **The CR implied rich results that cannot exist.** `FAQPage` was deprecated (notice
+     2026-05-07, tooling removed June 2026) and `HowTo` retired in 2023, and
+     `SoftwareApplication` qualifies only with an `aggregateRating` or `review` that this
+     project will not self-publish, because Google's policy forbids self-serving reviews.
+     AC-8 required the Google Rich Results Test to report no errors, which no build of
+     this site can satisfy; it now asserts structured-data *validity*, which the build can
+     check, and says why the stronger claim was dropped. FR-41 and FR-42 keep both
+     entities — they are shipped and cost nothing — on an explicitly speculative
+     LLM-parsing rationale rather than an implied search-visibility one.
+* **Not done, and deliberately:** the research's remaining items are unchanged in
+  Carry-forward. IndexNow submission is a new requirement rather than a correction, the
+  Lighthouse gate's GEO framing is addressed by FR-36's rewrite in attempt 4, and the
+  `llms.txt` "structural advantage" wording and the discovery-channel question are
+  change-owner calls.
+* **Verification evidence:** the built `dist/robots.txt` carries the new content, the six
+  crawler files are still present, and the content check passes unchanged.
+* **Disposition:** pending
+
 ## Carry-forward
 
 Items this session has identified but not actioned. They are not attempts and carry no
@@ -332,6 +444,14 @@ close.
 claims adversarially verified) contradicts several requirements this CR implemented.
 Recorded here so the corrections are not lost; they belong in the CR text and, for the
 first item, in shipped code.
+
+**Status after attempts 4 and 5.** The first three items below are **done**: the agent
+list is corrected in `robots.txt` and FR-18, the `FAQPage` and `HowTo` rationale is stated
+as speculative in FR-41 and FR-42, and AC-8 no longer asserts a Rich Results pass. The
+Lighthouse item is **done** by FR-36's rewrite, which now justifies the gate on user
+experience and classic SEO and claims no discovery effect. The remaining three — the
+`llms.txt` wording, IndexNow, and the discovery-channel question — are **open** and are
+change-owner decisions rather than corrections.
 
 * **FR-18's agent list is wrong, and this is the one that costs citations.** Vendors
   separate training tokens from retrieval-for-citation tokens. `GPTBot` and `ClaudeBot`

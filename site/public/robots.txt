@@ -1,9 +1,28 @@
 # robots.txt for https://outlook-local-mcp.com
 #
-# This project is discovered largely through AI assistants, so the AI crawlers below
-# are deliberately allowed. Do NOT add a Disallow for GPTBot, ClaudeBot, PerplexityBot,
-# Google-Extended, or OAI-SearchBot: blocking them would cut off this project's primary
-# discovery channel (CR-0070 FR-18).
+# Nothing is disallowed. The single `User-agent: *` group below already admits every
+# crawler, so these notes exist only so that a future change does not add a Disallow
+# without understanding what it would cost (CR-0070 FR-18).
+#
+# Vendors run two distinct classes of agent, and the distinction is what matters here:
+#
+#   Retrieval for citation. These fetch a page while answering a user's question, and are
+#   the agents that can put this project into an assistant's answer. Disallowing one of
+#   them removes the project from that assistant's answers:
+#     ChatGPT-User, OAI-SearchBot     (OpenAI)
+#     Claude-User, Claude-SearchBot   (Anthropic)
+#     PerplexityBot, Perplexity-User  (Perplexity)
+#     Applebot                        (Apple; renders JavaScript)
+#
+#   Training consent. These control whether content may be used to train a model. Their
+#   setting has no bearing on whether the project is cited today:
+#     GPTBot            (OpenAI)
+#     ClaudeBot         (Anthropic)
+#     Google-Extended   (Google)
+#     Applebot-Extended (Apple)
+#
+# ChatGPT Search also draws on the Bing index, so Bingbot access is a precondition for
+# appearing there: permission in this file is necessary but not sufficient.
 #
 # A Markdown representation of the landing page is served at /index.md for clients that
 # prefer Markdown (CR-0070 FR-35).
