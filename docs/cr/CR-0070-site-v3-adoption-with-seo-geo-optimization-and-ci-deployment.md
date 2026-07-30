@@ -649,8 +649,12 @@ records that.
 Five phases, ordered so the site is tracked and deployable before discovery work is
 layered on.
 
-**Phase 1: Adopt and track.** Move `site-v3/` to `site/`, remove the `/site-v3/`
-ignore entry, add `site/node_modules` and `site/dist`. Set `base` to `/` and emit
+**Phase 1: Adopt and track.** Anchor the `data/` rule in `.gitignore` to `/data/`
+FIRST, before adding anything under `site/`: unanchored it matches at any depth and
+would silently ignore `site/**/data/` (see "Carried forward from CR-0069"). Then move
+`site-v3/` to `site/`, remove the `/site-v3/` ignore entry, add `site/node_modules`
+and `site/dist`, and confirm with `git status` that every intended file is actually
+staged. Set `base` to `/` and emit
 `site/public/CNAME` containing the apex. Self-host the Inter and Geist Mono fonts and
 remove the Google-hosted links. Confirm MSW is absent and that nothing is awaited
 before the first render. Build and verify locally.
@@ -751,6 +755,8 @@ output plus a post-deploy live check.
 |-----------|-----------|-------------|--------|-----------------|
 | `site/tests/build-output.test.ts` | `basePathMatchesTarget` | Asserts asset references match the FR-1 base, with repo URLs excluded | `dist` tree | All match |
 | `site/tests/build-output.test.ts` | `noServiceWorker` | Asserts no `msw` or service worker reference in output | `dist` | Zero matches |
+| `site/tests/build-output.test.ts` | `noMswProductionDependency` | Asserts `msw` is absent from the dependency tree, not merely from the output (carried from CR-0069) | `site/package.json`, lockfile | Absent |
+| `site/tests/prerender.test.ts` | `noRenderGatingAwait` | Asserts nothing is awaited before the first render, the defect v3 currently ships (carried from CR-0069) | `site/src/main.tsx` | No await before render |
 | `site/tests/build-output.test.ts` | `crawlerFilesPresent` | Asserts `robots.txt`, `sitemap.xml`, `llms.txt` exist | `dist` | All present |
 | `site/tests/build-output.test.ts` | `llmsTxtMatchesRepoRoot` | Asserts served `llms.txt` is byte-identical to the repo-root file | Both files | Identical |
 | `site/tests/build-output.test.ts` | `robotsAllowsAiCrawlers` | Asserts no `Disallow` for the five named agents | `robots.txt` | None |
@@ -1108,7 +1114,10 @@ the motion and canvas layers only on the client, so the server render never
 executes browser code. Content must never be hidden pending hydration: the
 pre-rendered markup is the source of truth for what a crawler sees, and CSS or
 script that hides it until hydration defeats the whole CR. AC-2 and AC-3 exist to
-catch exactly that.
+catch exactly that. One concrete mechanism to avoid is documented under "Carried
+forward from CR-0069": `gsap.from` hides its target the moment it is called and only
+restores it when its trigger fires, so on an element with no scroll distance to travel
+it hides the content permanently.
 
 ### Risk 2: Pre-rendered markup diverges from hydrated markup
 
@@ -1213,6 +1222,9 @@ step most likely to expose real work, which is why it has its own phase.
 * No blocking dependency remains. Content negotiation was the only one and is
   deferred, so every requirement here is satisfiable on plain GitHub Pages with no
   Cloudflare change.
+* Reuses artifacts from the abandoned `dev/cr-0069`: `.agents/scripts/verify-site-deploy.sh`
+  is adapted rather than rewritten, and two of its test assertions are carried by
+  name. See "Carried forward from CR-0069".
 * A follow-up CR **MUST** correct the deferred copy. This CR should not be considered
   finished work on the site's content, only on its foundation.
 * Depends on CR-0065 for the documentation governance rules that decide what is
@@ -1274,10 +1286,110 @@ Cloudflare zone. Deferring the mechanism leaves this CR with no blocking depende
 and nothing to change outside the repository, while still delivering the thing that
 carries the value, which is the content in a form a model can read.
 
+## Carried forward from CR-0069
+
+CR-0069 was abandoned, but it was implemented, validated, and iterated on before that
+happened, and its branch retains real artifacts and hard-won detail. Everything below
+was checked against `dev/cr-0069` rather than recalled, and each item is either a
+requirement here or a concrete trap the implementation will otherwise walk into.
+
+### A live landmine in `.gitignore`
+
+`.gitignore` line 32 on this branch is an **unanchored `data/`** rule, intended for
+the Docker volume at `./data/auth`. It matches at any depth, so
+`git check-ignore site/src/data/foo.ts` confirms it would silently ignore a
+`site/**/data/` directory. On CR-0069 this went unnoticed until a later phase found
+that a previous phase's data modules had never been committed, which would have
+failed CI for missing source. Phase 1 **MUST** anchor the rule to `/data/`, as
+`dev/cr-0069` did, before adding anything under `site/`.
+
+### Two tests worth carrying by name
+
+CR-0069's suite ended up with two assertions this CR's Test Strategy did not have,
+both aimed squarely at defects the v3 source actually contains:
+
+* `noRenderGatingAwait` asserts that nothing is awaited before the first render. This
+  is the exact defect in v3's `main.tsx`, and it is the defect that took the previous
+  site down. A requirement (FR-5) without a test is a comment.
+* `noMswProductionDependency` asserts MSW is absent from the dependency tree, not
+  merely absent from the built output. The output-level check passes as soon as tree
+  shaking removes it; the dependency-level check is what stops it coming back.
+
+Both **MUST** be added to the Test Strategy alongside the existing rows.
+
+### The documentation-anchor slug algorithm is a trap
+
+FR-14 requires verb `SeeDocs` anchors to resolve in published HTML. A Markdown
+renderer's default slugger will not necessarily agree with the repository's own. The
+authoritative algorithm is `headingToAnchor` in
+`internal/tools/verb_metadata_test.go`: lowercase, keep `a-z`, `0-9`, and `-`, map
+spaces to hyphens, drop everything else. CR-0069's implementation had to match it
+explicitly and also handle explicit `{#anchor}` overrides. The site build **MUST**
+reuse that algorithm rather than trusting the renderer's default, or every deep link
+from `system.help` breaks silently.
+
+### `verify-site-deploy.sh` already exists
+
+`dev/cr-0069` carries `.agents/scripts/verify-site-deploy.sh`, and its design should
+be adopted rather than reinvented: it splits **local checks** that need no network and
+run in CI (for example asserting `extension/manifest.json` `homepage` is the apex
+while `support` stays a GitHub URL) from **live checks** behind a `--live` flag that
+only make sense post-deploy (apex serves 200 with no project-page base path in the
+body, `www` redirects to the apex, and the crawler files each serve 200). That split
+is what lets the same script gate CI and verify a deployment. Adapt it; extend the
+live checks to cover `/index.md` and the provenance endpoint.
+
+### The test harness must rebuild, and this was proven the hard way
+
+The Test Strategy already requires building before asserting. The reason is worth
+recording, because the failure is invisible. CR-0069's harness initially built only
+when `dist` was **absent**, so the realistic sequence of editing a source file and
+running the tests asserted against the previous build and reported everything green.
+It was caught only by injecting a known-bad string into the source, running the tests
+alone, and observing that they still passed. The fix was to rebuild unconditionally,
+which was cheap because the build is fast. A suite that can pass against stale output
+is worse than no suite, because it is trusted.
+
+### `gsap.from` strands anything it cannot animate back
+
+Directly relevant to Phase 3 and Risk 1. `gsap.from` applies its hidden start state
+the instant it is called, and only restores it when its trigger fires. Called on an
+element with no scroll distance to travel, for example anything above the fold or any
+element when the viewport is taller than the document, the trigger never fires and the
+element stays invisible permanently. CR-0069's iteration session hit this: the hero
+headline was hidden and still hidden after a 45 second settle. Two mitigations came
+out of it, and both apply here because v3 drives its motion with GSAP: restrict
+hidden-start animations to elements that are actually below the fold, and add a
+safety sweep that clears opacity and transform on anything still transparent after a
+short delay. In a pre-rendered site the stakes are higher than they were then, because
+hidden content defeats the pre-rendering this CR exists to deliver.
+
+### Label what cannot be gated in CI
+
+CR-0069's validation report ended at zero FAIL, PARTIAL, and GAP only after
+classifying the residue honestly, in three buckets worth reusing: **fixed**,
+**justified as non-CI-gatable** (live measurements and manual copy review), and
+**owner actions** (console access nobody in CI has). Applying the same labels here
+avoids the failure mode where a live-only or human-only check sits in a CR looking
+like an unmet requirement, or worse, gets quietly dropped. NFR-1, AC-17, AC-22, and
+AC-24 in this CR are of that kind and are marked accordingly.
+
+### One artifact deliberately not carried
+
+`dev/cr-0069` also holds `.agents/scripts/capture-legacy-site-reference.sh`, which
+reconstructs the pre-migration page from the `gh-pages` build output. It existed
+because CR-0069 required 1:1 fidelity to a page that could no longer be viewed. This
+CR adopts v3 as authored and has no fidelity-to-legacy requirement, so the script is
+not needed. It is noted only because the technique, reconstructing a reference and
+measuring against it numerically, would be the starting point if visual regression
+testing is ever wanted.
+
 ## Related Items
 
 * Supersedes: CR-0069 (abandoned; branch `dev/cr-0069` retains the CR, its
-  validation report, and the iteration ledger)
+  validation report, its iteration ledger, and two reusable scripts under
+  `.agents/scripts/`). Specific detail carried across is listed under "Carried
+  forward from CR-0069"; that branch is worth reading before starting Phase 3.
 * Related change requests: CR-0060 (domain-aggregated tools), CR-0065
   (documentation architecture), CR-0068 (tool definition quality)
 * Issue: [#26](https://github.com/desek/outlook-local-mcp/issues/26)
