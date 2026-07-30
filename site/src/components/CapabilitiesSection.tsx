@@ -244,7 +244,7 @@ export default function CapabilitiesSection() {
   }, { scope: sectionRef })
 
   return (
-    <section ref={sectionRef} id="capabilities" className="relative bg-white">
+    <section ref={sectionRef} id="capabilities" className="relative bg-white" data-scrub-section>
 
       {/* ═══════════════════════════════════════
           DESKTOP: Scroll-pinned crossfade

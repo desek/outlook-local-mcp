@@ -11,20 +11,30 @@
  * component consumed, its mock data still described the retired flat tool naming,
  * and it shipped roughly 250 KB into a static marketing build.
  *
- * @agents-index Client entry: registers GSAP plugins and renders synchronously, nothing awaited before first paint.
+ * The root is pre-rendered at build time (react-dom/server, see entry-server.tsx), so
+ * this entry HYDRATES the existing markup rather than replacing it. Hydration attaches
+ * behaviour without discarding the server-rendered content, so a slow or failed script
+ * load still leaves the full text on screen. installSafetySweep is the net for GSAP's
+ * hidden-start reveals that never fire (CR-0070 FR-11).
+ *
+ * @agents-index Client entry: registers GSAP plugins, hydrates the pre-rendered root, and installs the reveal safety net; nothing awaited before first paint.
  */
 import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
+import { hydrateRoot } from 'react-dom/client'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import { ScrollTrigger } from 'gsap/ScrollTrigger'
 import App from './App'
+import { installSafetySweep } from './safety.sweep'
 import './index.css'
 
 gsap.registerPlugin(useGSAP, ScrollTrigger)
 
-createRoot(document.getElementById('root')!).render(
+hydrateRoot(
+  document.getElementById('root')!,
   <StrictMode>
     <App />
   </StrictMode>,
 )
+
+installSafetySweep()

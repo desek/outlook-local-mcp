@@ -99,7 +99,7 @@ export default function BrandRevealSection() {
   void ScrollTrigger
 
   return (
-    <section ref={sectionRef} id="brand-reveal" className="relative">
+    <section ref={sectionRef} id="brand-reveal" className="relative" data-scrub-section>
       {/* ═══ DESKTOP ═══ */}
       <div
         ref={desktopWrapperRef}

@@ -65,5 +65,14 @@ docs/research/cr-0060-token-economics/runs/
 # its generated outputs and installed dependencies are ignored.
 /site/node_modules/
 /site/dist/
+# SSR bundle emitted for build-time pre-rendering (react-dom/server); consumed by
+# build/prerender.mjs and never published.
+/site/dist-ssr/
+# Documentation pages generated from docs/*.md at build time as Vite HTML inputs.
+# The Markdown in docs/ is the single source of truth; these HTML files must never be
+# committed (CR-0070 FR-14).
+/site/concepts.html
+/site/quickstart.html
+/site/troubleshooting.html
 # TypeScript incremental build cache emitted by `tsc -b`.
 /site/*.tsbuildinfo
