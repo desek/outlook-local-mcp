@@ -21,9 +21,10 @@ and is judged materially better than what the repository can produce, so it beco
 the site. This change request brings that source under version control, adds a
 GitHub Actions workflow that builds and publishes it to the `gh-pages` branch,
 pre-renders it so its content exists without JavaScript, adds the SEO and GEO
-foundation, emits a Markdown representation of every page served under content
-negotiation, stamps build provenance into the artifact, and adds a visible
-acknowledgement backlink to `https://gigwhere.com`.
+foundation, emits a static Markdown representation of the landing page with its
+diagrams as Mermaid, enforces a Lighthouse budget in CI, stamps build provenance into
+the artifact, and adds a visible acknowledgement backlink to
+`https://gigwhere.com`.
 
 This CR is deliberately scoped to **foundation, not wording**. Correcting the site's
 factual copy is deferred to a follow-up CR; see "Deferred to a follow-up CR" below
@@ -166,20 +167,20 @@ because its `base: '/outlook-local-mcp/'` happens to match the project-page subp
 that GitHub serves the branch root at. Under the apex domain the site moves to `/`
 and that prefix stops resolving. FR-1 fixes `base` at `/` accordingly.
 
-### Content negotiation is not something GitHub Pages can do
+### Why content negotiation is deferred
 
-Relevant because FR-34 requires it. Pages is a static host with no request-time
-logic: it sets `Vary: Accept-Encoding` and nothing else, and cannot branch on an
-`Accept` header. Verified against the live project page 2026-07-30.
+GitHub Pages is a static host with no request-time logic: it sets
+`Vary: Accept-Encoding` and nothing else, and cannot branch on an `Accept` header.
+Verified against the live project page 2026-07-30.
 
-The Markdown representation itself is therefore split from the negotiation that
-serves it. Emitting `.md` files as build outputs (FR-30 to FR-33, FR-35) needs no
-infrastructure and works on plain Pages today, which is why those requirements stand
-alone and are the foundation. True `Accept`-based negotiation (FR-34) needs code at
-the edge, and the implementation choice carries a trade-off recorded under
-Alternative Approaches: a Cloudflare Worker can do it, but only if the zone is
-switched back from DNS-only to proxied, which reintroduces the SSL-mode and managed
-`robots.txt` concerns that made DNS-only the right call previously.
+That splits the Markdown representation from the mechanism that would serve it from
+the same URL. Emitting `/index.md` as a build output (FR-30 to FR-34) needs no
+infrastructure and works on plain Pages today, which is the whole of what this CR
+requires. Negotiating on `Accept` needs edge code, and the practical option is a
+Cloudflare Worker, which requires switching the zone back from DNS-only to proxied
+and reintroduces the SSL-mode, managed `robots.txt`, and bot-protection concerns
+recorded under "Deferred to a follow-up CR". Keeping it out leaves this CR with no
+blocking dependency and nothing to change outside the repository.
 
 ### Current State Diagram
 
@@ -354,81 +355,83 @@ flowchart TD
 
 **Markdown representation**
 
-30. The build **MUST** emit a Markdown representation of every published page at a
-    parallel path (for example `/index.md` alongside `/`, and
-    `/docs/concepts.md` alongside `/docs/concepts`).
-31. The Markdown representation **MUST** be generated from the same source as the
-    HTML, so the two cannot describe different content.
-32. Diagrams that exist as SVG components in the site **MUST** be rendered as
-    Mermaid fenced code blocks in the Markdown representation, not as image
-    references or omitted. This applies to the five capability and privacy diagrams.
-33. The Markdown representation **MUST** be served with
-    `Content-Type: text/markdown`.
-34. The site **MUST** serve the Markdown representation when a client requests a page
-    with `Accept: text/markdown`, returning the HTML representation otherwise, and
-    **MUST** set `Vary: Accept` on any negotiated response.
-35. `robots.txt` and `llms.txt` **MUST** advertise the Markdown paths so a crawler
-    that does not negotiate can still discover them.
+30. The build **MUST** emit a Markdown representation of the landing page at
+    `/index.md`. Only the landing page is in scope; extending this to the
+    documentation and other pages is deferred.
+31. `/index.md` **MUST** be generated from the same source as the landing page HTML,
+    so the two cannot describe different content. It **MUST NOT** be hand-authored.
+32. Diagrams that exist as SVG components on the landing page **MUST** be rendered as
+    Mermaid fenced code blocks in `/index.md`, not as image references and not
+    omitted. This applies to the five capability and privacy diagrams.
+33. `/index.md` **MUST** be reachable as a static file at the apex origin. The
+    response `Content-Type` is whatever GitHub Pages' MIME mapping assigns to `.md`,
+    which cannot be overridden: Pages permits no custom response headers. The
+    implementation **MUST** verify the served value after the first deploy and record
+    it, because it is currently unverified. `text/plain` is an acceptable outcome for
+    this CR, since the content is still consumable; guaranteeing `text/markdown`
+    requires the edge layer and is deferred with content negotiation.
+34. `robots.txt` and `llms.txt` **MUST** both advertise `/index.md`, so a client that
+    cannot negotiate can still discover it.
 
 **Lighthouse and Core Web Vitals**
 
-36. A Lighthouse run against the built site **MUST** score at least 95 in
+35. A Lighthouse run against the built site **MUST** score at least 95 in
     Performance, at least 95 in Accessibility, at least 95 in Best Practices, and
     100 in SEO, measured on mobile emulation.
-37. Lighthouse **MUST** run in CI against the built output, and the workflow **MUST**
+36. Lighthouse **MUST** run in CI against the built output, and the workflow **MUST**
     fail if any category falls below its threshold.
-38. The thresholds **MUST** be recorded in a committed configuration file rather than
+37. The thresholds **MUST** be recorded in a committed configuration file rather than
     passed as ad-hoc command arguments, so a regression is visible as a diff.
 
 **GEO**
 
-39. Every page **MUST** contain JSON-LD structured data valid under schema.org,
+38. Every page **MUST** contain JSON-LD structured data valid under schema.org,
     present in the pre-rendered head.
-40. The landing page **MUST** include a `SoftwareApplication` entity with `name`,
+39. The landing page **MUST** include a `SoftwareApplication` entity with `name`,
     `description`, `applicationCategory`, `operatingSystem`, `license`,
     `codeRepository`, `programmingLanguage`, `downloadUrl`, and `softwareVersion`.
-41. The landing page **MUST** include a `FAQPage` entity covering at minimum: what
+40. The landing page **MUST** include a `FAQPage` entity covering at minimum: what
     the project is, whether an Entra ID app registration is required, whether data
     leaves the user's machine, which Outlook features are supported, and how to
     connect it to Claude Desktop.
-42. The quickstart page **MUST** include a `HowTo` entity mirroring
+41. The quickstart page **MUST** include a `HowTo` entity mirroring
     `docs/quickstart.md`.
-43. An `Organization` entity **MUST** express the GigWhere acknowledgement as a real
+42. An `Organization` entity **MUST** express the GigWhere acknowledgement as a real
     property (`sponsor` or `contributor`), not only as footer text.
-44. The page structure **MUST** support question-form headings with answer-first
+43. The page structure **MUST** support question-form headings with answer-first
     section openings, meaning each section owns its own heading element and its lead
     paragraph is addressable. Writing that copy is deferred (see "Deferred to a
     follow-up CR"); this CR delivers the structure it needs, not the wording.
-45. Every page **MUST** display a last-updated date, with a matching JSON-LD
+44. Every page **MUST** display a last-updated date, with a matching JSON-LD
     `dateModified`.
 
 **GigWhere backlink**
 
-46. The site footer **MUST** contain a link to `https://gigwhere.com` present as a
+45. The site footer **MUST** contain a link to `https://gigwhere.com` present as a
     literal `<a href>` in the pre-rendered HTML, not injected by JavaScript.
-47. That link **MUST NOT** carry `rel="nofollow"` or `rel="sponsored"`.
-48. `README.md` **MUST** carry the same acknowledgement, with wording matching the
+46. That link **MUST NOT** carry `rel="nofollow"` or `rel="sponsored"`.
+47. `README.md` **MUST** carry the same acknowledgement, with wording matching the
     footer.
 
 **CI deployment**
 
-49. A GitHub Actions workflow **MUST** build `site/` and publish the output to the
+48. A GitHub Actions workflow **MUST** build `site/` and publish the output to the
     `gh-pages` branch on push to `main` when files under `site/` or `docs/` change.
-50. The workflow **MUST** be the only mechanism that writes to `gh-pages`, and the
+49. The workflow **MUST** be the only mechanism that writes to `gh-pages`, and the
     branch **MUST NOT** be hand-edited.
-51. The workflow **MUST NOT** require any secret beyond the default `GITHUB_TOKEN`.
-52. The workflow **MUST** run the site's checks before publishing, and **MUST NOT**
+50. The workflow **MUST NOT** require any secret beyond the default `GITHUB_TOKEN`.
+51. The workflow **MUST** run the site's checks before publishing, and **MUST NOT**
     publish if any fail.
-53. `CNAME`, `robots.txt`, `sitemap.xml`, and `llms.txt` **MUST** be build outputs
+52. `CNAME`, `robots.txt`, `sitemap.xml`, and `llms.txt` **MUST** be build outputs
     rather than files placed on `gh-pages` by hand, so a rebuild cannot revert them.
-54. `extension/manifest.json` `homepage` **MUST** be `https://outlook-local-mcp.com`.
+53. `extension/manifest.json` `homepage` **MUST** be `https://outlook-local-mcp.com`.
 
 ### Non-Functional Requirements
 
 1. The site **MUST** achieve Largest Contentful Paint under 2.5 seconds, Cumulative
    Layout Shift under 0.1, and Interaction to Next Paint under 200 milliseconds,
    measured on mobile. These are the field thresholds behind the Lighthouse
-   Performance score required by FR-36 and are stated separately because a passing
+   Performance score required by FR-35 and are stated separately because a passing
    category score does not by itself guarantee each metric is within budget.
 2. The build **MUST** complete with no network access beyond the package registry.
 3. The site **MUST NOT** load third-party analytics, trackers, or any third-party
@@ -473,6 +476,25 @@ rediscovered as a surprise:
   machine. Interactive browser sign-in binds a loopback port, and enabling
   OpenTelemetry adds an outbound OTLP connection.
 
+Two structural items are also deferred, distinct from the copy work above:
+
+* **Content negotiation.** Serving Markdown from the same URL as the HTML when a
+  client sends `Accept: text/markdown`, with `Vary: Accept`. GitHub Pages cannot do
+  this: it is a static host with no request-time logic and sets only
+  `Vary: Accept-Encoding`, verified 2026-07-30. It needs edge code, and the practical
+  option is a Cloudflare Worker, which requires switching the zone from DNS-only back
+  to proxied. That reintroduces the concerns that made DNS-only correct in the first
+  place: SSL/TLS must be Full (strict) rather than Flexible, Cloudflare's managed
+  Content Signals file must not be allowed to occupy `/robots.txt`, and Bot Fight
+  Mode must not challenge the AI crawlers FR-17 deliberately admits. Deferring it
+  keeps this CR entirely on plain Pages with no Cloudflare change and no blocking
+  dependency.
+* **Markdown for the documentation and comparison pages.** This CR emits `/index.md`
+  only. Extending it is mechanical once the generator exists, and the documentation
+  pages are a special case worth thinking about separately, since their content
+  already originates as Markdown in `docs/` and round-tripping it through HTML to get
+  Markdown back would be a strange path.
+
 The accurate figures, for the follow-up CR to use: four aggregate domain tools
 (`calendar`, `mail`, `account`, `system`) and 42 registered verbs, 33 in the default
 gated configuration, with per-domain counts of calendar 15, mail 13, account 7, and
@@ -496,8 +518,8 @@ this ships.
 * Crawler files, canonical and social metadata, JSON-LD.
 * Self-hosting the fonts.
 * Build provenance in the HTML head and at `/build-info.json`.
-* A Markdown representation of every page, with SVG diagrams as Mermaid, served
-  under `Accept` negotiation.
+* A static `/index.md` for the landing page, with the SVG diagrams as Mermaid,
+  advertised in `robots.txt` and `llms.txt`.
 * A Lighthouse budget enforced in CI.
 * Re-enabling the Pages custom domain.
 * The structural groundwork question-form headings need, without writing them.
@@ -531,6 +553,9 @@ this ships.
   `docs/{readme,quickstart,concepts,troubleshooting}.md`.
 * **Migrating Pages to `build_type: workflow`.** The branch-based source continues
   to work and the workflow writes to `gh-pages`.
+* **Content negotiation on `Accept`,** and the edge layer it requires. See "Deferred
+  to a follow-up CR".
+* **Markdown representations beyond `/index.md`.**
 * **Client-side routing.** The site stays a set of pre-rendered pages built as
   separate Vite entries; no router is introduced.
 * **A documentation search index, internationalization, or a blog.**
@@ -559,22 +584,22 @@ this ships.
   conflict along with two moderate advisories that cannot be patched.
 * **Serve the documentation as raw Markdown only.** Rejected as a replacement for
   HTML: no structured data, no canonical, no heading semantics, and weak retrieval
-  relative to semantic HTML. Serving Markdown *alongside* HTML under negotiation is a
-  different proposition and is what FR-30 to FR-35 require.
+  relative to semantic HTML. Serving Markdown *alongside* HTML is a different
+  proposition and is what FR-30 to FR-34 require.
 
 ### How to serve the Markdown representation
 
-GitHub Pages cannot branch on an `Accept` header, so FR-34 needs a decision. The
-options, in the order they should be considered:
+GitHub Pages cannot branch on an `Accept` header. The options were weighed as
+follows; the first is what this CR adopts.
 
 * **Parallel `.md` paths with no negotiation.** Emit `/index.md` and `/docs/*.md` and
   advertise them in `robots.txt` and `llms.txt`. Zero infrastructure, works on plain
-  Pages, and satisfies FR-30 to FR-33 and FR-35. It does not satisfy FR-34, because
-  a client sending `Accept: text/markdown` to `/` still receives HTML. This is the
-  mandatory foundation regardless of what is chosen for negotiation.
-* **Cloudflare Worker in front of Pages (recommended for FR-34).** A Worker inspects
+  Pages, and satisfies FR-30 to FR-34. A client sending `Accept: text/markdown` to `/` still
+  receives HTML, which is the limitation this CR accepts. This is what FR-30 to FR-34
+  require and it is all that is in scope here.
+* **Cloudflare Worker in front of Pages (deferred).** A Worker inspects
   `Accept`, rewrites to the `.md` variant when Markdown is preferred, and sets
-  `Vary: Accept`. It is the only option that satisfies FR-34 literally. The cost is
+  `Vary: Accept`. It is the only option that serves Markdown from the same URL as the HTML. The cost is
   that the zone must move from DNS-only back to proxied, which reintroduces exactly
   the concerns that made DNS-only correct before: SSL/TLS mode must be Full (strict)
   and not Flexible, Cloudflare's managed Content Signals `robots.txt` must not be
@@ -650,10 +675,10 @@ page.
 `robots.txt`, the `llms.txt` copy step, and a sitemap generator driven by the emitted
 page list. Add canonical, Open Graph, Twitter card, and JSON-LD
 (`SoftwareApplication`, `FAQPage`, `HowTo`, `Organization`). Add last-updated dates
-and `dateModified`. Add the GigWhere footer link and its JSON-LD property. Emit a
-Markdown representation of every page, converting the five SVG diagrams to Mermaid
-fences, advertise the paths in `robots.txt` and `llms.txt`, and add the negotiation
-layer chosen under Alternative Approaches.
+and `dateModified`. Add the GigWhere footer link and its JSON-LD property. Emit
+`/index.md` from the same source as the landing page HTML, converting the five SVG
+diagrams to Mermaid fences, and advertise it in `robots.txt` and `llms.txt`. Content
+negotiation is not part of this phase.
 
 **Phase 5: Lighthouse budget, references, and registration.** Add the committed
 Lighthouse threshold configuration and wire Lighthouse into the workflow as a
@@ -744,10 +769,10 @@ output plus a post-deploy live check.
 | `site/tests/provenance.test.ts` | `provenanceMetaPresent` | Asserts commit, build time, and run meta tags in every pre-rendered head | All pages | Present |
 | `site/tests/provenance.test.ts` | `buildInfoMatchesMeta` | Asserts `/build-info.json` agrees with the meta tags | `dist` | Equal |
 | `site/tests/provenance.test.ts` | `localBuildIsLabelled` | Asserts a build with no CI env marks provenance local rather than fabricating values | Built without CI env | Labelled local |
-| `site/tests/markdown.test.ts` | `everyPageHasMarkdownTwin` | Asserts a `.md` counterpart exists for every emitted HTML page | `dist` | Set equality |
-| `site/tests/markdown.test.ts` | `markdownMatchesHtmlContent` | Asserts the Markdown carries the same headings and body text as its HTML twin | Both representations | Equivalent |
-| `site/tests/markdown.test.ts` | `svgDiagramsBecomeMermaid` | Asserts each of the five SVG diagrams appears as a Mermaid fence, not an image or omission | `dist/**/*.md` | Mermaid fences |
-| `site/tests/markdown.test.ts` | `markdownPathsAdvertised` | Asserts `robots.txt` and `llms.txt` reference the Markdown paths | `dist` | Present |
+| `site/tests/markdown.test.ts` | `indexMarkdownEmitted` | Asserts `dist/index.md` exists and is non-empty | `dist` | Present |
+| `site/tests/markdown.test.ts` | `markdownMatchesHtmlContent` | Asserts `index.md` carries the same headings and body text as `index.html` | Both representations | Equivalent |
+| `site/tests/markdown.test.ts` | `svgDiagramsBecomeMermaid` | Asserts each of the five SVG diagrams appears as a Mermaid fence, not an image or omission | `dist/index.md` | Mermaid fences |
+| `site/tests/markdown.test.ts` | `markdownPathAdvertised` | Asserts `robots.txt` and `llms.txt` both reference `/index.md` | `dist` | Present |
 | `site/tests/lighthouse.test.ts` | `thresholdsConfigCommitted` | Asserts the Lighthouse threshold config exists and declares all four categories | Config file | Present |
 | `site/tests/content.test.ts` | `lastUpdatedMatchesJsonLd` | Asserts the visible date equals JSON-LD `dateModified` | All pages | Equal |
 | `site/tests/sitemap.test.ts` | `sitemapCoversAllPages` | Asserts set equality between emitted HTML pages and sitemap entries | `dist`, `sitemap.xml` | Equal |
@@ -755,7 +780,7 @@ output plus a post-deploy live check.
 | `site/tests/docs-pages.test.ts` | `docsAnchorsPreserved` | Asserts every registry `SeeDocs` anchor resolves in published HTML | Registry values, `dist` | All resolve |
 | `site/tests/docs-pages.test.ts` | `docsProseNotDuplicated` | Asserts `site/` contains no copy of the narrative Markdown prose | `site/` tree | Absent |
 | `site/tests/build-failure.test.ts` | `missingDocFailsBuild` | Asserts the build exits non-zero naming a renamed doc file | Renamed fixture | Non-zero, named |
-| `.agents/scripts/verify-site-deploy.sh` | n/a | Post-deploy live check of status codes, redirects, crawler files, provenance, and `Accept: text/markdown` negotiation | Live site | All pass |
+| `.agents/scripts/verify-site-deploy.sh` | n/a | Post-deploy live check of status codes, redirects, crawler files, provenance, and `/index.md` reachability with its served Content-Type recorded | Live site | All pass |
 | CI (Lighthouse) | n/a | Runs Lighthouse on mobile emulation against the built site and fails below threshold | `dist` | Performance, Accessibility, Best Practices at least 95; SEO 100 |
 
 The test runner **MUST** build before asserting, and **MUST NOT** assert against a
@@ -900,35 +925,35 @@ Then no reference targets a host other than the site's own origin
   And the Inter and Geist Mono fonts are served from the site
 ```
 
-### AC-14: A Markdown representation exists for every page
+### AC-14: The landing page has a Markdown representation
 
 ```gherkin
 Given the site has been built
 When the output is inspected
-Then every published HTML page has a Markdown counterpart at a parallel path
-  And each Markdown file is served with Content-Type text/markdown
-  And robots.txt and llms.txt advertise the Markdown paths
+Then /index.md exists and is non-empty
+  And its headings and body text match the landing page HTML
+  And it was generated by the build rather than committed by hand
 ```
 
-### AC-15: SVG diagrams appear as Mermaid in Markdown
+### AC-15: SVG diagrams appear as Mermaid in the Markdown
 
 ```gherkin
-Given a page contains one of the five SVG capability or privacy diagrams
-When that page's Markdown representation is inspected
-Then the diagram appears as a Mermaid fenced code block
-  And it is not an image reference and not omitted
+Given the landing page contains the five SVG capability and privacy diagrams
+When /index.md is inspected
+Then each diagram appears as a Mermaid fenced code block
+  And none appears as an image reference
+  And none is omitted
 ```
 
-### AC-16: Content negotiation returns the requested representation
+### AC-16: The Markdown path is advertised and reachable
 
 ```gherkin
-Given the negotiation layer is deployed
-When a page is requested with Accept: text/markdown
-Then the response body is the Markdown representation
-  And Content-Type is text/markdown
-  And the response carries Vary: Accept
-And when the same page is requested with Accept: text/html
-Then the response body is the HTML representation
+Given the site is live
+When robots.txt and llms.txt are inspected
+Then both reference /index.md
+And when /index.md is requested
+Then it returns 200
+  And the served Content-Type is recorded, whatever Pages assigns to .md
 ```
 
 ### AC-17: Lighthouse thresholds are enforced in CI
@@ -1128,19 +1153,19 @@ maintained in parallel, and `markdownMatchesHtmlContent` asserts equivalence of
 headings and body text on every build. Hand-authoring the Markdown is the specific
 thing to avoid.
 
-### Risk 6: The negotiation layer reintroduces the Cloudflare proxy problems
+### Risk 6: The served Content-Type for `/index.md` is not what a client expects
 
 **Likelihood:** medium
-**Impact:** medium
-**Mitigation:** FR-34 cannot be satisfied on plain Pages, and the recommended
-implementation is a Worker, which requires proxying the zone. Proxying is what
-previously forced Flexible SSL (an unencrypted origin hop), let Cloudflare's managed
-Content Signals file occupy `/robots.txt`, and risked Bot Fight Mode challenging the
-AI crawlers FR-17 deliberately admits. If the Worker path is taken, SSL/TLS must be
-Full (strict), the managed `robots.txt` must be disabled, and bot protection must be
-verified against `GPTBot` and `ClaudeBot` before it is considered done. The static
-`.md` paths under FR-30 to FR-33 and FR-35 work without any of this, so the
-foundation is not blocked on resolving it.
+**Impact:** low
+**Mitigation:** GitHub Pages permits no custom response headers, so the
+`Content-Type` on `/index.md` is whatever its MIME mapping assigns to `.md`. That
+value is currently unverified, and could not be verified while authoring: no `.md`
+file is reachable on the existing deployment, because Pages excludes dot-prefixed
+paths and nothing else on `gh-pages` qualifies. A client filtering strictly on
+`text/markdown` may therefore reject it. FR-33 requires the value be verified and
+recorded after the first deploy rather than assumed, and accepts `text/plain` for this
+CR since the content is still consumable. Guaranteeing the header needs the edge
+layer, which is deferred.
 
 ### Risk 7: Deferred copy is amplified rather than merely postponed
 
@@ -1176,20 +1201,18 @@ the crawler files build outputs removes the incentive for the most likely edits,
 **Mitigation:** the current build is 448 KB of JavaScript (137 KB gzipped) plus
 70 KB of CSS (12.9 KB gzipped), and GSAP, Lenis, and several canvas components are
 all client-side. Pre-rendering improves perceived load but does not reduce bundle
-size, and FR-36 sets a hard Performance floor of 95 that a 448 KB bundle may not
+size, and FR-35 sets a hard Performance floor of 95 that a 448 KB bundle may not
 clear on mobile emulation. Code-split the motion layer off the critical path, and
 treat the first Lighthouse run as a measurement rather than a formality: it is the
 step most likely to expose real work, which is why it has its own phase.
 
 ## Dependencies
 
-* **Blocking:** the implementation choice for the FR-34 negotiation layer, since a
-  Worker requires proxying the Cloudflare zone and that has consequences recorded
-  under Risk 6. The static Markdown paths are not blocked on it.
 * Requires GitHub Pages settings access to re-enable the custom domain deleted by
   `c12b6c5`. No DNS change is required: the zone was never modified.
-* If the Worker path is chosen for FR-34, requires Cloudflare access to proxy the
-  zone and configure SSL/TLS, the managed `robots.txt`, and bot protection.
+* No blocking dependency remains. Content negotiation was the only one and is
+  deferred, so every requirement here is satisfiable on plain GitHub Pages with no
+  Cloudflare change.
 * A follow-up CR **MUST** correct the deferred copy. This CR should not be considered
   finished work on the site's content, only on its foundation.
 * Depends on CR-0065 for the documentation governance rules that decide what is
@@ -1207,9 +1230,9 @@ step most likely to expose real work, which is why it has its own phase.
 | Phase 1: Adopt and track | 3 to 5 hours | Font self-hosting is most of it |
 | Phase 2: CI deployment and provenance | 3 to 5 hours | Includes re-enabling the custom domain |
 | Phase 3: Pre-render and docs pages | 10 to 18 hours | Widest variance; depends entirely on how the motion and canvas layers tolerate server rendering |
-| Phase 4: Crawler surface, metadata, Markdown | 8 to 12 hours | The SVG to Mermaid conversion and the negotiation layer are the new weight |
+| Phase 4: Crawler surface, metadata, Markdown | 6 to 9 hours | The SVG to Mermaid conversion is the new weight; negotiation is deferred |
 | Phase 5: Lighthouse budget and registration | 4 to 10 hours | Range is wide because the first Lighthouse run decides how much performance work the 448 KB bundle needs |
-| **Total** | **28 to 50 hours** | Copy correction is excluded and deferred |
+| **Total** | **26 to 47 hours** | Copy correction and content negotiation are excluded and deferred |
 
 ## Decision Outcome
 
@@ -1241,10 +1264,15 @@ close behind.
 The Markdown representation is treated as a first-class output rather than a
 convenience. HTML forces a retrieval pipeline to reconstruct meaning from
 presentation, and an SVG diagram carries none at all once flattened; emitting Mermaid
-turns those diagrams into something a model can quote and reason about. The
-representation is separated from the negotiation that serves it because the former is
-static and free while the latter needs edge code, so the foundation ships either
-way.
+turns those diagrams into something a model can quote and reason about.
+
+Scoping it to a single static `/index.md` is deliberate. The representation and the
+mechanism that serves it are separable, and only the mechanism needs infrastructure:
+a static file advertised in `robots.txt` and `llms.txt` is discoverable today on plain
+Pages, whereas negotiating on `Accept` requires edge code and a return to a proxied
+Cloudflare zone. Deferring the mechanism leaves this CR with no blocking dependency
+and nothing to change outside the repository, while still delivering the thing that
+carries the value, which is the content in a form a model can read.
 
 ## Related Items
 
@@ -1276,9 +1304,15 @@ Three properties drive retrieval, and the first is a precondition for the others
 2. **Claims must be self-contained and specific.** "Four aggregate MCP tools
    dispatching 42 verbs across calendar, mail, account, and system, 33 of them
    registered in the default gated configuration" survives extraction. "Powerful
-   Outlook integration" does not. FR-26 and FR-35.
+   Outlook integration" does not. Deferred to the copy CR; this one delivers the
+   pre-rendered surface those claims will sit in.
 3. **Structure must match the question.** Question-form headings with answer-first
-   sentences align the retrievable unit with the query. FR-35.
+   sentences align the retrievable unit with the query. FR-43 delivers the structure;
+   the wording is deferred.
+4. **Diagrams must carry meaning, not pixels.** An SVG flattens to nothing a model can
+   use. FR-32 re-expresses the five capability and privacy diagrams as Mermaid in
+   `/index.md`, which is the one place this CR improves what a model can quote rather
+   than only how easily it can reach it.
 
 ### On not blocking AI crawlers
 
@@ -1299,8 +1333,9 @@ practice (use `gsap.matchMedia()` rather than `window.innerWidth` checks inside
 direct DOM manipulation rather than `setState`; use `height: 100vh` rather than
 `minHeight` on pinned triggers).
 
-Two caveats travel with them. Their tool-surface content is the retired model
-(FR-25), and Asset 10 specifies a Three.js particle field via `@react-three/fiber`
+Two caveats travel with them. Their tool-surface content is the retired model, which
+is enumerated under "Deferred to a follow-up CR", and Asset 10 specifies a Three.js
+particle field via `@react-three/fiber`
 while what was actually built is a canvas implementation and neither package is a
 dependency. Where the documents and the code disagree, the code is correct and the
 documents should be corrected to match as they are adopted.
