@@ -20,6 +20,7 @@ import { dirname, resolve } from 'node:path'
 const here = dirname(fileURLToPath(import.meta.url))
 const siteRoot = resolve(here, '..')
 const indexPath = resolve(siteRoot, 'dist/index.html')
+const indexMdPath = resolve(siteRoot, 'dist/index.md')
 const ssrEntry = resolve(siteRoot, 'dist-ssr/entry-server.js')
 
 /** Matches the empty root container the client build emits, tolerating whitespace. */
@@ -36,12 +37,16 @@ function fail(message) {
   process.exit(1)
 }
 
-const { render } = await import(ssrEntry).catch((err) =>
+const { render, renderIndexMarkdown } = await import(ssrEntry).catch((err) =>
   fail(`could not load SSR bundle at ${ssrEntry}: ${err?.message ?? err}`),
 )
 
 if (typeof render !== 'function') {
   fail('SSR bundle does not export a render() function')
+}
+
+if (typeof renderIndexMarkdown !== 'function') {
+  fail('SSR bundle does not export a renderIndexMarkdown() function')
 }
 
 const appHtml = render()
@@ -69,3 +74,15 @@ if (/<div id="root">\s*<\/div>/.test(injected)) {
 
 writeFileSync(indexPath, injected, 'utf8')
 console.log(`prerender: injected ${appHtml.length} chars into dist/index.html`)
+
+// Emit the Markdown representation of the landing page (FR-31 to FR-33). It is derived
+// from the same render as the HTML above, so the two cannot describe different content.
+const indexMd = renderIndexMarkdown()
+if (typeof indexMd !== 'string' || indexMd.trim().length === 0) {
+  fail('renderIndexMarkdown() produced no Markdown; refusing to publish an empty /index.md')
+}
+if (!/```mermaid/.test(indexMd)) {
+  fail('index.md carries no Mermaid fences; the SVG diagrams were not converted (FR-33)')
+}
+writeFileSync(indexMdPath, indexMd, 'utf8')
+console.log(`prerender: wrote ${indexMd.length} chars to dist/index.md`)

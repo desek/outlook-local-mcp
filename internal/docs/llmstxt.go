@@ -6,14 +6,30 @@ import (
 )
 
 // githubBase is the absolute GitHub blob URL prefix for the default branch.
-// All links in the generated llms.txt must use this prefix so off-repo LLM
+// All repository links in the generated llms.txt use this prefix so off-repo LLM
 // clients can resolve them without access to the local filesystem.
 const githubBase = "https://github.com/desek/outlook-local-mcp/blob/main/"
+
+// siteBase is the absolute apex origin the published website is served from
+// (CR-0070 FR-1). Site items (for example the Markdown landing page representation)
+// carry a full URL under this origin rather than a GitHub blob path.
+const siteBase = "https://outlook-local-mcp.com/"
 
 // llmsSections defines the H2 sections in the generated llms.txt.
 // Each section has a heading and a list of items in llms.txt format:
 // "[Title](url): description".
 var llmsSections = []llmsSection{
+	{
+		heading: "Site",
+		items: []llmsItem{
+			{
+				title:       "Landing page (Markdown)",
+				path:        "index.md",
+				absolute:    siteBase,
+				description: "A Markdown representation of the project landing page, with its capability and privacy diagrams as Mermaid, for clients that prefer Markdown over HTML.",
+			},
+		},
+	},
 	{
 		heading: "Docs",
 		items: []llmsItem{
@@ -84,8 +100,13 @@ type llmsSection struct {
 
 // llmsItem represents a single entry in an llms.txt section.
 type llmsItem struct {
-	title       string
-	path        string
+	title string
+	// path is joined to a base origin to form the item URL. For a repository item
+	// the base is githubBase; for a site item the base is the value of absolute.
+	path string
+	// absolute, when non-empty, is the origin the path is joined to instead of
+	// githubBase, letting a site item point at the published apex domain.
+	absolute    string
 	description string
 }
 
@@ -96,11 +117,12 @@ type llmsItem struct {
 //   - A single H1 header ("# outlook-local-mcp").
 //   - A blockquote one-sentence project summary.
 //   - An information paragraph about the in-server documentation surface.
-//   - H2 sections (Docs, Tools, Change Requests, Optional) with items as
-//     "[Title](absolute-github-url): description" lines.
+//   - H2 sections (Site, Docs, Tools, Change Requests, Optional) with items as
+//     "[Title](absolute-url): description" lines.
 //
-// Every link uses an absolute GitHub blob URL on the main branch so off-repo
-// LLM clients can resolve them without local filesystem access.
+// Repository links use an absolute GitHub blob URL on the main branch so off-repo
+// LLM clients can resolve them without local filesystem access; the Site section's
+// items use the published apex origin instead (CR-0070 FR-35).
 //
 // GenerateLLMsTxt takes no parameters and returns a string; it does not read
 // the embedded bundle at runtime (the catalog is used only to verify slugs
@@ -123,7 +145,11 @@ func GenerateLLMsTxt() string {
 	for _, section := range llmsSections {
 		fmt.Fprintf(&b, "## %s\n\n", section.heading)
 		for _, item := range section.items {
-			url := githubBase + item.path
+			base := githubBase
+			if item.absolute != "" {
+				base = item.absolute
+			}
+			url := base + item.path
 			fmt.Fprintf(&b, "- [%s](%s): %s\n", item.title, url, item.description)
 		}
 		b.WriteString("\n")

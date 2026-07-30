@@ -1,0 +1,14 @@
+# robots.txt for https://outlook-local-mcp.com
+#
+# This project is discovered largely through AI assistants, so the AI crawlers below
+# are deliberately allowed. Do NOT add a Disallow for GPTBot, ClaudeBot, PerplexityBot,
+# Google-Extended, or OAI-SearchBot: blocking them would cut off this project's primary
+# discovery channel (CR-0070 FR-18).
+#
+# A Markdown representation of the landing page is served at /index.md for clients that
+# prefer Markdown (CR-0070 FR-35).
+
+User-agent: *
+Allow: /
+
+Sitemap: https://outlook-local-mcp.com/sitemap.xml

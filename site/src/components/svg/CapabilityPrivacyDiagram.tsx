@@ -13,6 +13,7 @@ export default function CapabilityPrivacyDiagram({ className }: Props) {
 
   return (
     <svg
+      data-diagram="privacy"
       viewBox="0 0 640 400"
       xmlns="http://www.w3.org/2000/svg"
       className={className}

@@ -88,8 +88,15 @@ func TestLLMsTxt_LinksAreAbsolute(t *testing.T) {
 
 	for _, m := range matches {
 		url := m[1]
+		// Site items point at the published apex origin (CR-0070 FR-35), for
+		// example the Markdown landing page representation at /index.md. They are
+		// still absolute; they are simply not GitHub blob URLs, so they are checked
+		// only for the apex prefix and skipped by the blob/tree check below.
+		if strings.HasPrefix(url, "https://outlook-local-mcp.com/") {
+			continue
+		}
 		if !strings.HasPrefix(url, "https://github.com/desek/outlook-local-mcp/") {
-			t.Errorf("link URL is not an absolute GitHub URL: %q", url)
+			t.Errorf("link URL is not an absolute GitHub or apex site URL: %q", url)
 		}
 		if strings.Contains(url, "..") || (!strings.Contains(url, "/blob/") && !strings.Contains(url, "/tree/") && !strings.HasSuffix(url, "/")) {
 			t.Errorf("link URL does not reference blob or tree on a branch: %q", url)

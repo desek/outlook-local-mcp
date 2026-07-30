@@ -92,6 +92,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
 
   return (
     <svg
+      data-diagram="calendar"
       viewBox="0 0 480 300"
       xmlns="http://www.w3.org/2000/svg"
       className={className}

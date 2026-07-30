@@ -5,6 +5,7 @@ interface Props {
 export default function CapabilityMultiAccount({ className }: Props) {
   return (
     <svg
+      data-diagram="multi-account"
       viewBox="0 0 480 340"
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Multi-account management diagram"

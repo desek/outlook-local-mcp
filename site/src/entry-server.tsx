@@ -12,11 +12,16 @@
  * canvas lives inside effects and event handlers, so the tree renders cleanly on the
  * server without any browser-API guards firing.
  *
- * @agents-index Server render entry: renders App to an HTML string via renderToString for build-time pre-rendering.
+ * It also exports renderIndexMarkdown, the /index.md source (CR-0070 FR-31 to FR-33).
+ * That function derives its Markdown from the very same render() output the HTML uses,
+ * so the two representations are generated from one source and cannot diverge (FR-32).
+ *
+ * @agents-index Server render entry: renders App to an HTML string, and derives the /index.md Markdown from that same render.
  */
 import { StrictMode } from 'react'
 import { renderToString } from 'react-dom/server'
 import App from './App'
+import { htmlToLandingMarkdown } from '../build/index.md.emit'
 
 /**
  * render produces the pre-rendered HTML for the landing page.
@@ -30,4 +35,16 @@ export function render(): string {
       <App />
     </StrictMode>,
   )
+}
+
+/**
+ * renderIndexMarkdown produces the Markdown representation of the landing page.
+ *
+ * It converts the same HTML render() returns, so the Markdown carries the same content
+ * as the pre-rendered page, with the five SVG diagrams re-expressed as Mermaid (FR-33).
+ *
+ * @returns The landing page as a Markdown document.
+ */
+export function renderIndexMarkdown(): string {
+  return htmlToLandingMarkdown(render())
 }

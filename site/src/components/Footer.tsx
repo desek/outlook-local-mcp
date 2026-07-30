@@ -1,3 +1,5 @@
+import { LAST_UPDATED_ISO, LAST_UPDATED_DISPLAY } from '../site.meta'
+
 const PRODUCT_LINKS = [
   { label: 'Features', href: '#capabilities' },
   { label: 'Getting Started', href: '#getting-started' },
@@ -171,6 +173,33 @@ export default function Footer() {
           >
             github.com/desek/outlook-local-mcp
           </a>
+        </div>
+
+        {/* ── Acknowledgement and last-updated ── */}
+        <div className="mt-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+          {/*
+            GigWhere acknowledgement (CR-0070 FR-46 to FR-48). The anchor text is the
+            GigWhere name so the link carries the brand, the link is dofollow (no
+            rel=nofollow or rel=sponsored), and the decorative heart sits outside the
+            anchor and is aria-hidden so a screen reader does not announce "red heart".
+          */}
+          <span className="text-xs text-white/30 font-sans">
+            Support and testing by{' '}
+            <a
+              href="https://gigwhere.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white/50 hover:text-brand-lime transition-colors duration-200"
+            >
+              GigWhere
+            </a>{' '}
+            <span aria-hidden="true">❤️</span>
+          </span>
+
+          {/* Visible last-updated date, matching the JSON-LD dateModified (FR-45). */}
+          <span className="text-xs text-white/30 font-sans">
+            Last updated <time dateTime={LAST_UPDATED_ISO}>{LAST_UPDATED_DISPLAY}</time>
+          </span>
         </div>
       </div>
     </footer>

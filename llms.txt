@@ -4,6 +4,10 @@
 
 This server embeds its own documentation and exposes it through three verbs on the `system` aggregate tool: `system.list_docs`, `system.search_docs`, and `system.get_docs`. Each embedded document is also available as an MCP resource at `doc://outlook-local-mcp/{slug}`. LLM clients that support `resources/list` and `resources/read` can fetch documents natively; clients that do not can use the `system.*_docs` verbs instead. Call `{tool: "system", args: {operation: "list_docs"}}` to see the available documents, or `{tool: "system", args: {operation: "status"}}` for the server entry point including `docs.base_uri`.
 
+## Site
+
+- [Landing page (Markdown)](https://outlook-local-mcp.com/index.md): A Markdown representation of the project landing page, with its capability and privacy diagrams as Mermaid, for clients that prefer Markdown over HTML.
+
 ## Docs
 
 - [Quick Start Guide](https://github.com/desek/outlook-local-mcp/blob/main/QUICKSTART.md): Prerequisites, installation, authentication, and first tool call.

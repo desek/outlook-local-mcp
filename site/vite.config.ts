@@ -3,6 +3,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { provenancePlugin } from './build/provenance.plugin'
+import { seoPlugin } from './build/seo.plugin'
 import { generateDocPages } from './build/doc.pages'
 
 // The site root is this config file's directory. Documentation pages are generated
@@ -29,7 +30,10 @@ export default defineConfig(({ isSsrBuild }) => {
     // provenancePlugin stamps build provenance (commit, UTC build time, workflow run)
     // into every HTML head as <meta> tags and emits /build-info.json, injected from the
     // CI environment with an explicit local-build fallback (CR-0070 FR-26 to FR-30).
-    plugins: [react(), tailwindcss(), provenancePlugin()],
+    // seoPlugin injects the per-page canonical, Open Graph, Twitter card, and JSON-LD
+    // into every head and emits sitemap.xml and the copied llms.txt (CR-0070 FR-19 to
+    // FR-23, FR-39 to FR-45).
+    plugins: [react(), tailwindcss(), provenancePlugin(), seoPlugin()],
     resolve: {
       dedupe: ['react', 'react-dom'],
     },

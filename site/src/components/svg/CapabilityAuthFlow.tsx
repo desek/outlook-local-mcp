@@ -5,6 +5,7 @@ interface Props {
 export default function CapabilityAuthFlow({ className }: Props) {
   return (
     <svg
+      data-diagram="auth-flow"
       viewBox="0 0 480 360"
       xmlns="http://www.w3.org/2000/svg"
       aria-label="Zero-Config Auth flow diagram showing three authentication methods"

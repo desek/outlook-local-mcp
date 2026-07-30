@@ -17,6 +17,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { renderMarkdown } from './doc.markdown'
+import { LAST_UPDATED_ISO, LAST_UPDATED_DISPLAY } from '../src/site.meta'
 
 /**
  * DocPage describes one publishable documentation page.
@@ -68,6 +69,9 @@ function pageTemplate(title: string, body: string): string {
     <main class="doc-page">
 ${body}
     </main>
+    <footer class="doc-footer">
+      <p>Last updated <time datetime="${LAST_UPDATED_ISO}">${escapeHtml(LAST_UPDATED_DISPLAY)}</time></p>
+    </footer>
   </body>
 </html>
 `
