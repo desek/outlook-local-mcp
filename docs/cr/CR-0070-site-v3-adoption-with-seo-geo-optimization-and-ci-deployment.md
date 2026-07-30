@@ -420,11 +420,13 @@ flowchart TD
     available to change. Three measurements establish it, all with identical markup and
     scheduling:
 
-    | client bundle served | LCP | Performance |
+    | critical-path bytes changed | LCP | Performance |
     |---|---|---|
-    | 137 KB gzipped (React, GSAP, ScrollTrigger, Lenis, components) | 2,553 ms | 0.97 |
-    | 20 bytes (stub) | 1,803 ms | 0.99 |
-    | absent entirely | 1,803 ms | 1.00 |
+    | none — as shipped | 2,553 ms | 0.97 |
+    | client bundle replaced by a 20-byte stub | 1,803 ms | 0.99 |
+    | client bundle absent entirely | 1,803 ms | 1.00 |
+    | all five web fonts removed, real bundle | 1,952 ms | 0.99 |
+    | fonts subset to the site's own 111 glyphs (94 KB to 43 KB), real bundle | 2,406 ms | 0.97 |
 
     The 750 ms difference is the bundle's transfer time at the emulated 1,475 Kbps, to
     within a few milliseconds. Scheduling does not move it: deferring the module's
@@ -445,6 +447,14 @@ flowchart TD
       smooth scroller — is the reason CR-0070 adopted v3 rather than rebuilding, and it
       is what the 137 KB buys. Reaching 100 means removing that design, which is a
       change-owner decision about the product, not a performance defect to fix.
+
+      The font measurements close off the obvious alternative. Deleting every web font
+      outright, which is far past anything acceptable, still leaves the page at 0.99;
+      subsetting them properly to the 111 glyphs the site actually uses buys 148 ms and
+      leaves the score unmoved at 0.97. So no font strategy reaches 100 either. With
+      fonts perfectly optimised the bundle would still need to fall to roughly 27 KB
+      gzipped — React alone is about 45 KB — which is the same conclusion by a different
+      route: the animation stack is the constraint, and nothing else on the page is.
 
     The 96 floor is set one point below the measured 0.97 to absorb run-to-run variance,
     and the metric budgets above make the underlying numbers assertable in their own

@@ -370,6 +370,14 @@ collected until the site is deployed.
   100 in Performance needs the bundle down to roughly 20 KB — which means removing the
   GSAP and Lenis motion design that CR-0070 adopted v3 in order to keep. That is a
   product decision for the change owner, not a defect.
+
+  The fonts were then tested as the other half of the critical path, to be sure the
+  conclusion was not an artefact of looking only at the bundle. Removing all five faces
+  outright — well past anything acceptable — reaches 1,952 ms and **0.99**, still not
+  1.00. Subsetting them properly (94 KB to 43 KB, Carry-forward records why it was
+  reverted) buys 148 ms and leaves the score at 0.97. Both roads end in the same place:
+  with fonts perfectly optimised the bundle would still have to fall to roughly 27 KB,
+  and React alone is about 45 KB.
 * **FR-36 amended accordingly, and tightened in every direction the evidence allows.**
   Accessibility, Best Practices and SEO go from "at least 95" to **100 on every page**;
   documentation-page Performance goes from "at least 95" to **100**; the landing page is
@@ -488,6 +496,34 @@ change-owner decisions rather than corrections.
 Pre-rendering is confirmed as the highest-value requirement, which validates the CR's
 central thesis, with the honesty caveat that the evidence is third-party edge telemetry
 rather than vendor confirmation and should be cited as such.
+
+### TODO: font subsetting, built and then reverted, worth 148 ms
+
+Attempt 4 built a post-build step that subsets each emitted face to the 111 characters the
+site can actually display, cutting the five above-the-fold woff2 files from 94 KB to 43 KB.
+Measured: **148 ms of Largest Contentful Paint on every page** (index 2,554 to 2,406;
+concepts 1,652 to 1,503; quickstart 1,502 to 1,352; troubleshooting 1,651 to 1,502). No
+category score moved, on any page.
+
+It was reverted for one reason: `pyftsubset` is a Python tool, so the Node build would gain
+a Python plus `fonttools` plus `brotli` dependency, which CI does not have and which sits
+awkwardly against NFR-2's "no network access beyond the package registry". A JavaScript
+subsetter with a bundled harfbuzz (`subset-font` and similar) would avoid that entirely,
+and is the way to pick this up.
+
+Two findings worth keeping, because both cost a full measure-and-diff cycle to find and are
+invisible without a pixel comparison:
+
+* **`--no-hinting` changes rasterisation.** It saves about 10% more and moved 110 of 135
+  screenshot tiles outside the visual tolerance, on text that was otherwise identical.
+* **Restricting `--layout-features` does too.** `kern,liga,clig,calt` looks like the
+  complete set for western text and is not: it drops `ccmp`, `locl`, `mark` and `rlig`,
+  which the default set keeps, with the same 110-tile result. `--layout-features=*` alone
+  did not fix it either; `--glyph-names`, `--symbol-cmap`, `--legacy-cmap` and
+  `--notdef-outline` were also required before the diff came back clean.
+
+The lesson generalises past fonts: a "pure byte reduction" is only pure if something
+measures the pixels, and three of the four attempts here silently were not.
 
 ### TODO: fold metrics tracking into the project so regressions are visible
 
