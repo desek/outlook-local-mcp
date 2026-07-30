@@ -8,6 +8,14 @@ metadata:
 
 # Changelog
 
+## [1.4.0](https://github.com/desek/governance/compare/governance-v1.3.0...governance-v1.4.0) (2026-07-29)
+
+
+### Features
+
+* **governance:** add CR implementation workflow reference to the governance skill ([#27](https://github.com/desek/governance/issues/27)) ([cfcb537](https://github.com/desek/governance/commit/cfcb537eeaee2cfdc9d653a88bc1db381cec7801))
+* **governance:** decouple governance references from the implementation ([8f51fde](https://github.com/desek/governance/commit/8f51fde6e61091431034960dd7bc3e19b811f6c7)), closes [#25](https://github.com/desek/governance/issues/25)
+
 ## [1.3.0](https://github.com/desek/governance/compare/governance-v1.2.0...governance-v1.3.0) (2026-03-09)
 
 

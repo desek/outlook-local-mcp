@@ -17,6 +17,7 @@ Detailed guidance for creating and managing Change Requests.
 - [Requirements](#requirements)
 - [Document Numbering](#document-numbering)
 - [Source Traceability](#source-traceability)
+- [Governance Reference Boundary](#governance-reference-boundary)
 
 ## When to Create a CR
 
@@ -146,3 +147,37 @@ A CR may need to be reviewed and updated ("rebased") when the diff between its `
 - The implementation plan's feasibility
 - The impact assessment's completeness
 - The acceptance criteria's validity
+
+## Governance Reference Boundary
+
+Source Traceability records what a CR was written *against*. This section governs the reverse direction: where a governance identifier is allowed to appear once the CR is being implemented. The two read together — a CR points at its source commit, and the implementation points back at the CR through Git metadata, never through the working tree.
+
+### The reference pattern
+
+A **governance reference** is any identifier matching one of the prefixes `CR-`, `ADR-`, `FR-`, `NFR-`, or `AC-` immediately followed by a hyphen already consumed by the prefix and one or more digits. In regular-expression terms it is `(CR|ADR|FR|NFR|AC)-[0-9]+`, covering Change Requests, Architecture Decision Records, Functional Requirements, Non-Functional Requirements, and Acceptance Criteria.
+
+### Permitted territory
+
+A governance reference **MAY** appear only in:
+
+- The governance corpus: any file under `docs/cr/` or `docs/adr/`, including filenames.
+- The governance corpus index: `docs/llms.txt`, whose purpose is to enumerate the corpus.
+- Git metadata: commit messages, branch names, pull request titles and descriptions, and issue text.
+- The governance skill's own definition of the rule and its document-naming conventions, where the pattern appears as a placeholder rather than as a reference to a specific document. These files are exactly `skills/governance/templates/CR.md`, `skills/governance/templates/ADR.md`, `skills/governance/reference/cr-guide.md`, and `skills/governance/reference/adr-guide.md`.
+- The boundary test's own machinery: `tests/governance/test_reference_boundary.bats` and `tests/governance/test_helpers/setup.bash`, which must embed the pattern to define and exercise the check.
+
+### Prohibited territory
+
+A governance reference **MUST NOT** appear in:
+
+- Source code of any kind, including code comments.
+- Test names, test descriptions, and test assertions.
+- User-facing documentation: `README.md`, `AGENTS.md`, `CONTRIBUTING.md`, `WORKFLOW.md`, skill `SKILL.md` files, and any documentation outside the governance corpus that is not on the permitted allowlist above.
+
+### Linking an implementation to its governance document
+
+Git metadata is the permitted mechanism for tying an implementation to the CR or ADR it originated from. **Commit messages, branch names, and pull request descriptions** carry the identifier; a checkpoint commit subject bearing a CR identifier is queryable with `git log --grep` and never appears in the working tree. Embedding the identifier in source code, tests, or user-facing documentation is **prohibited** — describe the behavior on its own terms and let the commit metadata record its provenance.
+
+### Rationale
+
+The distinction is one of audience. The governance corpus is read by people reasoning about decisions, for whom identifiers are how they navigate it. Everything else is read by people using or changing the software, for whom an identifier is a dead end: it is meaningless to a reader without the corpus, it rots silently when a document is renumbered or superseded, and it inverts traceability by forcing a reader of the code to obtain the governance document before understanding what they are reading.

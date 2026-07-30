@@ -19,6 +19,10 @@ Creates and manages governance documents: ADRs for architectural decisions, CRs 
 | Technical/architectural decision | ADR | [reference/adr-guide.md](reference/adr-guide.md) |
 | Requirement or scope change | CR | [reference/cr-guide.md](reference/cr-guide.md) |
 
+## Governance Reference Boundary
+
+Governance identifiers (the `CR-`, `ADR-`, `FR-`, `NFR-`, and `AC-` prefixes followed by digits) belong in the governance corpus under `docs/` and in Git metadata — commit messages, branch names, and pull request descriptions — and **MUST NOT** be written into source code, test names, or user-facing documentation. To link an implementation back to its governance document, put the identifier in the commit message and describe the behavior itself in the code; see [reference/cr-guide.md#governance-reference-boundary](reference/cr-guide.md#governance-reference-boundary) for the full pattern definition, the permitted and prohibited territories, and the rationale.
+
 ## ADR Workflow
 
 > **Documentation-only task.** Creating an ADR is a documentation-only task. No code compilation, test execution, or linting is required.
@@ -34,7 +38,7 @@ Use this checklist when creating an Architecture Decision Record:
 - [ ] Set status to "proposed"
 ```
 
-**Template frontmatter:** The template file contains its own frontmatter (`name: adr-template`, `description: Template for creating Architecture Decision Records (ADRs).`, and `metadata` fields) that describe the template itself. Do **not** copy these values into created documents. Each ADR must have its own unique `name` and `description` reflecting the specific decision. Created ADR documents **MUST** omit the `metadata.copyright` and `metadata.version` frontmatter fields.
+**Template frontmatter:** A created ADR carries its own `name` and `description` reflecting the specific decision, and no template metadata. The template's `name` and `description` describe the template itself, so replace them; the template carries no other metadata to copy.
 
 **Strict requirements:**
 - File naming: `ADR-NNNN-{title}.md` (four-digit number, lowercase, hyphens)
@@ -62,7 +66,7 @@ Use this checklist when creating a Change Request:
 - [ ] Set status to "proposed"
 ```
 
-**Template frontmatter:** The template file contains its own frontmatter (`name: cr-template`, `description: Template for creating Change Requests (CRs).`, and `metadata` fields) that describe the template itself. Do **not** copy these values into created documents. Each CR must have its own unique `name` and `description` reflecting the specific change request. Created CR documents **MUST** omit the `metadata.copyright` and `metadata.version` frontmatter fields.
+**Template frontmatter:** A created CR carries its own `name` and `description` reflecting the specific change request, and no template metadata. The template's `name` and `description` describe the template itself, so replace them; the template carries no other metadata to copy.
 
 **Strict requirements:**
 - File naming: `CR-NNNN-{title}.md` (four-digit number, lowercase, hyphens)
@@ -76,6 +80,10 @@ Use this checklist when creating a Change Request:
 - Number of diagrams
 - Depth of impact assessment
 
+### Implementing an Authored CR
+
+Once a CR exists, [reference/cr-implementation-workflow.md](reference/cr-implementation-workflow.md) provides a project-agnostic agent-team workflow that carries it from review through phased implementation, finalization, validation, gap-fixing, and documentation. It follows the host project's own build, lint, and test conventions.
+
 ## Templates
 
 - **ADR**: [templates/ADR.md](templates/ADR.md)
@@ -87,6 +95,7 @@ For detailed lifecycle information, best practices, and examples:
 
 - **ADR Guide**: [reference/adr-guide.md](reference/adr-guide.md)
 - **CR Guide**: [reference/cr-guide.md](reference/cr-guide.md)
+- **CR Implementation Workflow**: [reference/cr-implementation-workflow.md](reference/cr-implementation-workflow.md) — agent-team workflow for implementing an existing CR
 
 ## Commit Message Format
 
