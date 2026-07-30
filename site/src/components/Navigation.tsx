@@ -102,7 +102,7 @@ export default function Navigation() {
                 href={link.href}
                 className="relative text-sm text-white/80 tracking-wide transition-colors duration-200 hover:text-brand-lime focus-visible:outline-2 focus-visible:outline-brand-lime focus-visible:outline-offset-4 group"
                 onClick={(e) => handleNavClick(e, link.href, 'external' in link && link.external)}
-                {...('external' in link && link.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+                {...('external' in link && link.external ? { target: '_blank', rel: 'noopener' } : {})}
               >
                 {link.label}
                 {/* Lime dot on hover */}
@@ -160,7 +160,7 @@ export default function Navigation() {
               href={link.href}
               className="text-2xl text-white font-sans font-medium tracking-wide hover:text-brand-lime transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-brand-lime"
               onClick={(e) => handleNavClick(e, link.href, 'external' in link && link.external)}
-              {...('external' in link && link.external ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
+              {...('external' in link && link.external ? { target: '_blank', rel: 'noopener' } : {})}
             >
               {link.label}
             </a>

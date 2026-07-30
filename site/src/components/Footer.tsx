@@ -81,7 +81,7 @@ export default function Footer() {
                   <a
                     href={link.href}
                     target="_blank"
-                    rel="noopener noreferrer"
+                    rel="noopener"
                     className="text-sm text-white/50 font-sans hover:text-brand-lime transition-colors duration-200"
                   >
                     {link.label}
@@ -107,7 +107,7 @@ export default function Footer() {
             <a
               href="https://github.com/desek/outlook-local-mcp"
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noopener"
               className="inline-flex items-center gap-2 bg-white/[0.08] border border-white/10 rounded-lg px-4 py-2.5 hover:border-brand-lime/30 hover:bg-white/[0.12] transition-all duration-200 group"
             >
               {/* GitHub icon */}
@@ -124,7 +124,7 @@ export default function Footer() {
               <a
                 href="https://github.com/desek/outlook-local-mcp"
                 target="_blank"
-                rel="noopener noreferrer"
+                rel="noopener"
                 className="w-9 h-9 flex items-center justify-center rounded-md bg-white/[0.06] text-white/40 hover:text-brand-lime hover:bg-white/[0.1] transition-all duration-200"
                 aria-label="GitHub"
               >
@@ -135,7 +135,7 @@ export default function Footer() {
               <a
                 href="https://x.com"
                 target="_blank"
-                rel="noopener noreferrer"
+                rel="noopener"
                 className="w-9 h-9 flex items-center justify-center rounded-md bg-white/[0.06] text-white/40 hover:text-brand-lime hover:bg-white/[0.1] transition-all duration-200"
                 aria-label="X (Twitter)"
               >
@@ -168,7 +168,7 @@ export default function Footer() {
           <a
             href="https://github.com/desek/outlook-local-mcp"
             target="_blank"
-            rel="noopener noreferrer"
+            rel="noopener"
             className="text-xs text-white/30 font-sans hover:text-brand-lime transition-colors duration-200"
           >
             github.com/desek/outlook-local-mcp
@@ -188,7 +188,7 @@ export default function Footer() {
             <a
               href="https://gigwhere.com"
               target="_blank"
-              rel="noopener noreferrer"
+              rel="noopener"
               className="text-white/50 underline underline-offset-2 hover:text-brand-lime transition-colors duration-200"
             >
               GigWhere

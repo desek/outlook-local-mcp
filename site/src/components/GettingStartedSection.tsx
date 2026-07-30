@@ -157,7 +157,7 @@ export default function GettingStartedSection() {
                       <a
                         href="https://github.com/desek/outlook-local-mcp/releases"
                         target="_blank"
-                        rel="noopener noreferrer"
+                        rel="noopener"
                         className="inline-flex items-center gap-2 bg-brand-dark text-white font-mono text-label font-semibold tracking-[0.136em] uppercase px-6 py-3 rounded-lg hover:bg-brand-lime hover:text-brand-dark transition-colors duration-200"
                       >
                         Download .mcpb

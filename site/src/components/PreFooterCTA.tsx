@@ -73,7 +73,7 @@ export default function PreFooterCTA() {
           ref={linkRef}
           href="https://github.com/desek/outlook-local-mcp"
           target="_blank"
-          rel="noopener noreferrer"
+          rel="noopener"
           className="mt-5 font-mono text-label font-semibold tracking-[0.18em] text-brand-lime uppercase hover:text-white transition-colors duration-200"
         >
           View on GitHub <span>&#8599;</span>

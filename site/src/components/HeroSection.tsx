@@ -149,7 +149,7 @@ export default function HeroSection() {
                 <a
                   href="https://github.com/desek/outlook-local-mcp/releases"
                   target="_blank"
-                  rel="noopener noreferrer"
+                  rel="noopener"
                   className="text-sm font-mono tracking-wide text-white/60 hover:text-brand-lime transition-colors duration-200"
                 >
                   Download Claude Desktop extension (.mcpb)
