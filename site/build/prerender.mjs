@@ -72,50 +72,71 @@ if (/<div id="root">\s*<\/div>/.test(injected)) {
   fail('root is still empty after injection; refusing to publish')
 }
 
-// Inline the build's stylesheet into the document head so the landing page has no
-// render-blocking stylesheet request on the critical path. Lighthouse mobile measured
-// ~600ms of render delay charged to that single blocking request (CR-0070 FR-36); the
-// bytes still ship, but folding them into the HTML response removes the extra round
-// trip and pulls First and Largest Contentful Paint in on the hero <h1>. The referenced
-// CSS file is content-hashed by Vite, so we resolve it from the tag rather than a fixed
-// name, and fail loudly if the expected local stylesheet link is absent (the build
-// output shape changed) rather than silently ship the slower blocking variant.
-const STYLESHEET_LINK_RE =
-  /<link\b[^>]*\brel="stylesheet"[^>]*\bhref="(\/assets\/[^"]+\.css)"[^>]*>/g
-let inlinedCount = 0
-const withInlineCss = injected.replace(STYLESHEET_LINK_RE, (_tag, href) => {
-  let css
-  try {
-    css = readFileSync(resolve(siteRoot, `dist${href}`), 'utf8')
-  } catch (err) {
-    fail(`could not read stylesheet ${href} to inline it: ${err?.message ?? err}`)
-  }
-  inlinedCount += 1
-  return `<style>${css}</style>`
-})
-if (inlinedCount === 0) {
-  fail('no local <link rel="stylesheet"> found in dist/index.html to inline; the build output changed shape')
+// Inline the build's stylesheet into every page and preload the fonts each one
+// paints its Largest Contentful Paint element in.
+//
+// Both are applied to the documentation pages as well as the landing page. They were
+// previously landing-page only, which left the doc pages with a render-blocking
+// stylesheet request that Lighthouse mobile costed at 750 to 900 ms, and with no font
+// preload at all, so their prose swapped fonts late and charged the reflow to
+// Cumulative Layout Shift. Inlining is affordable now that the stylesheet is Latin
+// subsets only: it dropped from 88 KB to 39 KB when the unused Cyrillic, Greek,
+// Vietnamese, and extended-Latin faces were removed.
+//
+// Font choice per page is deliberate rather than blanket: preloading a font a page
+// does not paint above the fold wastes bandwidth on the critical path. The landing
+// page's LCP element is the hero <h1> in Inter; the doc pages lead with prose in Inter
+// and code blocks in Geist Mono.
+const assetsDir = resolve(siteRoot, 'dist/assets')
+
+/** Resolves a content-hashed woff2 by filename stem, or null when absent. */
+function findFont(stem) {
+  const f = readdirSync(assetsDir).find((n) => n.startsWith(stem) && n.endsWith('.woff2'))
+  return f ? `<link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/${f}" />` : null
 }
 
-// Preload the above-the-fold Latin Inter weights so the hero <h1> (the Largest
-// Contentful Paint element, rendered in Inter 400) paints in its real font instead of
-// swapping in late and reflowing, which is the layout shift Lighthouse mobile charges
-// to Cumulative Layout Shift (CR-0070 FR-36). @font-face declares these with
-// font-display: swap, so a preload only changes their fetch priority, never blocks
-// render. The files are content-hashed, so we resolve them from the built assets
-// directory rather than a fixed name and simply skip preloading if none are found.
-const assetsDir = resolve(siteRoot, 'dist/assets')
-const preloadWeights = ['inter-latin-400-normal', 'inter-latin-600-normal', 'inter-latin-700-normal']
-const preloadLinks = preloadWeights
-  .map((stem) => readdirSync(assetsDir).find((f) => f.startsWith(stem) && f.endsWith('.woff2')))
-  .filter(Boolean)
-  .map((f) => `<link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/${f}" />`)
-  .join('\n    ')
-const withPreloads = preloadLinks
-  ? withInlineCss.replace('</title>', `</title>\n    ${preloadLinks}`)
-  : withInlineCss
+const STYLESHEET_LINK = /<link\b[^>]*\brel="stylesheet"[^>]*\bhref="(\/assets\/[^"]+\.css)"[^>]*>/g
 
-writeFileSync(indexPath, withPreloads, 'utf8')
+/**
+ * Inlines the stylesheet and injects the given font preloads into one page.
+ * Returns the transformed HTML. Fails the build if a referenced stylesheet cannot
+ * be read, since shipping a page with no styles is worse than not shipping.
+ */
+function optimisePage(html, pageName, fontStems) {
+  let inlined = 0
+  const withCss = html.replace(STYLESHEET_LINK, (_m, href) => {
+    let css
+    try {
+      css = readFileSync(resolve(siteRoot, `dist${href}`), 'utf8')
+    } catch (err) {
+      fail(`could not read stylesheet ${href} to inline it into ${pageName}: ${err?.message ?? err}`)
+    }
+    inlined += 1
+    return `<style>${css}</style>`
+  })
+  if (inlined === 0) {
+    fail(`no local <link rel="stylesheet"> found in dist/${pageName} to inline; the build output changed shape`)
+  }
+  const preloads = fontStems.map(findFont).filter(Boolean).join('\n    ')
+  return preloads ? withCss.replace('</title>', `</title>\n    ${preloads}`) : withCss
+}
+
+const HERO_FONTS = ['inter-latin-400-normal', 'inter-latin-600-normal', 'inter-latin-700-normal']
+const DOC_FONTS = ['inter-latin-400-normal', 'geist-mono-latin-400-normal']
+
+writeFileSync(indexPath, optimisePage(injected, 'index.html', HERO_FONTS), 'utf8')
+
+for (const page of ['concepts.html', 'quickstart.html', 'troubleshooting.html']) {
+  const path = resolve(siteRoot, `dist/${page}`)
+  let html
+  try {
+    html = readFileSync(path, 'utf8')
+  } catch (err) {
+    fail(`documentation page dist/${page} is missing: ${err?.message ?? err}`)
+  }
+  writeFileSync(path, optimisePage(html, page, DOC_FONTS), 'utf8')
+}
+
 console.log(`prerender: injected ${appHtml.length} chars into dist/index.html`)
 
 // Emit the Markdown representation of the landing page (FR-31 to FR-33). It is derived

@@ -8,12 +8,19 @@
  * 400/500/600/700 and Geist Mono 400/600. @import rules must precede every style
  * and @theme rule, so these stay at the top of the file.
  */
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
-@import "@fontsource/geist-mono/400.css";
-@import "@fontsource/geist-mono/600.css";
+/*
+ * Latin subsets only. The full @fontsource entrypoints declare every charset the
+ * upstream family ships (Cyrillic, Greek, Vietnamese, and the extended Latin
+ * ranges), which produced 40 @font-face rules totalling 50 KB of the 88 KB
+ * stylesheet and shipped 34 woff2 files. This site renders Latin text only, so
+ * the other subsets were pure weight on the critical path.
+ */
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/inter/latin-700.css";
+@import "@fontsource/geist-mono/latin-400.css";
+@import "@fontsource/geist-mono/latin-600.css";
 
 /*
  * IMPORTANT: Never redefine --spacing in :root or @theme.
