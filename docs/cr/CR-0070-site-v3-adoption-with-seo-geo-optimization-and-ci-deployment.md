@@ -491,7 +491,21 @@ flowchart TD
     right, so a regression in LCP, CLS or TBT fails the gate even if the rounded category
     score does not move.
 37. Lighthouse **MUST** run in CI against the built output, and the workflow **MUST**
-    fail if any category falls below its threshold.
+    fail if any category falls below its threshold. It **MUST** run on the pull request
+    as well as on the deploy.
+
+    The deploy gate alone is not sufficient, and the reason is the failure this CR exists
+    to fix. `deploy-site.yml` fires on push to `main`, so a threshold breach surfaces only
+    *after* merge, as a failed deploy — and a failed deploy leaves the apex serving the
+    previously published build. That is precisely the state the CR opened in. A
+    pull-request run turns the same breach into a review-time signal, while the deploy
+    keeps its own gate, which is what AC-19 requires and the last check before the live
+    site.
+
+    The two are split by path so neither the site nor the application pays for the other's
+    build: `site.yml` runs on `site/**` and `docs/**`, and `ci.yml` ignores site-only
+    paths. `docs/**` triggers both, because those Markdown files are embedded into the
+    binary *and* generate the documentation pages.
 38. The thresholds **MUST** be recorded in a committed configuration file rather than
     passed as ad-hoc command arguments, so a regression is visible as a diff.
 
@@ -576,7 +590,11 @@ flowchart TD
 ## Affected Components
 
 * `site/` (new, promoted from the ignored `site-v3/`).
-* `.github/workflows/deploy-site.yml` (new).
+* `.github/workflows/deploy-site.yml` (new): builds and publishes on push to `main`.
+* `.github/workflows/site.yml` (new): the same build and Lighthouse gate on the pull
+  request, so a regression is caught before merge rather than as a failed deploy.
+* `.github/workflows/ci.yml`: scoped away from site-only paths, so a website change no
+  longer triggers the Go pipeline, a GoReleaser dry-run and four container builds.
 * `gh-pages` branch: becomes a CI-managed artifact.
 * `docs/concepts.md`, `docs/quickstart.md`, `docs/troubleshooting.md`: consumed at
   build time, not modified.

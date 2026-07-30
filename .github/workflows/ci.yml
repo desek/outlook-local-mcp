@@ -1,7 +1,22 @@
+# ci.yml - the Go application's pull-request checks.
+#
+# Scoped away from site-only changes. This workflow runs `make ci`, a GoReleaser
+# dry-run, and four container builds with smoke tests; none of that is affected by a
+# change under site/, and running it there costs several runner-minutes for no signal.
+# The website has its own workflow (site.yml).
+#
+# `docs/**` is deliberately NOT ignored. The narrative docs are embedded into the binary
+# (see docs/embed.go and the allowlist test), so a change there can fail Go tests. Those
+# paths therefore trigger both this workflow and site.yml, which is correct: the same
+# files are consumed by both the binary and the site build.
 name: CI
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'site/**'
+      - '.github/workflows/site.yml'
+      - '.github/workflows/deploy-site.yml'
   workflow_dispatch:
 
 jobs:
