@@ -1,0 +1,5 @@
+# pnpm 11 reads settings from here, not from a "pnpm" field in package.json.
+# esbuild needs its install script to fetch the platform binary vite's bundler
+# uses; nothing else is permitted to run scripts.
+onlyBuiltDependencies:
+  - esbuild

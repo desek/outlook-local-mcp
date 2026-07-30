@@ -29,7 +29,10 @@
 node_modules/
 
 # Docker volume data
-data/
+# Anchored to the repo root: unanchored (`data/`) matches at any depth and would
+# silently ignore `site/**/data/`, which is exactly how CR-0069 lost committed
+# modules. Keep the leading slash (CR-0070 FR-5).
+/data/
 
 # Environment-specific MCP config (contains local paths)
 .mcp.json
@@ -58,9 +61,9 @@ docs/research/cr-0060-token-economics/runs/
 # Claude Code agent worktrees
 /.claude/worktrees/
 
-# Vendored website source under evaluation, copied from
-# ../experiments/saas-anything/output/outlook-local-mcp-v3. Held out of version
-# control deliberately: it is a reference copy being assessed, not yet the
-# project's site. Promote it by moving it to a tracked path and removing this
-# entry, rather than by committing it in place from here.
-/site-v3/
+# Website build artifacts (CR-0070). The site source at /site/ is tracked; only
+# its generated outputs and installed dependencies are ignored.
+/site/node_modules/
+/site/dist/
+# TypeScript incremental build cache emitted by `tsc -b`.
+/site/*.tsbuildinfo
