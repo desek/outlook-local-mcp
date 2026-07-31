@@ -83,13 +83,26 @@ purpose and caveats in its own docstring.
   checker and separates real errors from the checker's CSS-profile lag. Real errors and
   contrast failures must both be zero.
 
+## Dependencies
+
+pnpm 11.18.0 does **not** read a `pnpm` field from `package.json`. Overrides and pnpm
+settings live in `site/pnpm-workspace.yaml`, and an override placed in `package.json` is
+silently ignored while appearing to have been applied. Confirm an override took by
+grepping the resolved version out of `site/pnpm-lock.yaml`, not by trusting that
+`package.json` looks right. That trap, the `puppeteer-core` pin being load-bearing despite
+a `site/`-scoped search finding no importer, and the production-tree audit gate `site.yml`
+runs are documented in
+[`../docs/reference/site-quality.md`](../docs/reference/site-quality.md).
+
 ## CI
 
 Two workflows, split by path so neither the site nor the Go application pays for the
 other's build:
 
-* `site.yml` — pull requests touching `site/**` or `docs/**`. Builds and runs the
-  Lighthouse gate, uploading the reports as an artifact on failure as well as success.
+* `site.yml` — pull requests touching `site/**` or `docs/**`. Runs a production
+  dependency audit (`pnpm --dir site audit --prod --audit-level=moderate`) before the
+  build, then builds and runs the Lighthouse gate, uploading the reports as an artifact
+  on failure as well as success.
 * `deploy-site.yml` — push to `main`. The same build and gate, then publishes `dist/` to
   `gh-pages`. The gate runs *before* the publish step, so a regression blocks the deploy.
 * `ci.yml` — the Go pipeline; ignores site-only paths.
