@@ -143,7 +143,7 @@ User-facing documentation has a single source of truth per concern. Future CRs t
 2. **Narrative concepts** (output tiers, multi-account model, gating modes, authentication flows, OAuth scopes summary, observability overview, well-known client IDs, in-server documentation surface, MCP elicitation) live in `docs/concepts.md`. New concepts are added as new anchored sections; verbs reference them via `SeeDocs`. Detailed contributor-level material (sequence diagrams, token cache schema, middleware chain, OTel attribute lists) does NOT belong here; it lives in `docs/reference/` and is not embedded.
 3. **First-run workflow** lives in `docs/quickstart.md`. Configuration steps, integration setup, and end-to-end verification go here.
 4. **Failure modes and recovery** live in `docs/troubleshooting.md`. Each entry has a stable anchor for `SeeDocs` references.
-5. **Architecture and internals** live in `docs/reference/{architecture,auth-flows,observability,release}.md`. These files are not embedded into the binary. The boundary rule: if an LLM helping a user mid-session needs the content to use or troubleshoot the server, it belongs in an embedded file (`concepts.md` or `troubleshooting.md`); if only a contributor modifying the code needs it, it belongs in `docs/reference/`.
+5. **Architecture and internals** live in `docs/reference/{architecture,auth-flows,observability,release,site-quality}.md`. These files are not embedded into the binary. The boundary rule: if an LLM helping a user mid-session needs the content to use or troubleshoot the server, it belongs in an embedded file (`concepts.md` or `troubleshooting.md`); if only a contributor modifying the code needs it, it belongs in `docs/reference/`.
 6. **Governance** (CRs and ADRs) lives in `docs/cr/` and `docs/adr/`. Not embedded.
 7. The repository-root `README.md` is a landing page only. It contains install, the four-domain tool invocation example, a link grid into `docs/`, and the licence. It **MUST NOT** contain per-tool reference, full configuration tables, or narrative concepts.
 8. The embedded bundle is exactly four files: `docs/{readme,quickstart,concepts,troubleshooting}.md`. Adding a fifth requires updating `docs/embed.go`, the allowlist test, and this section.
@@ -154,6 +154,37 @@ User-facing documentation has a single source of truth per concern. Future CRs t
    - Is it a failure mode and how to recover? → `docs/troubleshooting.md`.
    - Is it architecture, internals, or a build/release detail? → `docs/reference/`.
    - Is it a decision or scope change? → CR or ADR under `docs/cr/` or `docs/adr/`.
+
+## Website
+
+The website in `site/` is a separate build with its own quality gate, and it is measured
+rather than eyeballed. Before changing it, read the documents rather than re-deriving what
+they contain:
+
+* [`docs/reference/site-quality.md`](docs/reference/site-quality.md) — how to run the
+  checks, what Lighthouse's simulated throttling does and does not measure, why the
+  landing page is held to 96 while the documentation pages are held to 100, the five
+  clocks that must be frozen for a reproducible screenshot, and the optimisations that
+  look lossless and are not. Read this before attempting any site performance work; most
+  of the obvious levers were measured and move nothing.
+* [`site/ARCHITECTURE.md`](site/ARCHITECTURE.md) — the design language and per-section
+  intent of the page, as authored.
+* `.agents/scripts/site.*.mjs` — the measurement harness itself. Each script carries its
+  purpose and its caveats in its own docstring.
+
+Three rules for site changes:
+
+* **A visual change is asserted, not asserted-to-be-absent.** Any change claiming to leave
+  rendering untouched **MUST** be verified with a screenshot comparison against a build of
+  the commit it is compared to, not assumed from the nature of the change. Repairs and
+  regressions look identical in a diff until someone opens the tiles.
+* **The Lighthouse thresholds in `site/lighthouserc.json` are a measured ceiling, not an
+  aspiration.** Raising one requires the measurement that shows it is reachable; lowering
+  one requires saying so in the governing CR rather than editing the file quietly.
+* **The site and the Go application have separate workflows.** `site.yml` runs on
+  `site/**` and `docs/**`; `ci.yml` ignores site-only paths. `docs/**` triggers both,
+  because those files are embedded in the binary and also generate the site's
+  documentation pages.
 
 ## Quality Standards
 
