@@ -69,11 +69,18 @@ jobs:
       # Uploaded on failure as well as success. A threshold breach is reported by lhci as
       # a single line naming the assertion; the reports carry the attribution needed to
       # act on it, and they are gone once the runner is reclaimed.
+      #
+      # `include-hidden-files` is required and not optional: lhci writes to `.lighthouseci`,
+      # a dotted directory, and the action excludes hidden files by default. Without it the
+      # step reports success and uploads nothing, which is how the first run of this
+      # workflow failed its gate and left no evidence. `if-no-files-found: error` is the
+      # guard against that recurring silently.
       - name: Upload Lighthouse reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: lighthouse-reports
           path: site/.lighthouseci
-          if-no-files-found: warn
+          include-hidden-files: true
+          if-no-files-found: error
           retention-days: 14
