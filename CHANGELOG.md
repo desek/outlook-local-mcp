@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0](https://github.com/desek/outlook-local-mcp/compare/v0.4.0...v0.5.0) (2026-07-31)
+
+
+### Features
+
+* container distribution, system.about verb, and registry-computed tool annotations ([#27](https://github.com/desek/outlook-local-mcp/issues/27)) ([326f3d7](https://github.com/desek/outlook-local-mcp/commit/326f3d74ad5d847860c537affcf97ebb842199e8))
+* **site:** adopt v3, pre-render it, and deploy to gh-pages from CI ([09397dd](https://github.com/desek/outlook-local-mcp/commit/09397ddb0d8dc1cc07a72ff502d3f5719b855614))
+
 ## [0.4.0](https://github.com/desek/outlook-local-mcp/compare/v0.3.0...v0.4.0) (2026-04-26)
 
 
