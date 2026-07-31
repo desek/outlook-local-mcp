@@ -484,23 +484,44 @@ flowchart TD
       script back, of any size — a 20-byte stub and a 4.5 KB vanilla-JavaScript layer were
       both measured, each with LCP unchanged at 1,803 ms — and the category rounds to 0.99.
 
-      So 100 on the landing page does not require a lighter framework. It requires the page
-      to ship **no JavaScript whatsoever**: no tabs, no accordions, no copy-to-clipboard, no
-      mobile navigation, no motion. And even then it holds 100 only on the rounding
-      boundary, with the LCP audit itself at 0.98. A requirement that can be met only by an
-      inert page, and only by rounding, is not describing a defect in this one; that is why
-      the landing page is held at 96 with metric budgets rather than to a figure the site
-      cannot occupy while remaining a site.
+      That was the conclusion drawn from those measurements: that 100 requires the page to
+      ship no JavaScript whatsoever, and holds even then only on the rounding boundary.
+
+      **It was wrong, and CI disproved it.** Every measurement above was taken against a
+      local static server, which delivers the whole document inside about 90 ms. Lantern
+      charges every byte fetched before the *observed* paint, so on localhost the client
+      bundle always lands inside the LCP window and is always charged. On a GitHub runner
+      the same build measures **Largest Contentful Paint 1,660 to 1,664 ms and Performance
+      1.00 on all three runs**, because the deferred bundle is requested after the observed
+      paint and falls outside the graph entirely.
+
+      Both of the original targets — Performance 100 and LCP at or below 1,700 ms — are
+      therefore met on the landing page, with its motion design and interactivity intact.
+      What made the difference is the pre-render step's deferral of the client bundle until
+      after the browser reports its LCP entry, a change whose value was invisible in local
+      measurement and was nearly reverted as marginal.
+
+      The lesson is about the instrument rather than the site: a localhost server compresses
+      every fetch into one window and removes the timing distinctions the metric exists to
+      capture, so it systematically overstates LCP for any deferred resource. It is the
+      wrong environment in which to conclude that a target is unreachable. The library-floor
+      arithmetic above remains correct *for that environment* and should be read as
+      describing it, not the web.
 
     The metric budgets above make the underlying numbers assertable in their own right, so
     a regression in LCP or CLS fails the gate even if a rounded category score does not
     move.
 
     **The landing page's Performance category and Total Blocking Time are not asserted at
-    all, because on CI they do not measure the site.** A 96 floor was set first, one point
-    below the local 0.97. The first CI runs then showed the landing page swinging between
-    0.66 and 0.97 on *identical commits*, driven by Total Blocking Time ranging from
-    193 ms to 1,675 ms where the same build measures 8 to 12 ms locally.
+    all, because on CI they track runner contention rather than the site.** A 96 floor was
+    set first, one point below the local 0.97. CI then showed the landing page anywhere
+    between 0.66 and 1.00 on *identical commits*, driven by Total Blocking Time ranging
+    from 45 ms to 1,675 ms where the same build measures 8 to 12 ms locally.
+
+    The spread tracks the runner almost exactly: at `benchmarkIndex` around 3,100 the page
+    scores 1.00 three times out of three with TBT at 45 to 53 ms; at 2,100 to 2,500 it
+    scores 0.66 to 0.97 with TBT in the hundreds. The site is capable of 100 here — it is
+    the measurement that is not dependable enough to gate on.
 
     | run | index Performance | index TBT | index LCP | benchmarkIndex |
     |---|---|---|---|---|

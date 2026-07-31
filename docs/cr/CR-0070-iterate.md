@@ -409,12 +409,29 @@ collected until the site is deployed.
   any script back and it rounds to 0.99: a 20-byte stub and a 4.5 KB vanilla-JavaScript
   layer were both measured, and both scored 0.99 with LCP unchanged at 1,803 ms.
 
-  So the target is not "a lighter framework". It is **zero JavaScript** — no tabs, no
-  accordions, no copy buttons, no mobile navigation, no motion — and even that holds 1.00
-  only on the rounding boundary. This is worth stating plainly because it reframes the
-  whole question: the gap between 0.97 and 1.00 was never a performance defect anyone
-  could fix, and chasing it further would have meant dismantling the page to win a
-  rounding decision.
+  The conclusion drawn at the time was that the target is not "a lighter framework" but
+  **zero JavaScript**, and that even that holds 1.00 only on the rounding boundary.
+
+  **That conclusion was wrong, and CI disproved it after this session closed.** Every
+  measurement above was taken against a local static server, which delivers the whole
+  document inside about 90 ms. Lantern charges every byte fetched before the *observed*
+  paint, so on localhost the bundle always lands inside the LCP window and is always
+  charged, however it is scheduled. On a healthy GitHub runner the same build measures
+  **LCP 1,660 to 1,664 ms and Performance 1.00 on all three runs**, with the motion design
+  and every interactive feature intact. Both original targets are met.
+
+  What delivers it is the pre-render step's deferral of the client bundle until after the
+  browser reports its LCP entry — the change this session almost reverted as marginal,
+  because locally it was worth 0.01. Its value was invisible in the environment it was
+  measured in.
+
+  The correction is worth more than the original finding. Eleven approaches were falsified
+  carefully and one environment was never questioned, and it was the environment that was
+  wrong. A localhost server compresses every fetch into a single window and erases the
+  timing distinctions the metric exists to capture, which makes it systematically
+  pessimistic for any deferred resource — and it is therefore the wrong place to conclude
+  that a target is unreachable. "Falsify by substitution" was applied diligently to the
+  page and never once to the harness.
 * **FR-36 amended accordingly, and tightened in every direction the evidence allows.**
   Accessibility, Best Practices and SEO go from "at least 95" to **100 on every page**;
   documentation-page Performance goes from "at least 95" to **100**; the landing page is
@@ -679,6 +696,16 @@ cycle on, and each was wrong for a reason that is not obvious in advance.
   ends: halving the DOM moved LCP 65 ms in the wrong direction. The real causes sat in the
   audit details — the CLS audit named three specific font files, and the LCP phase table
   named transfer rather than evaluation.
+
+* **Question the measurement environment, not only the measurement.** This session's most
+  expensive error was not a wrong hypothesis about the page; it was never asking whether
+  localhost was a valid place to measure a network-timing metric. It is not: a local static
+  server delivers everything inside one window, so a deferred resource is charged to LCP
+  exactly as an eagerly-loaded one would be, and the conclusion "1.00 is unreachable"
+  followed from the harness rather than the site. CI, whose timings actually separate the
+  requests, measured 1.00 three times out of three. Before concluding a target cannot be
+  met, ask which properties of the environment the metric depends on, and whether the
+  environment has them.
 
 * **Falsify by substitution, at an extreme.** "Is it the bundle?" was settled in one build
   by serving a 20-byte file in its place. "Is it the fonts?" was settled by deleting every

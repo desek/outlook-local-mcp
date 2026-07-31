@@ -76,37 +76,52 @@ Lantern model from the observed trace. Three consequences, all measured:
   `layout-shifts` audit named three specific font files, and the LCP phase table named
   transfer rather than evaluation.
 
-### Why the landing page is held to 96 and the documentation pages to 100
+### The localhost measurement overstates the landing page's LCP
 
-The library floor — React, ReactDOM, GSAP, ScrollTrigger and Lenis, hydrating a component
-that returns one empty `<div>` — is **108.79 KB gzipped**, or 590 ms. The site's own code
-is 29 KB of the 137.6 KB shipped, and the five capability diagrams only 9.3 KB of that.
+Measured locally, the landing page's LCP is a linear function of bundle size: the library
+floor — React, ReactDOM, GSAP, ScrollTrigger and Lenis, hydrating a component that returns
+one empty `<div>` — is **108.79 KB gzipped**, or 590 ms, and the whole shipped bundle is
+137.6 KB, of which the site's own code is 29 KB and the five capability diagrams 9.3 KB.
+With no script element at all the page audits LCP 0.98 at 1,803 ms; a 20-byte stub and a
+4.5 KB vanilla layer both score 0.99.
 
-With no script element at all the landing page audits FCP 1.00, Speed Index 1.00, TBT
-1.00, CLS 1.00 and **LCP 0.98**, a weighted 0.995 that reaches 1.00 only by rounding. A
-20-byte stub and a 4.5 KB vanilla-JavaScript layer both score 0.99. So 100 on that page
-requires shipping *no JavaScript*, not a lighter framework, and the thresholds in
-`site/lighthouserc.json` reflect the measured ceiling rather than an aspiration.
+**Do not conclude from that arithmetic that 100 is unreachable.** It was concluded once,
+and CI disproved it: the same build measures **LCP 1,660 to 1,664 ms and Performance 1.00
+on all three runs** on a healthy runner, with the motion design and interactivity intact.
+
+The difference is the instrument. Lantern charges every byte fetched before the *observed*
+paint, and a local static server delivers the whole document inside about 90 ms, so the
+client bundle always lands inside that window and is always charged — no matter how it is
+scheduled. A real network separates the requests, the pre-render step's deferral puts the
+bundle after the LCP entry, and it drops out of the graph.
+
+So localhost systematically overstates LCP for any deferred resource, and it is the wrong
+environment in which to decide that a performance target cannot be met. Take that decision
+from CI. The bundle-size model above is correct *for localhost* and should be read as
+describing it.
 
 ### What CI can and cannot measure here
 
 CI does *not* simply score lower than a developer machine, which is what was assumed
-before the gate had ever run there. Measured on GitHub's runners (`benchmarkIndex` ≈ 2,500
-against 2,970 locally):
+before the gate had ever run there. Measured across four runs on GitHub's runners:
 
 | page | CI Performance | CI TBT | CI LCP |
 |---|---|---|---|
-| index.html | 0.66 to 0.97 | 193 to 1,675 ms | 1,658 to 2,108 ms |
+| index.html, runner at `benchmarkIndex` ≈ 3,100 | **1.00 / 1.00 / 1.00** | 45 to 53 ms | 1,660 to 1,664 ms |
+| index.html, runner at 2,100 to 2,500 | 0.66 to 0.97 | 193 to 1,675 ms | 1,658 to 2,108 ms |
 | the three documentation pages | 1.00 every run | 0 ms every run | 1,506 to 1,665 ms |
 
 The documentation pages are stable to the millisecond. The landing page is not: Total
-Blocking Time swings eightfold on *identical commits*, and because TBT is 30% of the
-Performance weight, the category swings with it. Two causes, neither of which a visitor
-experiences — the first of each three runs is systematically the worst, a cold start the
-median only partly absorbs; and even discounting it, CI TBT is 421 to 689 ms against 8 to
-12 ms locally, a fiftyfold gap on hardware 15% slower, which points at software rendering
-on a runner with no GPU pushing this page's canvas and compositing work onto the main
-thread.
+Blocking Time varies thirtyfold on *identical commits*, and because TBT carries 30% of the
+Performance weight, the category follows it from 0.66 to 1.00. The spread tracks the
+runner's `benchmarkIndex` almost exactly, so it is contention, not the site.
+
+Two contributing effects, neither of which a visitor experiences. The first of each three
+runs is systematically the worst on every metric, a cold start the median only partly
+absorbs. And on the slower runners TBT reaches the hundreds of milliseconds against 8 to
+12 ms locally, far beyond what a 15% hardware difference explains, which points at
+software rendering: a runner with no GPU pushes this page's canvas and compositing work
+onto the main thread.
 
 So the landing page's Performance category and TBT are **not asserted**. A gate that
 varies eightfold on unchanged input cannot discriminate a regression. What is asserted
