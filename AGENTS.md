@@ -143,7 +143,7 @@ User-facing documentation has a single source of truth per concern. Future CRs t
 2. **Narrative concepts** (output tiers, multi-account model, gating modes, authentication flows, OAuth scopes summary, observability overview, well-known client IDs, in-server documentation surface, MCP elicitation) live in `docs/concepts.md`. New concepts are added as new anchored sections; verbs reference them via `SeeDocs`. Detailed contributor-level material (sequence diagrams, token cache schema, middleware chain, OTel attribute lists) does NOT belong here; it lives in `docs/reference/` and is not embedded.
 3. **First-run workflow** lives in `docs/quickstart.md`. Configuration steps, integration setup, and end-to-end verification go here.
 4. **Failure modes and recovery** live in `docs/troubleshooting.md`. Each entry has a stable anchor for `SeeDocs` references.
-5. **Architecture and internals** live in `docs/reference/{architecture,auth-flows,observability,release,site-quality}.md`. These files are not embedded into the binary. The boundary rule: if an LLM helping a user mid-session needs the content to use or troubleshoot the server, it belongs in an embedded file (`concepts.md` or `troubleshooting.md`); if only a contributor modifying the code needs it, it belongs in `docs/reference/`.
+5. **Architecture and internals** live in `docs/reference/{architecture,auth-flows,observability,release,security,site-quality}.md`. These files are not embedded into the binary. The boundary rule: if an LLM helping a user mid-session needs the content to use or troubleshoot the server, it belongs in an embedded file (`concepts.md` or `troubleshooting.md`); if only a contributor modifying the code needs it, it belongs in `docs/reference/`.
 6. **Governance** (CRs and ADRs) lives in `docs/cr/` and `docs/adr/`. Not embedded.
 7. The repository-root `README.md` is a landing page only. It contains install, the four-domain tool invocation example, a link grid into `docs/`, and the licence. It **MUST NOT** contain per-tool reference, full configuration tables, or narrative concepts.
 8. The embedded bundle is exactly four files: `docs/{readme,quickstart,concepts,troubleshooting}.md`. Adding a fifth requires updating `docs/embed.go`, the allowlist test, and this section.
@@ -238,6 +238,13 @@ make ci
 ```
 
 Do not commit code that breaks builds, fails linting, or causes test failures.
+
+The dependency vulnerability instruments (`govulncheck`, Dependabot, `grype`),
+why their finding counts differ on this repository, the triage procedure for a
+new alert, the advisory-ecosystem reading rule, and the `fix(deps):` merge rule
+that decides whether a dependency change reaches a release are documented in
+[`docs/reference/security.md`](docs/reference/security.md). Read it before
+triaging a security finding or merging a dependency pull request.
 
 ## Commit and PR Conventions
 

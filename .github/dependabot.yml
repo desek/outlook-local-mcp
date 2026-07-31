@@ -1,0 +1,47 @@
+# dependabot.yml - automated dependency currency for the Go application.
+#
+# Why this exists at all. CR-0071 opened with no dependabot.yml in the repository's
+# history: security updates arrived (they do not require this file), but *version*
+# updates did not, so eleven direct dependencies and roughly forty indirect ones
+# drifted current without anyone being told. The result was a self-sustaining
+# backlog — sixteen alerts, a red security gate, and a fix PR blocked for three
+# months — that had to be cleared by campaign. This file converts that campaign
+# into maintenance: the gap Dependabot has to close each week stays small enough
+# to review, which is the only state in which a dependency bot is worth having.
+#
+# The grouping choice. Version updates are grouped into one pull request per
+# ecosystem so the routine currency churn arrives as a single reviewable unit
+# rather than a swarm of one-module PRs nobody reads. Security updates are left
+# UNGROUPED on purpose: an urgent fix must arrive alone so it is reviewable in
+# isolation and stays visually distinct from the routine version bumps it would
+# otherwise be buried in. See docs/reference/security.md for the triage procedure
+# and the `fix(deps):` merge rule that governs whether these PRs reach a release.
+#
+# Note for the next editor: CR-0072 appends a THIRD ecosystem, `npm` on `/site`,
+# to the `updates` list below. The two entries here are structured as a clean
+# append point — add the npm entry after github-actions, do not restructure these.
+version: 2
+updates:
+  # The Go module at the repository root. This is the tree CR-0071 brought current.
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      # Routine version bumps travel together as one PR per week.
+      gomod-version-updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
+
+  # The pinned third-party actions used across the workflows. Nothing else updates
+  # these, so without this entry they drift indefinitely.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    groups:
+      github-actions-version-updates:
+        applies-to: version-updates
+        patterns:
+          - "*"
