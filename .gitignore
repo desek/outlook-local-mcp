@@ -29,7 +29,10 @@
 node_modules/
 
 # Docker volume data
-data/
+# Anchored to the repo root: unanchored (`data/`) matches at any depth and would
+# silently ignore `site/**/data/`, which is exactly how CR-0069 lost committed
+# modules. Keep the leading slash (CR-0070 FR-5).
+/data/
 
 # Environment-specific MCP config (contains local paths)
 .mcp.json
@@ -57,3 +60,29 @@ docs/research/cr-0060-token-economics/runs/
 
 # Claude Code agent worktrees
 /.claude/worktrees/
+
+# Website build artifacts (CR-0070). The site source at /site/ is tracked; only
+# its generated outputs and installed dependencies are ignored.
+/site/node_modules/
+/site/dist/
+# SSR bundle emitted for build-time pre-rendering (react-dom/server); consumed by
+# build/prerender.mjs and never published.
+/site/dist-ssr/
+# Documentation pages generated from docs/*.md at build time as Vite HTML inputs.
+# The Markdown in docs/ is the single source of truth; these HTML files must never be
+# committed (CR-0070 FR-14).
+/site/concepts.html
+/site/quickstart.html
+/site/troubleshooting.html
+# TypeScript incremental build cache emitted by `tsc -b`.
+/site/*.tsbuildinfo
+# Lighthouse CI reports emitted by `lhci autorun` (site/lighthouserc.json upload
+# target). The thresholds config is committed; the per-run reports are not.
+/site/.lighthouseci/
+
+# Local secrets. Never commit: these files hold API tokens and credentials.
+# Anchored to the repository root and also matched at any depth, so a stray
+# .env in a subproject (site/, infra/) cannot slip through either.
+.env
+.env.*
+!.env.example

@@ -1,0 +1,86 @@
+# site.yml - the website's pull-request checks.
+#
+# The website and the Go application are checked by separate workflows so that neither
+# pays for the other's build. This one runs only when the site or the narrative docs it
+# consumes change; the application's workflow (ci.yml) ignores site-only paths.
+#
+# Why this exists at all. The Lighthouse gate that CR-0070 requires (FR-36 to FR-38) lived
+# only in deploy-site.yml, which fires on push to main. A regression therefore surfaced
+# *after* merge, as a failed deploy, and a failed deploy means the apex keeps serving the
+# previously published build — which is exactly the state CR-0070 was opened to fix.
+# Running the same gate on the pull request turns that into a review-time signal.
+#
+# The gate here duplicates deploy-site.yml's rather than replacing it. The deploy must
+# keep its own check: it is what AC-19 requires, and it is the last thing standing between
+# a regression and the live site.
+#
+# `docs/**` is included because the site build generates the documentation pages from
+# those Markdown files (build/doc.pages.ts), so a docs change alters the published site.
+name: Site
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'docs/**'
+      - '.github/workflows/site.yml'
+      - '.github/workflows/deploy-site.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One run per ref. Superseded runs are cancelled: unlike the deploy workflow, nothing here
+# publishes, so an in-flight run of an outdated commit has no value.
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Node plus corepack, which resolves pnpm from the "packageManager" field in
+      # site/package.json, so no pnpm version is pinned here. Kept identical to
+      # deploy-site.yml on purpose: a gate that passes on the pull request and fails on
+      # the deploy, because the two ran different toolchains, would be worse than no gate.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install site dependencies
+        run: pnpm --dir site install --frozen-lockfile
+
+      # `tsc -b` runs inside the build script, so a type error fails here.
+      - name: Build site
+        run: pnpm --dir site run build
+      - name: Run site tests if present
+        run: pnpm --dir site run --if-present test
+
+      # The same gate the deploy runs, against thresholds committed in
+      # site/lighthouserc.json so a change to them appears as a diff (FR-38).
+      - name: Lighthouse budget gate
+        run: pnpm --dir site run lighthouse
+
+      # Uploaded on failure as well as success. A threshold breach is reported by lhci as
+      # a single line naming the assertion; the reports carry the attribution needed to
+      # act on it, and they are gone once the runner is reclaimed.
+      #
+      # `include-hidden-files` is required and not optional: lhci writes to `.lighthouseci`,
+      # a dotted directory, and the action excludes hidden files by default. Without it the
+      # step reports success and uploads nothing, which is how the first run of this
+      # workflow failed its gate and left no evidence. `if-no-files-found: error` is the
+      # guard against that recurring silently.
+      - name: Upload Lighthouse reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-reports
+          path: site/.lighthouseci
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 14

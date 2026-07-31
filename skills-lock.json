@@ -4,11 +4,25 @@
     "checkpoint-commit": {
       "source": "desek/governance",
       "sourceType": "github",
+      "skillPath": "skills/checkpoint-commit/SKILL.md",
       "computedHash": "1bd2ca0f8427515ca2e4a761d78317500a73adff4256e192c0d790ce12fbc250"
+    },
+    "checkpoint-distill": {
+      "source": "desek/governance",
+      "sourceType": "github",
+      "skillPath": "skills/checkpoint-distill/SKILL.md",
+      "computedHash": "a5ed4708f5cb646abad453b5466b6633476bc7847c16ce1cb9fc6cd3f651d049"
+    },
+    "checkpoint-iterate": {
+      "source": "desek/governance",
+      "sourceType": "github",
+      "skillPath": "skills/checkpoint-iterate/SKILL.md",
+      "computedHash": "6a7cd566c0100c0df1d72f9f30d5e14031366c1dab8ac74eb2a30010262f109c"
     },
     "checkpoint-read": {
       "source": "desek/governance",
       "sourceType": "github",
+      "skillPath": "skills/checkpoint-read/SKILL.md",
       "computedHash": "5603a6c2d452d3ac331a1692bf5fd3d00e3bfa98e7de6eb85276145f207ed3c7"
     },
     "electron": {
@@ -19,7 +33,8 @@
     "governance": {
       "source": "desek/governance",
       "sourceType": "github",
-      "computedHash": "b25baa1a0b923266c466c27459816f74ad6603a35fbacc8ffd850db37764827d"
+      "skillPath": "skills/governance/SKILL.md",
+      "computedHash": "c8e1b6fef55f4235640ec31a27bb1dddd188d3d030e9d3e4d78aed234a71ac30"
     }
   }
 }

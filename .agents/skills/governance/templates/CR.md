@@ -1,9 +1,6 @@
 ---
 name: cr-template
 description: Template for creating Change Requests (CRs).
-metadata:
-  copyright: Copyright Daniel Grenemark 2026
-  version: "0.0.1"
 # These are required metadata elements. Feel free to add additional if motivated.
 id: "CR-XXXX"
 status: "{proposed | approved | rejected | implemented | on-hold | cancelled}"
@@ -140,6 +137,18 @@ CHANGE REQUEST TEMPLATE GUIDELINES
    - These fields record the repository state the document's analysis is based on
    - If the repository has changed significantly since `source-commit`, the CR may need
      to be reviewed and updated ("rebased") to reflect the current state
+
+9. GOVERNANCE REFERENCE BOUNDARY (Keep Identifiers Out of the Implementation)
+   - Governance identifiers **MUST NOT** appear in source code, code comments,
+     test names, or user-facing documentation
+   - The document you are creating is read by people reasoning about decisions;
+     the code that implements it is read by people using or changing the software,
+     for whom a governance identifier is a dead end that rots silently when the
+     document is renumbered, superseded, or cancelled
+   - The link between an implementation and its governance document belongs in the
+     commit message, which is durable, queryable with `git log --grep`, and absent
+     from the working tree where readers of the code would trip over it
+   - Describe the behavior on its own terms; put the identifier in the commit
 =============================================================================
 -->
 

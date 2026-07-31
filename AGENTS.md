@@ -143,7 +143,7 @@ User-facing documentation has a single source of truth per concern. Future CRs t
 2. **Narrative concepts** (output tiers, multi-account model, gating modes, authentication flows, OAuth scopes summary, observability overview, well-known client IDs, in-server documentation surface, MCP elicitation) live in `docs/concepts.md`. New concepts are added as new anchored sections; verbs reference them via `SeeDocs`. Detailed contributor-level material (sequence diagrams, token cache schema, middleware chain, OTel attribute lists) does NOT belong here; it lives in `docs/reference/` and is not embedded.
 3. **First-run workflow** lives in `docs/quickstart.md`. Configuration steps, integration setup, and end-to-end verification go here.
 4. **Failure modes and recovery** live in `docs/troubleshooting.md`. Each entry has a stable anchor for `SeeDocs` references.
-5. **Architecture and internals** live in `docs/reference/{architecture,auth-flows,observability,release}.md`. These files are not embedded into the binary. The boundary rule: if an LLM helping a user mid-session needs the content to use or troubleshoot the server, it belongs in an embedded file (`concepts.md` or `troubleshooting.md`); if only a contributor modifying the code needs it, it belongs in `docs/reference/`.
+5. **Architecture and internals** live in `docs/reference/{architecture,auth-flows,observability,release,site-quality}.md`. These files are not embedded into the binary. The boundary rule: if an LLM helping a user mid-session needs the content to use or troubleshoot the server, it belongs in an embedded file (`concepts.md` or `troubleshooting.md`); if only a contributor modifying the code needs it, it belongs in `docs/reference/`.
 6. **Governance** (CRs and ADRs) lives in `docs/cr/` and `docs/adr/`. Not embedded.
 7. The repository-root `README.md` is a landing page only. It contains install, the four-domain tool invocation example, a link grid into `docs/`, and the licence. It **MUST NOT** contain per-tool reference, full configuration tables, or narrative concepts.
 8. The embedded bundle is exactly four files: `docs/{readme,quickstart,concepts,troubleshooting}.md`. Adding a fifth requires updating `docs/embed.go`, the allowlist test, and this section.
@@ -154,6 +154,64 @@ User-facing documentation has a single source of truth per concern. Future CRs t
    - Is it a failure mode and how to recover? → `docs/troubleshooting.md`.
    - Is it architecture, internals, or a build/release detail? → `docs/reference/`.
    - Is it a decision or scope change? → CR or ADR under `docs/cr/` or `docs/adr/`.
+
+## Measurement and Verification
+
+When a number decides what to do, the instrument producing it is part of the work and gets
+the same scepticism as the code. These apply to any measured gate in this repository — the
+Lighthouse budget, the visual comparison, benchmarks, coverage, flaky tests — and each of
+them, skipped, has already produced a confident wrong answer here.
+
+* **Validate the instrument before trusting a result: run it twice on unchanged input.** A
+  measurement that disagrees with itself on a null change cannot detect a real one.
+  Disagreement is a defect in the instrument, fixed before any finding is reported.
+* **State the noise floor next to the threshold.** A tolerance without a measured floor is
+  a guess. Report both, and treat a result inside the noise band as "not measured" rather
+  than "unchanged". An intermittently-failing gate is worse than a failing one: it is
+  green often enough to be believed.
+* **Attribute from the detail, not the headline.** Diagnostic summaries name *correlates*
+  prominently and *causes* in the detail. Act on the attribution for the specific
+  measurement, not on whatever the tool puts at the top.
+* **Falsify by substitution, at an extreme.** To test whether a component is responsible,
+  replace it with a null or extreme version and re-measure. One decisive run beats an
+  afternoon of reasoning, and reasoning from first principles about performance is usually
+  wrong.
+* **Derive the model, then check it reproduces every measurement already taken.** A model
+  that reproduces them answers further questions without more runs, and converts "this
+  seems hard" into a number that can be argued with.
+* **A null result falsifies the intervention, not the hypothesis.** "I changed X and the
+  metric did not move, so X is not the cause" holds only if the change actually exercised
+  X. Verify the intervention did what was intended before concluding anything from its
+  lack of effect.
+* **Determinism requires controlling every source of it** — time, randomness, scheduling,
+  and any clock the platform advances independently. Miss one and the failure is
+  intermittent, which is the expensive kind.
+* **A failing golden-output diff is a question, not a verdict.** Snapshot and
+  reference-output comparisons fail identically for a regression and for a repair. Look at
+  what changed before deciding which it was.
+* **When a target proves unreachable, publish the ceiling with the measurement chain that
+  established it,** and say what would have to change to move it. Amend the governing CR
+  rather than quietly relaxing the check. A documented ceiling ends the question; a bare
+  assertion invites the same experiments to be re-run.
+
+## Website
+
+The website in `site/` has **its own [`site/AGENTS.md`](site/AGENTS.md)**, which is loaded
+automatically when working in that directory. Read it before changing anything under
+`site/`; it carries the build invariants, the design boundary, and the rule that a change
+claiming to leave rendering untouched must be verified by screenshot comparison rather
+than assumed.
+
+Two things are worth knowing from outside that directory:
+
+* **`docs/**` belongs to both.** Those Markdown files are embedded into the binary *and*
+  generate the site's documentation pages, so a change there triggers both workflows and
+  can fail either. `site.yml` runs on `site/**` and `docs/**`; `ci.yml` ignores site-only
+  paths.
+* **The measurement caveats are written down.** [`docs/reference/site-quality.md`](docs/reference/site-quality.md)
+  records what the site's gates actually measure and which optimisations were tried and
+  move nothing. It is the document to read before attempting site performance work, from
+  wherever that work starts.
 
 ## Quality Standards
 

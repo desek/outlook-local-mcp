@@ -1,0 +1,74 @@
+# deploy-site.yml - builds site/ and publishes it to the gh-pages branch.
+#
+# CR-0070 FR-50 to FR-54. This workflow is the ONLY mechanism permitted to write to
+# gh-pages; the branch is a CI-managed artifact and must not be hand-edited. It fires
+# on push to main when files under site/ or docs/ change (the site build consumes the
+# narrative docs), builds with pnpm, and publishes dist/.
+#
+# Provenance (commit, UTC build time, run id) is stamped into the artifact by the Vite
+# build from the GITHUB_* environment variables Actions sets automatically; see
+# site/build/provenance.plugin.ts.
+name: Deploy site
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'site/**'
+      - 'docs/**'
+      - '.github/workflows/deploy-site.yml'
+  workflow_dispatch:
+
+# Only the default token is used (FR-52). Writing to gh-pages needs contents: write.
+permissions:
+  contents: write
+
+# Serialise deploys so two pushes cannot race to publish gh-pages.
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Node plus corepack, which resolves pnpm from the "packageManager" field in
+      # site/package.json, so no pnpm version is pinned in this workflow. The local
+      # dev pin lives in .mise.toml (FR-3); both agree on 11.18.0.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install site dependencies
+        run: pnpm --dir site install --frozen-lockfile
+
+      # The checks gate (FR-53): the build runs `tsc -b` before `vite build`, so a
+      # type error fails here and no publish happens. The test step is a no-op today
+      # (the site has no test suite yet) and picks up `pnpm --dir site run test`
+      # automatically once phases 3 and 4 add it, needing no edit to this workflow.
+      - name: Build site
+        run: pnpm --dir site run build
+      - name: Run site tests if present
+        run: pnpm --dir site run --if-present test
+
+      # The Lighthouse gate (FR-36 to FR-38): run Lighthouse on mobile emulation against
+      # the built dist/ and fail the workflow if any category falls below its threshold,
+      # BEFORE the publish step runs, so a regression blocks the deploy (AC-17, AC-19).
+      # Thresholds live in site/lighthouserc.json (a committed config, not ad-hoc flags),
+      # so a change to them shows up as a diff. lhci resolves Chrome from the runner's
+      # preinstalled browser; @lhci/cli is a site devDependency installed above.
+      - name: Lighthouse budget gate
+        run: pnpm --dir site run lighthouse
+
+      # Publish dist/ to gh-pages using only the default GITHUB_TOKEN (FR-52). CNAME
+      # and the crawler files are build outputs inside dist/, so a rebuild cannot
+      # revert them (FR-54).
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: ./site/dist

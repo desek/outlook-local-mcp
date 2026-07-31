@@ -1,0 +1,239 @@
+@import "tailwindcss";
+
+/*
+ * Self-hosted web fonts (CR-0070 FR-25). @fontsource ships each weight as a CSS
+ * file that @font-face-declares the family against locally bundled woff2 assets
+ * with `font-display: swap`, so no request ever leaves for fonts.googleapis.com
+ * or fonts.gstatic.com. Weights mirror what the old Google links requested: Inter
+ * 400/500/600/700 and Geist Mono 400/600. @import rules must precede every style
+ * and @theme rule, so these stay at the top of the file.
+ */
+/*
+ * Latin subsets only. The full @fontsource entrypoints declare every charset the
+ * upstream family ships (Cyrillic, Greek, Vietnamese, and the extended Latin
+ * ranges), which produced 40 @font-face rules totalling 50 KB of the 88 KB
+ * stylesheet and shipped 34 woff2 files. This site renders Latin text only, so
+ * the other subsets were pure weight on the critical path.
+ */
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/inter/latin-700.css";
+@import "@fontsource/geist-mono/latin-400.css";
+@import "@fontsource/geist-mono/latin-600.css";
+
+/*
+ * IMPORTANT: Never redefine --spacing in :root or @theme.
+ * Tailwind 4 uses --spacing as its base multiplier (0.25rem).
+ * Use a different name (e.g. --section-gap) for custom spacing tokens.
+ */
+
+@theme {
+  /* Brand colors */
+  --color-brand-dark:      #052424;   /* Primary text, nav pill, footer BG */
+  --color-brand-lime:      #abff02;   /* ONLY accent — active states, CTAs, accents */
+  --color-brand-black:     #000000;   /* Deep space backgrounds only */
+  --color-brand-white:     #ffffff;   /* Text on dark, button fills */
+  --color-brand-off-white: #f0f0f0;   /* Section backgrounds, card fills */
+
+  /* Functional grays */
+  --color-gray-900: #0a1010;   /* Code block backgrounds */
+  --color-gray-800: #1a2a2a;   /* Secondary dark surfaces */
+  --color-gray-600: #454742;   /* Mid-gray text */
+  --color-gray-400: #6d6d6d;   /* Body text on light surfaces (4.54:1 on #f0f0f0, 5.17:1 on #fff, WCAG AA) */
+  --color-gray-200: #c2c2c2;   /* Eyebrow labels, muted text */
+  --color-gray-100: #e8e8e8;   /* Divider lines */
+
+  /* Accent variants */
+  --color-lime-dark: #4d7300;  /* Small uppercase labels on light bg (>=4.5:1 on #f0f0f0, WCAG AA) */
+  --color-lime-mid:  #7ab800;
+
+  /* Typography */
+  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'Geist Mono', 'Fira Code', 'Cascadia Code', monospace;
+
+  /* Type scale with compound line-height and letter-spacing */
+  --text-hero:            clamp(2.5rem, 5.09vw, 4.58rem);
+  --text-hero--line-height: 1.05;
+  --text-hero--letter-spacing: -0.02em;
+
+  --text-display:            clamp(2.4rem, 4.86vw, 4.375rem);
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.02em;
+
+  --text-brand-reveal:            clamp(2.56rem, 7.64vw, 6.875rem);
+  --text-brand-reveal--line-height: 1.0;
+  --text-brand-reveal--letter-spacing: -0.02em;
+
+  --text-section-heading:            clamp(1.5rem, 3.33vw, 2.5rem);
+  --text-section-heading--line-height: 1.15;
+  --text-section-heading--letter-spacing: -0.01em;
+
+  --text-capability:            clamp(1.25rem, 2.13vw, 1.917rem);
+  --text-capability--line-height: 1.2;
+  --text-capability--letter-spacing: -0.01em;
+
+  --text-body:            1rem;
+  --text-body--line-height: 1.6;
+  --text-body--letter-spacing: 0em;
+
+  --text-small:            0.875rem;
+  --text-small--line-height: 1.5;
+  --text-small--letter-spacing: 0em;
+
+  --text-label:            0.6875rem;
+  --text-label--line-height: 1.4;
+  --text-label--letter-spacing: 0.18em;
+
+  --text-mono-label:            0.6875rem;
+  --text-mono-label--line-height: 1.4;
+  --text-mono-label--letter-spacing: 0.18em;
+
+  /* Border radius */
+  --radius-pill:  8px;     /* Nav pill, buttons, cards */
+  --radius-notch: 80px;    /* Notch-corner SVG mask radius */
+  --radius-sm:    4px;
+  --radius-full:  9999px;
+
+  /* Custom spacing tokens (NOT --spacing — reserved by Tailwind 4) */
+  --section-gap:              80px;
+  --section-gap-sm:           48px;
+  --container-padding-x:      46.67px;
+  --container-padding-mobile: 20px;
+  --container-max-width:      1280px;
+}
+
+/* Global animation variables */
+:root {
+  --ease-out:       cubic-bezier(0, 0, 0.58, 1);
+  --ease-in-out:    cubic-bezier(0.42, 0, 0.58, 1);
+  --ease-spring:    cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast:  0.2s;
+  --duration-base:  0.4s;
+  --duration-slow:  0.6s;
+  --duration-crawl: 1.0s;
+}
+
+/* Base styles */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  background-color: #000000;
+  color: #ffffff;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/*
+ * The five capability diagrams account for 1,192 of the landing page's ~1,870 elements,
+ * and every one of them sits below the fold, in a section the visitor may never reach.
+ * Styling, laying out and painting them was the largest single cost before First
+ * Contentful Paint.
+ *
+ * `content-visibility: auto` lets the browser skip that work until the diagram is near
+ * the viewport. It is applied to the <svg> elements rather than to their sections
+ * deliberately: each diagram is sized entirely by its container (`w-full h-full`), so
+ * skipping its subtree cannot change the document's height, and the scroll-driven
+ * pinning that ScrollTrigger measures at load is left exactly as it was. Applying the
+ * same property to a section would collapse that section to its intrinsic-size
+ * placeholder and move every pinned trigger below it.
+ *
+ * The diagrams stay in the DOM, so a crawler reading the page without JavaScript sees
+ * no change; only the rendering of their internals is deferred.
+ */
+svg[data-diagram] {
+  content-visibility: auto;
+}
+
+/* Custom utilities */
+@utility container-page {
+  width: 100%;
+  max-width: var(--container-max-width);
+  margin-inline: auto;
+  padding-inline: var(--container-padding-mobile);
+}
+
+@utility text-label-mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-mono-label);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+@utility nav-pill {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(30px);
+  -webkit-backdrop-filter: blur(30px);
+  border-radius: 8px;
+}
+
+@utility dot-grid-bg {
+  background-image:
+    linear-gradient(color-mix(in srgb, var(--color-brand-lime) 8%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--color-brand-lime) 8%, transparent) 1px, transparent 1px);
+  background-size: 80px 80px;
+}
+
+@utility code-block {
+  background: var(--color-gray-900);
+  border-radius: 8px;
+  border-left: 2px solid var(--color-brand-lime);
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+@media (min-width: 1024px) {
+  .container-page {
+    padding-inline: var(--container-padding-x);
+  }
+}
+
+/*
+ * Install command row (hero).
+ *
+ * The command is wider than its container at narrow widths, so its wrapper is a
+ * horizontal scroller. Three things have to hold at once:
+ *
+ * 1. The scrollbar must be unobtrusive against the dark block: thin, with a grey
+ *    thumb on a transparent track.
+ *
+ * 2. The copy button must stay on the same centre line as the text. A horizontal
+ *    scrollbar is laid out INSIDE the scroller's box, so the scroller grows taller
+ *    than the 44px button beside it. The row is `items-center`, which centres each
+ *    child independently, so the text rises by half the scrollbar height and the
+ *    button reads as sitting below it. Measured here: an 11px scrollbar produced a
+ *    5.8px offset. The fix is `padding-top` equal to the scrollbar height, which
+ *    restores symmetry between the space above the text and the scrollbar below it.
+ *
+ *    Two approaches that do NOT work were tried and measured first. A `min-height`
+ *    makes the box taller but leaves the scrollbar inside it, so the text still
+ *    centres above the scrollbar. Reserving the strip as `padding-bottom` and
+ *    cancelling it with a negative `margin-bottom` centres the margin box correctly
+ *    but pushes the visible text up by half the padding, which measured as the same
+ *    5.8px offset. Both failures are invisible unless the centres are measured.
+ *
+ * 3. Where the viewport is wide enough, the container should simply grow to fit the
+ *    command so no scrollbar appears at all. That is handled on the container with
+ *    `lg:w-fit`, not here; this element keeps `overflow-x: auto` at every width and
+ *    the scrollbar just never materialises once the content fits.
+ */
+.install-scroller {
+  scrollbar-width: thin;
+  scrollbar-color: gray transparent;
+  /* Matches the scrollbar occupying the bottom of the content area, so the text
+     is centred against the element rather than against the space left above the
+     scrollbar. `--sb` is measured at runtime by useScrollbarHeight and is 0 both
+     without JavaScript and on overlay-scrollbar platforms, where no compensation
+     is wanted. */
+  padding-top: var(--sb, 0px);
+}

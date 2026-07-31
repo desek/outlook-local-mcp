@@ -54,6 +54,10 @@ Call any domain with `operation: "help"` to list its verbs and parameters.
 
 For LLM clients: see [llms.txt](llms.txt) for a machine-readable index.
 
+## Acknowledgements
+
+Support and testing by [GigWhere](https://gigwhere.com) ❤️
+
 ## License
 
 MIT License. See [LICENSE](LICENSE) for details.

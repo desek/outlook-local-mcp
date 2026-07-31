@@ -1,9 +1,6 @@
 ---
 name: adr-template
 description: Template for creating Architecture Decision Records (ADRs).
-metadata:
-  copyright: Copyright Daniel Grenemark 2026
-  version: "0.0.1"
 # These are required metadata elements. Feel free to add additional if motivated.
 status: "{proposed | rejected | accepted | deprecated | … | superseded by ADR-0123"
 date: {YYYY-MM-DD when the decision was last updated}
@@ -13,6 +10,33 @@ informed: {list everyone who is kept up-to-date on progress; and with whom there
 source-branch: {current Git branch name, from `git rev-parse --abbrev-ref HEAD`}
 source-commit: {short commit hash, from `git rev-parse --short HEAD`}
 ---
+
+<!--
+=============================================================================
+ARCHITECTURE DECISION RECORD TEMPLATE GUIDELINES
+=============================================================================
+
+1. REQUIREMENTS LANGUAGE (RFC 2119)
+   - Use ONLY **MUST** for requirements to ensure unambiguous specification
+   - Avoid SHOULD, MAY, RECOMMENDED, OPTIONAL - these create ambiguity
+
+2. ACCEPTANCE CRITERIA (Given-When-Then)
+   - Where the decision states verifiable outcomes, express them as
+     Given (precondition), When (trigger), Then (expected result)
+
+3. GOVERNANCE REFERENCE BOUNDARY (Keep Identifiers Out of the Implementation)
+   - Governance identifiers **MUST NOT** appear in source code, code comments,
+     test names, or user-facing documentation
+   - The document you are creating is read by people reasoning about decisions;
+     the code that implements it is read by people using or changing the software,
+     for whom a governance identifier is a dead end that rots silently when the
+     document is renumbered, superseded, or cancelled
+   - The link between an implementation and its governance document belongs in the
+     commit message, which is durable, queryable with `git log --grep`, and absent
+     from the working tree where readers of the code would trip over it
+   - Describe the behavior on its own terms; put the identifier in the commit
+=============================================================================
+-->
 
 # {short title, representative of solved problem and found solution}
 
