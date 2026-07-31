@@ -48,6 +48,11 @@ extension/bin/
 # Local test reports
 TEST-REPORT*.md
 
+# Agent screenshot tile sets (visual-regression baselines/candidates). Bulky PNG
+# artifacts kept on disk for the site.visual.diff.mjs comparison across phases;
+# the evidence record under .agents/logs/*.md is committed, the tiles are not.
+/.agents/screenshots/
+
 # CRUD bench per-run artifacts (CSV is checked in)
 docs/bench/runs/
 
