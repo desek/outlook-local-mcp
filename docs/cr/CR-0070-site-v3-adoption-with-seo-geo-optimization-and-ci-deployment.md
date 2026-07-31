@@ -1,14 +1,15 @@
 ---
 id: "CR-0070"
-status: "proposed"
+status: "completed"
 date: 2026-07-30
+completed-date: 2026-07-31
 requestor: desek
 stakeholders:
   - desek
 priority: "high"
 target-version: "0.8.0"
 source-branch: dev/site-v3
-source-commit: b3e79ba
+source-commit: ee42b2a
 ---
 
 # Site v3 Adoption: SEO and GEO Foundation, Markdown Representation, Build Provenance, Lighthouse Budget, and CI Deployment to gh-pages
@@ -684,7 +685,30 @@ this ships.
 ### Out of Scope ("Here, But Not Further")
 
 * **Redesign.** The v3 design is adopted as authored. Layout, typography, and colour
-  changes are deferred.
+  changes are deferred **except where a measured accessibility or validity threshold
+  requires one, and then only by the smallest adjustment that reaches the threshold.**
+
+  **Reconciled during implementation, having been written too broadly.** As first
+  drafted this bullet deferred colour changes outright, which FR-36's Accessibility floor
+  made impossible to honour: the landing page shipped 40 text elements below WCAG AA,
+  including the brand lime `#abff02` on white at 1.23:1 against a 4.5:1 requirement.
+  Meeting one requirement meant breaching the other, and the finalizer correctly refused
+  rather than choosing silently between them.
+
+  The boundary that actually holds is narrower than "no colour changes" and is stated
+  above. Everything changed under it, with the measured ratio it reached:
+
+  | change | reason | result |
+  |---|---|---|
+  | `--color-gray-400` `#6f6f6f` to `#6d6d6d` | 4.41:1 on the `#f0f0f0` section background | 4.54:1 on `#f0f0f0`, 5.17:1 on white |
+  | the three step numbers from `text-brand-lime` to `text-lime-dark` | 1.23:1 on white | 5.57:1, using a token the design system already defined for light backgrounds |
+  | `text-white/30` to `/50`, `text-white/40` to `/60` | 2.63:1 to 3.81:1 on the dark sections | 5.02:1 to 7.24:1, preserving the three-step visual hierarchy |
+
+  No colour was changed for aesthetic reasons, no palette token was added, and the two
+  brand colours are untouched. Markup corrected for validity or assistive technology —
+  `<div>` to `<span>` inside the accordion triggers, per-instance SVG ids, the tab and
+  panel id pairing — is likewise in scope under FR-36 and was held to the "no visual
+  regression" test, which it passed at 0 of 135 screenshot tiles.
 * **All copy correction**, including the tool counts, the Diagnostics category, the
   configuration-variable count, answer-shaped section openings, question-form
   heading wording, and the inherited absolute security claims. See "Deferred to a
