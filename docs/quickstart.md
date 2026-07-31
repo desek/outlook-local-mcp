@@ -4,7 +4,7 @@ Get from zero to a working Outlook Local MCP server in minutes.
 
 ## Prerequisites
 
-- **Go 1.24+** installed ([download](https://go.dev/dl/))
+- **Go 1.25+** installed ([download](https://go.dev/dl/))
 - A **Microsoft account** (personal, work, or school)
 
 ## 1. Build

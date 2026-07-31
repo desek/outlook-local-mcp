@@ -189,6 +189,8 @@ make license-check
 
 Scans Go module dependencies with `syft` and checks licenses with `grant`. Used to ensure all dependency licenses are compatible with the project's MIT licence.
 
+For what each instrument (`govulncheck`, Dependabot, `grype`) measures, why their finding counts differ, how to triage a new alert, and the standing published ceiling, see [`docs/reference/security.md`](security.md). Dependency currency is maintained by `.github/dependabot.yml`. See CR-0071.
+
 ---
 
 ## Version injection
