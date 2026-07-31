@@ -1,6 +1,6 @@
 module github.com/desek/outlook-local-mcp
 
-go 1.25.9
+go 1.25.12
 
 require (
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0
