@@ -196,34 +196,22 @@ them, skipped, has already produced a confident wrong answer here.
 
 ## Website
 
-The website in `site/` is a separate build with its own quality gate, and it is measured
-rather than eyeballed. Before changing it, read the documents rather than re-deriving what
-they contain:
+The website in `site/` has **its own [`site/AGENTS.md`](site/AGENTS.md)**, which is loaded
+automatically when working in that directory. Read it before changing anything under
+`site/`; it carries the build invariants, the design boundary, and the rule that a change
+claiming to leave rendering untouched must be verified by screenshot comparison rather
+than assumed.
 
-* [`docs/reference/site-quality.md`](docs/reference/site-quality.md) — how to run the
-  checks, what Lighthouse's simulated throttling does and does not measure, why the
-  landing page is held to 96 while the documentation pages are held to 100, the five
-  clocks that must be frozen for a reproducible screenshot, and the optimisations that
-  look lossless and are not. Read this before attempting any site performance work; most
-  of the obvious levers were measured and move nothing.
-* [`site/ARCHITECTURE.md`](site/ARCHITECTURE.md) — the design language and per-section
-  intent of the page, as authored.
-* `.agents/scripts/site.*.mjs` — the measurement harness itself. Each script carries its
-  purpose and its caveats in its own docstring.
+Two things are worth knowing from outside that directory:
 
-Three rules for site changes:
-
-* **A visual change is asserted, not asserted-to-be-absent.** Any change claiming to leave
-  rendering untouched **MUST** be verified with a screenshot comparison against a build of
-  the commit it is compared to, not assumed from the nature of the change. Repairs and
-  regressions look identical in a diff until someone opens the tiles.
-* **The Lighthouse thresholds in `site/lighthouserc.json` are a measured ceiling, not an
-  aspiration.** Raising one requires the measurement that shows it is reachable; lowering
-  one requires saying so in the governing CR rather than editing the file quietly.
-* **The site and the Go application have separate workflows.** `site.yml` runs on
-  `site/**` and `docs/**`; `ci.yml` ignores site-only paths. `docs/**` triggers both,
-  because those files are embedded in the binary and also generate the site's
-  documentation pages.
+* **`docs/**` belongs to both.** Those Markdown files are embedded into the binary *and*
+  generate the site's documentation pages, so a change there triggers both workflows and
+  can fail either. `site.yml` runs on `site/**` and `docs/**`; `ci.yml` ignores site-only
+  paths.
+* **The measurement caveats are written down.** [`docs/reference/site-quality.md`](docs/reference/site-quality.md)
+  records what the site's gates actually measure and which optimisations were tried and
+  move nothing. It is the document to read before attempting site performance work, from
+  wherever that work starts.
 
 ## Quality Standards
 
