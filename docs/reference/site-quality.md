@@ -202,3 +202,110 @@ unreachable by keyboard: a validator message traded for a real defect. `aria-con
 Around 54 messages per page are the checker's CSS profile lagging shipping CSS
 (`@property`, `margin-trim` and similar); they are reported as ignored rather than
 suppressed, so the exclusion stays visible. Real errors must be zero.
+
+## The dependency gate measures what ships, not what builds
+
+`site.yml` runs `pnpm --dir site audit --prod --audit-level=moderate` before the build,
+and fails the job on any finding. The scope is deliberate and is the whole point of the
+gate, so it is worth being precise about what the instrument does and does not look at.
+
+`--prod` audits only the packages resolved from `dependencies` in `site/package.json`,
+which at the time of writing is seven runtime packages, plus their transitive closure. It
+is exactly the tree whose code is bundled and pre-rendered into `dist/` and published to
+`gh-pages`. `--audit-level=moderate` sets the failure floor: a low-severity advisory is
+reported but does not fail the job, moderate and above does.
+
+It **excludes** the entire `devDependencies` closure. That is where the toolchain lives
+(`@lhci/cli`, `vite`, `puppeteer-core`, the TypeScript compiler) and it is where the site's
+open advisories have historically landed, because a Lighthouse CLI drags in a large
+transitive tree that accretes advisories no visitor ever executes. Those findings are real,
+but they are build-time only: `lhci autorun` runs after the build against its output and
+contributes no byte to `dist/`. The gate does not look at them, on purpose.
+
+### Why the noisy tree is watched by Dependabot and the narrow one by CI
+
+The build-time tree is not unwatched. The `npm` ecosystem entry in
+`.github/dependabot.yml` covers `/site` in full, dev dependencies included, and that is the
+correct home for it, because the two instruments are given deliberately different scopes.
+
+The CI audit is a **blocking** gate: a finding stops a deploy. A blocking gate must have a
+near-zero false-alarm rate or it does not survive contact with someone trying to ship on a
+Friday, and it acquires `continue-on-error` within a month. Restricting it to the runtime
+tree, which is small, changes rarely, and is clean today, is what buys it that property.
+
+Dependabot on the full tree is a **notification**, not a gate. Lower precision is
+acceptable there because the cost of an over-report is a pull request someone reads and
+closes, not a blocked deploy. Giving the noisy instrument the wide scope and the blocking
+instrument the narrow one is what keeps both alive. Widening the CI audit to the full tree
+would fail the job today for advisories nobody will act on, which is the failure mode that
+gets quality gates disabled rather than fixed.
+
+### The standing rule: moving a package into `dependencies` enters it into the gate
+
+The entire boundary rests on the vulnerable packages being confined to `devDependencies`,
+and nothing in `package.json` enforces that placement. Moving one line from
+`devDependencies` to `dependencies` brings that package, and everything it pulls in, into
+the shipped tree and therefore into the `--prod` audit. That is the intended behaviour, not
+an accident: the gate is the enforcement that the boundary still holds, so a package that
+crosses the line is audited from that commit forward, and the exclusion cannot silently
+outlive its justification. A contributor who narrows or widens the gate's scope, or raises
+its threshold, records the reason here rather than reaching for `continue-on-error`.
+
+## Two dependency traps found by measurement, not by reading docs
+
+Both of these were established by running the tooling during CR-0072 and watching what it
+actually did, which is the standard the rest of this document is written to.
+
+### pnpm 11 does not read overrides from `package.json`
+
+The three site advisories were closed with `pnpm.overrides`, forcing patched transitive
+versions upstream never shipped. The trap is where the override block lives. pnpm 11.18.0,
+the version pinned in `packageManager`, does **not** read a `pnpm` field from
+`package.json`: it emits `[WARN] ... "pnpm.overrides" ... ignored` and carries on. An
+override placed there leaves the lockfile fully vulnerable while every surface reading
+suggests it was applied, which is the worst kind of null change, one that looks like a
+result. The overrides live in `site/pnpm-workspace.yaml`, alongside the pnpm 11 settings
+this repo already keeps there (`onlyBuiltDependencies`). Confirm an override took by
+grepping the resolved version out of `site/pnpm-lock.yaml`, not by trusting that
+`package.json` looks right.
+
+### `puppeteer-core` is load-bearing, and a `site/`-scoped search says otherwise
+
+`puppeteer-core` is a `devDependency` pinned to an exact version with no caret, and a
+search restricted to `site/` and `.github/` finds no importer and concludes it is an
+orphan that can be removed or bumped freely. That conclusion is wrong, and CR-0072
+established it is wrong by looking wider. Three harness scripts import it through a deep
+internal ESM path:
+
+* `.agents/scripts/site.screenshot.mjs`
+* `.agents/scripts/site.content.check.mjs`
+* `.agents/scripts/site.contrast.audit.mjs`
+
+They reach into `.../puppeteer-core/lib/esm/puppeteer/puppeteer-core.js`, an internal
+layout with no cross-major compatibility guarantee, which is why the pin is exact and why
+the 24.x to 25.x major bump is out of scope. `site.screenshot.mjs` is the very harness this
+document opens with, the one the visual gate depends on. The pin is not cargo cult; a
+search that stopped at `site/` simply missed the consumers, and that is worth recording
+because the missed search is the lesson.
+
+## The dependency-currency noise floor
+
+CR-0072 Phase 1 baselined the Lighthouse gate on the unchanged tree by running the full
+build-and-`lighthouse` sequence twice, so the currency and override bumps could be judged
+against a known spread rather than against a single number. The measured spread was tight:
+category scores identical to `0.00` across both runs, and LCP within `2 ms`.
+
+Read that floor with the same suspicion this document applies to every other instrument.
+Two runs of a median-of-3 is a **coarse** floor: with six underlying runs it barely samples
+the runner variance, and most of the apparent tightness comes from `lhci`'s own
+median-of-3 smoothing rather than from low per-run variance. It is enough to say a
+post-change score inside `0.00` is not a regression; it is not enough to characterise the
+runner. The wider CI variance measured on the landing page above, TBT swinging thirtyfold
+on identical commits, is the honest picture of per-run spread, and it is why the landing
+page's Performance category is not asserted at all.
+
+The discriminator from the CI section applies unchanged here: a metric that is **identical
+across runs and still fails** is a defect in the site, while one that **swings** is the
+environment. A currency bump that moves a score by more than the baseline spread is a
+signal to investigate; one that moves it by less is "not measured", neither confirmed
+unchanged nor confirmed regressed.
