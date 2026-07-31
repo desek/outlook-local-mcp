@@ -88,15 +88,55 @@ With no script element at all the landing page audits FCP 1.00, Speed Index 1.00
 requires shipping *no JavaScript*, not a lighter framework, and the thresholds in
 `site/lighthouserc.json` reflect the measured ceiling rather than an aspiration.
 
-### Thresholds are hardware-sensitive
+### What CI can and cannot measure here
 
-Scores were calibrated on a machine reporting `benchmarkIndex` ≈ 2,970. CI runners are
-typically 700 to 1,500, and a slower CPU inflates the observed timings the model scales,
-so the same build scores lower there. Headroom is thin by design — the landing page at
-0.970 against a 0.96 floor, the documentation pages at 1.000 against 1.00. **A first
-failure on new hardware is a calibration problem, not a regression**; take the numbers
-from CI, which is where the gate runs, and read `lighthouse-reports` from the workflow
-artifact for the attribution.
+CI does *not* simply score lower than a developer machine, which is what was assumed
+before the gate had ever run there. Measured on GitHub's runners (`benchmarkIndex` ≈ 2,500
+against 2,970 locally):
+
+| page | CI Performance | CI TBT | CI LCP |
+|---|---|---|---|
+| index.html | 0.66 to 0.97 | 193 to 1,675 ms | 1,658 to 2,108 ms |
+| the three documentation pages | 1.00 every run | 0 ms every run | 1,506 to 1,665 ms |
+
+The documentation pages are stable to the millisecond. The landing page is not: Total
+Blocking Time swings eightfold on *identical commits*, and because TBT is 30% of the
+Performance weight, the category swings with it. Two causes, neither of which a visitor
+experiences — the first of each three runs is systematically the worst, a cold start the
+median only partly absorbs; and even discounting it, CI TBT is 421 to 689 ms against 8 to
+12 ms locally, a fiftyfold gap on hardware 15% slower, which points at software rendering
+on a runner with no GPU pushing this page's canvas and compositing work onto the main
+thread.
+
+So the landing page's Performance category and TBT are **not asserted**. A gate that
+varies eightfold on unchanged input cannot discriminate a regression. What is asserted
+there is what is stable: Accessibility, Best Practices and SEO at 100, plus LCP and CLS.
+Its Performance score is still a number worth measuring — it is simply measured locally
+and recorded in the CR, not gated in CI.
+
+Note that the landing page's LCP is *better* on CI (≈1,660 ms) than locally (≈2,553 ms),
+because the deferred bundle falls outside Lantern's LCP graph there. The 2,700 ms budget
+is the local ceiling, which is the stricter of the two environments.
+
+### Attribute a CI failure before recalibrating it
+
+A local number and a CI number disagreeing does not make CI wrong. The first CI run of
+this gate failed on a `concepts.html` Cumulative Layout Shift of 0.016 that measures 0.000
+locally, and it was a **real defect**: the documentation pages preloaded only the 400
+weights while rendering bold prose and bold inline code above the fold, so `inter-700` and
+`geist-mono-600` arrived late. It hid on macOS only because the fallback font's metrics
+happen to place the swap in nearly the same position. Chrome named both files in the
+`layout-shifts` audit.
+
+The discriminator is variance, and it is reliable:
+
+* **Identical across runs → a defect.** The CLS was `0.01601972601202666` three times.
+* **Swinging across runs → the environment.** TBT was 1,197 / 193 / 689 ms.
+
+Download the `lighthouse-reports` artifact and read the audit's own attribution before
+touching a threshold. That artifact only exists because `include-hidden-files: true` is
+set on the upload step — `.lighthouseci` is a dotted directory, and without it the step
+reports success and uploads nothing, which is how the very first failure left no evidence.
 
 ## Font subsetting is not a lossless optimisation
 

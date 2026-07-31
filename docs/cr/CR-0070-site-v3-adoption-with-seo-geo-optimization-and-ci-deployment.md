@@ -405,11 +405,16 @@ flowchart TD
 
 36. A Lighthouse run against the built site, on mobile emulation, **MUST** score 100 in
     Accessibility, Best Practices and SEO on every page, and 100 in Performance on the
-    three documentation pages. The landing page **MUST** score at least 96 in
-    Performance. Every page **MUST** hold Cumulative Layout Shift at or below 0.010 and
-    Total Blocking Time at or below 50 ms; Largest Contentful Paint **MUST** be at or
-    below 1,700 ms on the documentation pages and at or below 2,700 ms on the landing
-    page.
+    three documentation pages.
+
+    Every page **MUST** hold Cumulative Layout Shift at or below 0.010. Largest
+    Contentful Paint **MUST** be at or below 1,700 ms on the documentation pages and at
+    or below 2,700 ms on the landing page. The documentation pages **MUST** hold Total
+    Blocking Time at or below 50 ms.
+
+    The landing page's Performance category and Total Blocking Time are deliberately
+    **not** asserted, for reasons given below: on CI they measure the runner rather than
+    the site.
 
     **Why the landing page is held to a different Performance figure.** This began as a
     flat "at least 95 in Performance", which the landing page failed at 0.93. The
@@ -487,10 +492,40 @@ flowchart TD
       the landing page is held at 96 with metric budgets rather than to a figure the site
       cannot occupy while remaining a site.
 
-    The 96 floor is set one point below the measured 0.97 to absorb run-to-run variance,
-    and the metric budgets above make the underlying numbers assertable in their own
-    right, so a regression in LCP, CLS or TBT fails the gate even if the rounded category
-    score does not move.
+    The metric budgets above make the underlying numbers assertable in their own right, so
+    a regression in LCP or CLS fails the gate even if a rounded category score does not
+    move.
+
+    **The landing page's Performance category and Total Blocking Time are not asserted at
+    all, because on CI they do not measure the site.** A 96 floor was set first, one point
+    below the local 0.97. The first CI runs then showed the landing page swinging between
+    0.66 and 0.97 on *identical commits*, driven by Total Blocking Time ranging from
+    193 ms to 1,675 ms where the same build measures 8 to 12 ms locally.
+
+    | run | index Performance | index TBT | index LCP | benchmarkIndex |
+    |---|---|---|---|---|
+    | first | 0.66 / 0.89 / 0.89 | 1,675 / 447 / 421 ms | 2,108 / 1,658 / 1,661 ms | 2,115 / 2,515 / 2,498 |
+    | second | 0.71 / 0.97 / 0.83 | 1,197 / 193 / 689 ms | 1,814 / 1,660 / 1,663 ms | 2,198 / 2,522 / 2,461 |
+
+    Two effects, neither of which a visitor experiences. The first of each three runs is
+    systematically the worst on every metric, a cold-start the median only partly absorbs.
+    And even discounting it, CI Total Blocking Time is 421 to 689 ms against 8 to 12 ms
+    locally — a fiftyfold gap on hardware only 15% slower by `benchmarkIndex`, which
+    points at software rendering: a headless runner has no GPU, so this page's canvas and
+    compositing work lands on the main thread in a way it does not for a real browser.
+
+    A gate that varies eightfold on unchanged input cannot discriminate a regression, and
+    keeping it would have meant a permanently flaky check that teams learn to re-run until
+    green. What is asserted for the landing page is what is stable and meaningful there:
+    Accessibility, Best Practices and SEO at 100 — 1.00 on every CI run — plus LCP and
+    CLS. The three documentation pages keep the full category assertion at 100, which they
+    hold on every run with Total Blocking Time at zero.
+
+    The landing page's Performance score remains a measured number, recorded above and
+    reproducible locally; it is simply not a CI gate. `largest-contentful-paint` stays at
+    2,700 ms because that is the local ceiling, which is the stricter of the two
+    environments: CI measures 1,660 ms, since the deferred bundle falls outside the LCP
+    graph there.
 37. Lighthouse **MUST** run in CI against the built output, and the workflow **MUST**
     fail if any category falls below its threshold. It **MUST** run on the pull request
     as well as on the deploy.

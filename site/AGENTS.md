@@ -70,9 +70,14 @@ purpose and caveats in its own docstring.
   "regressed" nine tiles, and the tiles were the repair.
 * **The thresholds in `lighthouserc.json` are a measured ceiling, not an aspiration.**
   Raising one requires the measurement showing it is reachable. Lowering one requires
-  saying so in the governing CR rather than editing the file quietly. They are also
-  hardware-sensitive: a first failure on new CI hardware is a calibration problem, not a
-  regression.
+  saying so in the governing CR rather than editing the file quietly.
+* **Attribute a CI failure before recalibrating it.** Local and CI numbers differ, and the
+  difference is not automatically the runner's fault — the first CI run of this gate
+  failed on a Cumulative Layout Shift that measured 0.000 locally and turned out to be a
+  real defect on every platform whose fallback font differs from macOS. The rule is:
+  download the `lighthouse-reports` artifact, read the audit's own attribution, and only
+  then decide. A metric that is identical across runs is a defect; one that swings is the
+  environment. Do not reason from "it passes on my machine".
 * **Both accessibility and validity are gated.** `site.contrast.audit.mjs` walks every
   rendered text node at four widths; `site.validate.mjs` posts each page to the W3C Nu
   checker and separates real errors from the checker's CSS-profile lag. Real errors and
