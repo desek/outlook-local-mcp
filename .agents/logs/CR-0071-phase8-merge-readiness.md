@@ -132,6 +132,20 @@ commits are also on the branch.
    merge it.
 7. **Verify the release**: `release-please` should open/update a release PR that
    bumps to 0.5.1; merging that produces the patch release users should take.
+8. **Run `make crud-test` manually against a test tenant** (OUTSTANDING). This
+   is the runtime behavioural check for the mcp-go v0.45.0 -> v0.57.0 migration
+   (CR Phases 5 and 6, Risk 1). It was **not** run in the implementation
+   environment and is **not** wired into any CI workflow: it needs live
+   Microsoft 365 credentials plus an authenticated `claude` CLI and performs
+   real create/update/delete against a live mailbox and calendar, so it would
+   mutate real user data. What stood in for it is a STATIC substitute:
+   `TestVerbInventoryUnchangedAfterUpgrade` (golden over all 42
+   `{domain}.{operation}` identities and their four annotation hints) plus the
+   unchanged `extension/manifest.json`. That proves the registered MCP surface
+   is identical after the bump but does NOT exercise runtime request/response
+   behaviour through mcp-go v0.57.0. Run `make crud-test` against a disposable
+   test mailbox before relying on the release, and record the run under
+   `.agents/logs/`.
 
 ## 7. Constraints honoured by this phase
 

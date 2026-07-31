@@ -14,9 +14,17 @@ Phase 6 and Phase 8 evidence logs under `.agents/logs/` and marked accordingly.
 
 Requirements: 15/17 PASS (2 deferred-to-merge) | Non-Functional: 5/5 PASS |
 Acceptance Criteria: 12/15 PASS, 1 N/A, 2 deferred-to-merge |
-Tests: 2/2 added tests PASS, `make crud-test` NOT run (GAP) | Gaps: 1
+Tests: 2/2 added tests PASS, `make crud-test` DEFERRED (human-run) | Gaps: 0
 
-Counts by status: **PASS 34 · PARTIAL 0 · GAP 1 · FAIL 0 · DEFERRED 4 · N/A 1**
+Counts by status: **PASS 34 · PARTIAL 0 · GAP 0 · FAIL 0 · DEFERRED 5 · N/A 1**
+
+The prior GAP (a false "verified in CI" note on the `make crud-test` Quality
+Standards checkbox) was closed by a documentation-only fix on 2026-07-31: the CR
+checkbox now records honestly that `make crud-test` was not run in this
+environment, why (live M365 credentials plus an authenticated `claude` CLI, and
+it mutates a real mailbox and calendar), and that it remains an outstanding
+human-run verification step; the merge-readiness record carries it as an
+outstanding human action (item 8). The requirement is unchanged and stands.
 
 DEFERRED rows (FR-16, FR-17, AC-9, AC-10) are merge-time requirements. The
 branch is unpushed and unmerged by design (Phase 8 is preparation-only), so they
@@ -80,7 +88,7 @@ are **not failures** but are **unverified as of this report**.
 |-----------|-----------|-----------|--------|--------------|
 | `internal/buildinfo/snapshot_test.go` | `TestGoVersionMatchesToolchainPin` | Yes | Yes (`:90-116`) | Yes — asserts built toolchain ≥ `.mise.toml` pin, skips when `.mise.toml` absent, message names both versions. Re-run: PASS |
 | `internal/tools/dispatch_registry_test.go` | `TestVerbInventoryUnchangedAfterUpgrade` | Yes | Yes (`:143-175`) | Yes — golden over verb id set AND four annotation hints, bidirectional membership check (not a count). Re-run: PASS |
-| (harness) | `make crud-test` (Quality Standards checklist; Phases 5, 6; Verification Commands; Risk 1) | Yes | N/A | **GAP** — did not run. See Gaps |
+| (harness) | `make crud-test` (Quality Standards checklist; Phases 5, 6; Verification Commands; Risk 1) | Yes | N/A | **DEFERRED (human-run)** — cannot run here (live M365 credentials + authenticated `claude` CLI; mutates a real mailbox/calendar) and is not wired into CI. Recorded honestly in the CR checkbox and as an outstanding human action in the merge-readiness log (item 8). Statically substituted by `TestVerbInventoryUnchangedAfterUpgrade` + unchanged `extension/manifest.json` (surface identity, not runtime behaviour). See Gaps → Resolved |
 
 ## Diff Coverage
 
@@ -114,9 +122,12 @@ adaptation; there is no silent source edit hiding a surface change.
 
 ## Gaps
 
-1. **`make crud-test` did not run, and the Quality Standards checkbox is
-   inaccurately marked.** The CR marks `- [x] make crud-test passes after Stage 3`
-   with the note "verified in CI" (CR line 799). This is not accurate:
+**Status: 0 open.** The one gap below was resolved (documentation-only) on
+2026-07-31; the resolution is recorded inline under "Resolution".
+
+1. **`make crud-test` did not run, and the Quality Standards checkbox was
+   inaccurately marked.** The CR marked `- [x] make crud-test passes after Stage 3`
+   with the note "verified in CI" (CR line 799). This was not accurate:
    - No workflow under `.github/workflows/` references `crud-test` (grep of all
      six workflows returns nothing), so CI does not run it.
    - No crud-test evidence exists anywhere (`.agents/logs/` contains no crud-run
@@ -136,14 +147,27 @@ adaptation; there is no silent source edit hiding a surface change.
    drift, but it does not exercise runtime request/response behavior through the
    upgraded mcp-go v0.57.0, which is exactly the AC-6 / Risk 1 scenario.
 
-   **Suggested minimal fix (documentation-only):** correct the Quality Standards
-   checkbox note from "verified in CI" to an honest statement, e.g. "not run:
-   requires live M365 credentials and an authenticated claude CLI; must be
-   executed manually before merge per Phase 6. NFR-1 surface stability is
-   covered statically by TestVerbInventoryUnchangedAfterUpgrade." Either run
-   `make crud-test` against a test tenant and record the result under
-   `.agents/logs/`, or downgrade the checkbox to unchecked with the manual
-   follow-up noted. Do not leave a false "verified in CI" attribution.
+   **Resolution (documentation-only, 2026-07-31, cr-gap-fixer):** The false
+   "verified in CI" attribution was removed and the requirement left standing —
+   the box was NOT ticked to make the gap disappear.
+   - CR checkbox (CR-0071 file, "Test Execution") downgraded from `- [x] …
+     verified in CI` to `- [ ] … NOT run in this environment`, stating why
+     (live M365 credentials + authenticated `claude` CLI; performs real
+     create/update/delete against a live mailbox and calendar) and that it
+     remains an outstanding human-run verification step. It names the STATIC
+     substitute — `TestVerbInventoryUnchangedAfterUpgrade` (golden over all 42
+     `{domain}.{operation}` identities and their four annotation hints) plus the
+     unchanged `extension/manifest.json` — and is explicit that this proves
+     surface identity, not runtime behaviour through mcp-go v0.57.0.
+   - `.agents/logs/CR-0071-phase8-merge-readiness.md` §6 gained item 8: run
+     `make crud-test` manually against a test tenant before relying on the
+     release, alongside the other pending human actions.
+   - Re-traced: `grep -n "verified in CI"` over the CR now returns nothing; the
+     checkbox is unchecked; the merge-readiness log carries the human action.
+
+   The item is therefore **DEFERRED (human-run)**, joining the merge-time
+   deferrals below as accurately recorded and unverifiable-in-this-environment
+   rather than an open gap.
 
 ### Deferred-to-merge (not gaps, but unverified as of this report)
 
