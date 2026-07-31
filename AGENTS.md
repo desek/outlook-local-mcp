@@ -155,6 +155,45 @@ User-facing documentation has a single source of truth per concern. Future CRs t
    - Is it architecture, internals, or a build/release detail? → `docs/reference/`.
    - Is it a decision or scope change? → CR or ADR under `docs/cr/` or `docs/adr/`.
 
+## Measurement and Verification
+
+When a number decides what to do, the instrument producing it is part of the work and gets
+the same scepticism as the code. These apply to any measured gate in this repository — the
+Lighthouse budget, the visual comparison, benchmarks, coverage, flaky tests — and each of
+them, skipped, has already produced a confident wrong answer here.
+
+* **Validate the instrument before trusting a result: run it twice on unchanged input.** A
+  measurement that disagrees with itself on a null change cannot detect a real one.
+  Disagreement is a defect in the instrument, fixed before any finding is reported.
+* **State the noise floor next to the threshold.** A tolerance without a measured floor is
+  a guess. Report both, and treat a result inside the noise band as "not measured" rather
+  than "unchanged". An intermittently-failing gate is worse than a failing one: it is
+  green often enough to be believed.
+* **Attribute from the detail, not the headline.** Diagnostic summaries name *correlates*
+  prominently and *causes* in the detail. Act on the attribution for the specific
+  measurement, not on whatever the tool puts at the top.
+* **Falsify by substitution, at an extreme.** To test whether a component is responsible,
+  replace it with a null or extreme version and re-measure. One decisive run beats an
+  afternoon of reasoning, and reasoning from first principles about performance is usually
+  wrong.
+* **Derive the model, then check it reproduces every measurement already taken.** A model
+  that reproduces them answers further questions without more runs, and converts "this
+  seems hard" into a number that can be argued with.
+* **A null result falsifies the intervention, not the hypothesis.** "I changed X and the
+  metric did not move, so X is not the cause" holds only if the change actually exercised
+  X. Verify the intervention did what was intended before concluding anything from its
+  lack of effect.
+* **Determinism requires controlling every source of it** — time, randomness, scheduling,
+  and any clock the platform advances independently. Miss one and the failure is
+  intermittent, which is the expensive kind.
+* **A failing golden-output diff is a question, not a verdict.** Snapshot and
+  reference-output comparisons fail identically for a regression and for a repair. Look at
+  what changed before deciding which it was.
+* **When a target proves unreachable, publish the ceiling with the measurement chain that
+  established it,** and say what would have to change to move it. Amend the governing CR
+  rather than quietly relaxing the check. A documented ceiling ends the question; a bare
+  assertion invites the same experiments to be re-run.
+
 ## Website
 
 The website in `site/` is a separate build with its own quality gate, and it is measured
