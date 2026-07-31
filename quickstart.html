@@ -1,0 +1,320 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+    <link rel="icon" type="image/png" href="/icon.png" />
+    <title>Quick Start — Outlook Local MCP</title>
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/inter-latin-400-normal-C38fXH4l.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/inter-latin-700-normal-Yt3aPRUw.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-400-normal-DTRLJnHl.woff2" />
+    <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-600-normal-V-KvD_pi.woff2" />
+    <meta name="description" content="Quick Start documentation for Outlook Local MCP, the local Model Context Protocol server for Microsoft Outlook Calendar and Mail." />
+      <meta name="build:commit" content="09397ddb0d8dc1cc07a72ff502d3f5719b855614" />
+    <meta name="build:time" content="2026-07-31T09:45:53.015Z" />
+    <meta name="build:run" content="30621103940" />
+    <meta name="build:environment" content="ci" />
+      <link rel="canonical" href="https://outlook-local-mcp.com/quickstart.html" />
+    <meta property="og:title" content="Quick Start — Outlook Local MCP" />
+    <meta property="og:description" content="Install Outlook Local MCP, configure Claude Desktop or Claude Code, authenticate, and make your first calendar and mail tool call, all on your local machine." />
+    <meta property="og:type" content="article" />
+    <meta property="og:url" content="https://outlook-local-mcp.com/quickstart.html" />
+    <meta property="og:image" content="https://outlook-local-mcp.com/icon.png" />
+    <meta property="og:image:alt" content="The Outlook Local MCP wordmark" />
+    <meta property="og:site_name" content="Outlook Local MCP" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Quick Start — Outlook Local MCP" />
+    <meta name="twitter:description" content="Install Outlook Local MCP, configure Claude Desktop or Claude Code, authenticate, and make your first calendar and mail tool call, all on your local machine." />
+    <meta name="twitter:image" content="https://outlook-local-mcp.com/icon.png" />
+    <meta name="twitter:image:alt" content="The Outlook Local MCP wordmark" />
+    <meta name="build:updated" content="2026-07-30" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "name": "Connect Claude to Microsoft Outlook with Outlook Local MCP",
+        "description": "Install Outlook Local MCP, configure your MCP client, and authenticate to make your first Outlook Calendar and Mail tool call.",
+        "step": [
+          {
+            "@type": "HowToStep",
+            "position": 1,
+            "name": "Build",
+            "text": "Build the outlook-local-mcp binary from source, or install a released build."
+          },
+          {
+            "@type": "HowToStep",
+            "position": 2,
+            "name": "Configure Claude Desktop or Claude Code",
+            "text": "Register the server binary in your MCP client configuration so the client launches it."
+          },
+          {
+            "@type": "HowToStep",
+            "position": 3,
+            "name": "Authenticate and verify",
+            "text": "Trigger the first tool call, complete the one-time Microsoft sign-in, and confirm the server returns your calendar data."
+          }
+        ],
+        "dateModified": "2026-07-30"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Quick Start — Outlook Local MCP",
+        "url": "https://outlook-local-mcp.com/quickstart.html",
+        "dateModified": "2026-07-30"
+      }
+    </script>
+    <script type="module" crossorigin src="/assets/src-2LLAAICu.js"></script>
+    <script type="module" crossorigin src="/assets/docs.entry-CQKTRqjL.js"></script>
+    <style>/*! tailwindcss v4.3.3 | MIT License | https://tailwindcss.com */
+@layer properties{@supports (((-webkit-hyphens:none)) and (not (margin-trim:inline))) or ((-moz-orient:inline) and (not (color:rgb(from red r g b)))){*,:before,:after,::backdrop{--tw-translate-x:0;--tw-translate-y:0;--tw-translate-z:0;--tw-rotate-x:initial;--tw-rotate-y:initial;--tw-rotate-z:initial;--tw-skew-x:initial;--tw-skew-y:initial;--tw-space-y-reverse:0;--tw-border-style:solid;--tw-leading:initial;--tw-font-weight:initial;--tw-tracking:initial;--tw-shadow:0 0 #0000;--tw-shadow-color:initial;--tw-shadow-alpha:100%;--tw-inset-shadow:0 0 #0000;--tw-inset-shadow-color:initial;--tw-inset-shadow-alpha:100%;--tw-ring-color:initial;--tw-ring-shadow:0 0 #0000;--tw-inset-ring-color:initial;--tw-inset-ring-shadow:0 0 #0000;--tw-ring-inset:initial;--tw-ring-offset-width:0px;--tw-ring-offset-color:#fff;--tw-ring-offset-shadow:0 0 #0000;--tw-outline-style:solid;--tw-blur:initial;--tw-brightness:initial;--tw-contrast:initial;--tw-grayscale:initial;--tw-hue-rotate:initial;--tw-invert:initial;--tw-opacity:initial;--tw-saturate:initial;--tw-sepia:initial;--tw-drop-shadow:initial;--tw-drop-shadow-color:initial;--tw-drop-shadow-alpha:100%;--tw-drop-shadow-size:initial;--tw-backdrop-blur:initial;--tw-backdrop-brightness:initial;--tw-backdrop-contrast:initial;--tw-backdrop-grayscale:initial;--tw-backdrop-hue-rotate:initial;--tw-backdrop-invert:initial;--tw-backdrop-opacity:initial;--tw-backdrop-saturate:initial;--tw-backdrop-sepia:initial;--tw-duration:initial;--tw-ease:initial}}}@layer theme{:root,:host{--font-sans:"Inter", system-ui, -apple-system, sans-serif;--font-mono:"Geist Mono", "Fira Code", "Cascadia Code", monospace;--color-gray-100:#e8e8e8;--color-gray-200:#c2c2c2;--color-gray-400:#6d6d6d;--color-gray-600:#454742;--color-gray-800:#1a2a2a;--color-gray-900:#0a1010;--color-black:#000;--color-white:#fff;--spacing:.25rem;--container-xs:20rem;--container-md:28rem;--container-lg:32rem;--container-2xl:42rem;--container-3xl:48rem;--container-4xl:56rem;--text-xs:.75rem;--text-xs--line-height:calc(1 / .75);--text-sm:.875rem;--text-sm--line-height:calc(1.25 / .875);--text-base:1rem;--text-base--line-height:calc(1.5 / 1);--text-lg:1.125rem;--text-lg--line-height:calc(1.75 / 1.125);--text-2xl:1.5rem;--text-2xl--line-height:calc(2 / 1.5);--font-weight-normal:400;--font-weight-medium:500;--font-weight-semibold:600;--font-weight-bold:700;--tracking-tight:-.025em;--tracking-wide:.025em;--tracking-wider:.05em;--leading-tight:1.25;--leading-relaxed:1.625;--radius-sm:4px;--radius-md:.375rem;--radius-lg:.5rem;--ease-out:cubic-bezier(0, 0, .2, 1);--ease-in-out:cubic-bezier(.4, 0, .2, 1);--default-transition-duration:.15s;--default-transition-timing-function:cubic-bezier(.4, 0, .2, 1);--default-font-family:var(--font-sans);--default-mono-font-family:var(--font-mono);--color-brand-dark:#052424;--color-brand-lime:#abff02;--color-brand-black:#000;--color-brand-white:#fff;--color-brand-off-white:#f0f0f0;--color-lime-dark:#4d7300;--color-lime-mid:#7ab800;--text-hero:clamp(2.5rem, 5.09vw, 4.58rem);--text-hero--line-height:1.05;--text-hero--letter-spacing:-.02em;--text-display:clamp(2.4rem, 4.86vw, 4.375rem);--text-display--line-height:1.05;--text-display--letter-spacing:-.02em;--text-brand-reveal:clamp(2.56rem, 7.64vw, 6.875rem);--text-brand-reveal--line-height:1;--text-brand-reveal--letter-spacing:-.02em;--text-section-heading:clamp(1.5rem, 3.33vw, 2.5rem);--text-section-heading--line-height:1.15;--text-section-heading--letter-spacing:-.01em;--text-capability:clamp(1.25rem, 2.13vw, 1.917rem);--text-capability--line-height:1.2;--text-capability--letter-spacing:-.01em;--text-body:1rem;--text-small:.875rem;--text-label:.6875rem;--text-label--line-height:1.4;--text-label--letter-spacing:.18em;--text-mono-label:.6875rem;--radius-pill:8px;--radius-notch:80px;--radius-full:9999px;--section-gap:80px;--section-gap-sm:48px;--container-padding-x:46.67px;--container-padding-mobile:20px;--container-max-width:1280px}}@layer base{*,:after,:before,::backdrop{box-sizing:border-box;border:0 solid;margin:0;padding:0}::file-selector-button{box-sizing:border-box;border:0 solid;margin:0;padding:0}html,:host{-webkit-text-size-adjust:100%;tab-size:4;line-height:1.5;font-family:var(--default-font-family,-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji");font-feature-settings:var(--default-font-feature-settings,normal);font-variation-settings:var(--default-font-variation-settings,normal);-webkit-tap-highlight-color:transparent}hr{height:0;color:inherit;border-top-width:1px}abbr:where([title]){-webkit-text-decoration:underline dotted;text-decoration:underline dotted}h1,h2,h3,h4,h5,h6{font-size:inherit;font-weight:inherit}a{color:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;-webkit-text-decoration:inherit;text-decoration:inherit}b,strong{font-weight:bolder}code,kbd,samp,pre{font-family:var(--default-mono-font-family,ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);font-feature-settings:var(--default-mono-font-feature-settings,normal);font-variation-settings:var(--default-mono-font-variation-settings,normal);font-size:1em}small{font-size:80%}sub,sup{vertical-align:baseline;font-size:75%;line-height:0;position:relative}sub{bottom:-.25em}sup{top:-.5em}table{text-indent:0;border-color:inherit;border-collapse:collapse}:-moz-focusring:where(:not(iframe)){outline:auto}progress{vertical-align:baseline}summary{display:list-item}ol,ul,menu{list-style:none}img,svg,video,canvas,audio,iframe,embed,object{vertical-align:middle;display:block}img,video{max-width:100%;height:auto}button,input,select,optgroup,textarea{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}::file-selector-button{font:inherit;font-feature-settings:inherit;font-variation-settings:inherit;letter-spacing:inherit;color:inherit;opacity:1;background-color:#0000;border-radius:0}:where(select:is([multiple],[size])) optgroup{font-weight:bolder}:where(select:is([multiple],[size])) optgroup option{padding-inline-start:20px}::file-selector-button{margin-inline-end:4px}::placeholder{opacity:1}@supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px){::placeholder{color:currentColor}@supports (color:color-mix(in lab, red, red)){::placeholder{color:color-mix(in oklab, currentcolor 50%, transparent)}}}textarea{resize:vertical}::-webkit-search-decoration{-webkit-appearance:none}::-webkit-date-and-time-value{min-height:1lh;text-align:inherit}::-webkit-datetime-edit{display:inline-flex}::-webkit-datetime-edit-fields-wrapper{padding:0}::-webkit-datetime-edit{padding-block:0}::-webkit-datetime-edit-year-field{padding-block:0}::-webkit-datetime-edit-month-field{padding-block:0}::-webkit-datetime-edit-day-field{padding-block:0}::-webkit-datetime-edit-hour-field{padding-block:0}::-webkit-datetime-edit-minute-field{padding-block:0}::-webkit-datetime-edit-second-field{padding-block:0}::-webkit-datetime-edit-millisecond-field{padding-block:0}::-webkit-datetime-edit-meridiem-field{padding-block:0}::-webkit-calendar-picker-indicator{line-height:1}:-moz-ui-invalid{box-shadow:none}button,input:where([type=button],[type=reset],[type=submit]){appearance:button}::file-selector-button{appearance:button}::-webkit-inner-spin-button{height:auto}::-webkit-outer-spin-button{height:auto}[hidden]:where(:not([hidden=until-found])){display:none!important}}@layer components;@layer utilities{.pointer-events-none{pointer-events:none}.invisible{visibility:hidden}.visible{visibility:visible}.absolute{position:absolute}.fixed{position:fixed}.relative{position:relative}.static{position:static}.inset-0{inset:0}.top-0{top:0}.top-1\/2{top:50%}.top-3{top:calc(var(--spacing) * 3)}.top-4{top:calc(var(--spacing) * 4)}.top-24{top:calc(var(--spacing) * 24)}.right-0{right:0}.right-3{right:calc(var(--spacing) * 3)}.-bottom-1\.5{bottom:calc(var(--spacing) * -1.5)}.bottom-0{bottom:0}.bottom-6{bottom:calc(var(--spacing) * 6)}.bottom-8{bottom:calc(var(--spacing) * 8)}.left-0{left:0}.left-1\/2{left:50%}.left-3{left:calc(var(--spacing) * 3)}.left-6{left:calc(var(--spacing) * 6)}.z-0{z-index:0}.z-10{z-index:10}.z-20{z-index:20}.z-30{z-index:30}.z-40{z-index:40}.z-50{z-index:50}.col-span-2{grid-column:span 2/span 2}.container{width:100%}@media (width>=40rem){.container{max-width:40rem}}@media (width>=48rem){.container{max-width:48rem}}@media (width>=64rem){.container{max-width:64rem}}@media (width>=80rem){.container{max-width:80rem}}@media (width>=96rem){.container{max-width:96rem}}.container-page{width:100%;max-width:var(--container-max-width);padding-inline:var(--container-padding-mobile);margin-inline:auto}.mt-0\.5{margin-top:calc(var(--spacing) * .5)}.mt-1{margin-top:var(--spacing)}.mt-1\.5{margin-top:calc(var(--spacing) * 1.5)}.mt-2{margin-top:calc(var(--spacing) * 2)}.mt-3{margin-top:calc(var(--spacing) * 3)}.mt-4{margin-top:calc(var(--spacing) * 4)}.mt-5{margin-top:calc(var(--spacing) * 5)}.mt-6{margin-top:calc(var(--spacing) * 6)}.mt-8{margin-top:calc(var(--spacing) * 8)}.mt-10{margin-top:calc(var(--spacing) * 10)}.mt-12{margin-top:calc(var(--spacing) * 12)}.mt-14{margin-top:calc(var(--spacing) * 14)}.mr-2{margin-right:calc(var(--spacing) * 2)}.mb-1{margin-bottom:var(--spacing)}.mb-2{margin-bottom:calc(var(--spacing) * 2)}.mb-3{margin-bottom:calc(var(--spacing) * 3)}.mb-4{margin-bottom:calc(var(--spacing) * 4)}.mb-5{margin-bottom:calc(var(--spacing) * 5)}.mb-6{margin-bottom:calc(var(--spacing) * 6)}.mb-8{margin-bottom:calc(var(--spacing) * 8)}.mb-10{margin-bottom:calc(var(--spacing) * 10)}.mb-16{margin-bottom:calc(var(--spacing) * 16)}.ml-1{margin-left:var(--spacing)}.ml-2{margin-left:calc(var(--spacing) * 2)}.block{display:block}.flex{display:flex}.grid{display:grid}.hidden{display:none}.inline{display:inline}.inline-block{display:inline-block}.inline-flex{display:inline-flex}.table{display:table}.h-0\.5{height:calc(var(--spacing) * .5)}.h-1{height:var(--spacing)}.h-2{height:calc(var(--spacing) * 2)}.h-3{height:calc(var(--spacing) * 3)}.h-6{height:calc(var(--spacing) * 6)}.h-8{height:calc(var(--spacing) * 8)}.h-9{height:calc(var(--spacing) * 9)}.h-11{height:calc(var(--spacing) * 11)}.h-16{height:calc(var(--spacing) * 16)}.h-auto{height:auto}.h-full{height:100%}.w-0\.5{width:calc(var(--spacing) * .5)}.w-1{width:var(--spacing)}.w-1\.5{width:calc(var(--spacing) * 1.5)}.w-2{width:calc(var(--spacing) * 2)}.w-3{width:calc(var(--spacing) * 3)}.w-6{width:calc(var(--spacing) * 6)}.w-8{width:calc(var(--spacing) * 8)}.w-9{width:calc(var(--spacing) * 9)}.w-11{width:calc(var(--spacing) * 11)}.w-16{width:calc(var(--spacing) * 16)}.w-48{width:calc(var(--spacing) * 48)}.w-\[45\%\]{width:45%}.w-\[55\%\]{width:55%}.w-full{width:100%}.max-w-2xl{max-width:var(--container-2xl)}.max-w-3xl{max-width:var(--container-3xl)}.max-w-4xl{max-width:var(--container-4xl)}.max-w-lg{max-width:var(--container-lg)}.max-w-md{max-width:var(--container-md)}.max-w-xs{max-width:var(--container-xs)}.min-w-0{min-width:0}.flex-1{flex:1}.flex-none{flex:none}.shrink-0{flex-shrink:0}.-translate-x-1\/2{--tw-translate-x:calc(calc(1 / 2 * 100%) * -1);translate:var(--tw-translate-x) var(--tw-translate-y)}.-translate-y-1{--tw-translate-y:calc(var(--spacing) * -1);translate:var(--tw-translate-x) var(--tw-translate-y)}.-translate-y-1\/2{--tw-translate-y:calc(calc(1 / 2 * 100%) * -1);translate:var(--tw-translate-x) var(--tw-translate-y)}.translate-y-1{--tw-translate-y:var(--spacing);translate:var(--tw-translate-x) var(--tw-translate-y)}.-rotate-45{rotate:-45deg}.rotate-45{rotate:45deg}.rotate-180{rotate:180deg}.transform{transform:var(--tw-rotate-x,) var(--tw-rotate-y,) var(--tw-rotate-z,) var(--tw-skew-x,) var(--tw-skew-y,)}.cursor-default{cursor:default}.resize{resize:both}.grid-cols-1{grid-template-columns:repeat(1,minmax(0,1fr))}.grid-cols-2{grid-template-columns:repeat(2,minmax(0,1fr))}.flex-col{flex-direction:column}.flex-wrap{flex-wrap:wrap}.items-center{align-items:center}.items-start{align-items:flex-start}.justify-between{justify-content:space-between}.justify-center{justify-content:center}.gap-0\.5{gap:calc(var(--spacing) * .5)}.gap-1{gap:var(--spacing)}.gap-1\.5{gap:calc(var(--spacing) * 1.5)}.gap-2{gap:calc(var(--spacing) * 2)}.gap-3{gap:calc(var(--spacing) * 3)}.gap-4{gap:calc(var(--spacing) * 4)}.gap-6{gap:calc(var(--spacing) * 6)}.gap-8{gap:calc(var(--spacing) * 8)}.gap-10{gap:calc(var(--spacing) * 10)}:where(.space-y-0\.5>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * .5) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * .5) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-1>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(var(--spacing) * var(--tw-space-y-reverse));margin-block-end:calc(var(--spacing) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-1\.5>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 1.5) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 1.5) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-2>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 2) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 2) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-2\.5>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 2.5) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 2.5) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-3>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 3) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 3) * calc(1 - var(--tw-space-y-reverse)))}:where(.space-y-16>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 16) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 16) * calc(1 - var(--tw-space-y-reverse)))}.truncate{text-overflow:ellipsis;white-space:nowrap;overflow:hidden}.overflow-hidden{overflow:hidden}.overflow-x-auto{overflow-x:auto}.code-block{background:var(--color-gray-900);border-left:2px solid var(--color-brand-lime);font-family:var(--font-mono);border-radius:8px;font-size:.875rem;line-height:1.6}.nav-pill{-webkit-backdrop-filter:blur(30px);background:#0000004d;border-radius:8px}.rounded{border-radius:.25rem}.rounded-full{border-radius:var(--radius-full)}.rounded-lg{border-radius:var(--radius-lg)}.rounded-md{border-radius:var(--radius-md)}.border{border-style:var(--tw-border-style);border-width:1px}.border-t{border-top-style:var(--tw-border-style);border-top-width:1px}.border-b{border-bottom-style:var(--tw-border-style);border-bottom-width:1px}.border-l-2{border-left-style:var(--tw-border-style);border-left-width:2px}.border-brand-dark\/5{border-color:#0524240d}@supports (color:color-mix(in lab, red, red)){.border-brand-dark\/5{border-color:color-mix(in oklab, var(--color-brand-dark) 5%, transparent)}}.border-brand-dark\/10{border-color:#0524241a}@supports (color:color-mix(in lab, red, red)){.border-brand-dark\/10{border-color:color-mix(in oklab, var(--color-brand-dark) 10%, transparent)}}.border-brand-lime\/30{border-color:#abff024d}@supports (color:color-mix(in lab, red, red)){.border-brand-lime\/30{border-color:color-mix(in oklab, var(--color-brand-lime) 30%, transparent)}}.border-gray-100{border-color:var(--color-gray-100)}.border-white\/5{border-color:#ffffff0d}@supports (color:color-mix(in lab, red, red)){.border-white\/5{border-color:color-mix(in oklab, var(--color-white) 5%, transparent)}}.border-white\/10{border-color:#ffffff1a}@supports (color:color-mix(in lab, red, red)){.border-white\/10{border-color:color-mix(in oklab, var(--color-white) 10%, transparent)}}.border-l-brand-lime{border-left-color:var(--color-brand-lime)}.border-l-gray-100{border-left-color:var(--color-gray-100)}.bg-\[\#66bb6a\]{background-color:#66bb6a}.bg-\[\#ef5350\]{background-color:#ef5350}.bg-\[\#ffb300\]{background-color:#ffb300}.bg-black\/30{background-color:#0000004d}@supports (color:color-mix(in lab, red, red)){.bg-black\/30{background-color:color-mix(in oklab, var(--color-black) 30%, transparent)}}.bg-black\/95{background-color:#000000f2}@supports (color:color-mix(in lab, red, red)){.bg-black\/95{background-color:color-mix(in oklab, var(--color-black) 95%, transparent)}}.bg-brand-dark{background-color:var(--color-brand-dark)}.bg-brand-dark\/\[0\.02\]{background-color:#05242405}@supports (color:color-mix(in lab, red, red)){.bg-brand-dark\/\[0\.02\]{background-color:color-mix(in oklab, var(--color-brand-dark) 2%, transparent)}}.bg-brand-lime{background-color:var(--color-brand-lime)}.bg-brand-lime\/\[0\.04\]{background-color:#abff020a}@supports (color:color-mix(in lab, red, red)){.bg-brand-lime\/\[0\.04\]{background-color:color-mix(in oklab, var(--color-brand-lime) 4%, transparent)}}.bg-brand-off-white{background-color:var(--color-brand-off-white)}.bg-current{background-color:currentColor}.bg-gray-900{background-color:var(--color-gray-900)}.bg-gray-900\/50{background-color:#0a101080}@supports (color:color-mix(in lab, red, red)){.bg-gray-900\/50{background-color:color-mix(in oklab, var(--color-gray-900) 50%, transparent)}}.bg-lime-dark{background-color:var(--color-lime-dark)}.bg-transparent{background-color:#0000}.bg-white{background-color:var(--color-white)}.bg-white\/\[0\.02\]{background-color:#ffffff05}@supports (color:color-mix(in lab, red, red)){.bg-white\/\[0\.02\]{background-color:color-mix(in oklab, var(--color-white) 2%, transparent)}}.bg-white\/\[0\.04\]{background-color:#ffffff0a}@supports (color:color-mix(in lab, red, red)){.bg-white\/\[0\.04\]{background-color:color-mix(in oklab, var(--color-white) 4%, transparent)}}.bg-white\/\[0\.06\]{background-color:#ffffff0f}@supports (color:color-mix(in lab, red, red)){.bg-white\/\[0\.06\]{background-color:color-mix(in oklab, var(--color-white) 6%, transparent)}}.bg-white\/\[0\.08\]{background-color:#ffffff14}@supports (color:color-mix(in lab, red, red)){.bg-white\/\[0\.08\]{background-color:color-mix(in oklab, var(--color-white) 8%, transparent)}}.p-3{padding:calc(var(--spacing) * 3)}.p-4{padding:calc(var(--spacing) * 4)}.p-6{padding:calc(var(--spacing) * 6)}.p-8{padding:calc(var(--spacing) * 8)}.p-10{padding:calc(var(--spacing) * 10)}.px-1\.5{padding-inline:calc(var(--spacing) * 1.5)}.px-2{padding-inline:calc(var(--spacing) * 2)}.px-3{padding-inline:calc(var(--spacing) * 3)}.px-4{padding-inline:calc(var(--spacing) * 4)}.px-5{padding-inline:calc(var(--spacing) * 5)}.px-6{padding-inline:calc(var(--spacing) * 6)}.px-8{padding-inline:calc(var(--spacing) * 8)}.px-12{padding-inline:calc(var(--spacing) * 12)}.py-0\.5{padding-block:calc(var(--spacing) * .5)}.py-1{padding-block:var(--spacing)}.py-1\.5{padding-block:calc(var(--spacing) * 1.5)}.py-2{padding-block:calc(var(--spacing) * 2)}.py-2\.5{padding-block:calc(var(--spacing) * 2.5)}.py-3{padding-block:calc(var(--spacing) * 3)}.py-4{padding-block:calc(var(--spacing) * 4)}.py-5{padding-block:calc(var(--spacing) * 5)}.py-6{padding-block:calc(var(--spacing) * 6)}.py-8{padding-block:calc(var(--spacing) * 8)}.py-12{padding-block:calc(var(--spacing) * 12)}.py-16{padding-block:calc(var(--spacing) * 16)}.py-20{padding-block:calc(var(--spacing) * 20)}.py-24{padding-block:calc(var(--spacing) * 24)}.py-32{padding-block:calc(var(--spacing) * 32)}.pt-1{padding-top:var(--spacing)}.pt-3{padding-top:calc(var(--spacing) * 3)}.pt-5{padding-top:calc(var(--spacing) * 5)}.pt-6{padding-top:calc(var(--spacing) * 6)}.pr-4{padding-right:calc(var(--spacing) * 4)}.pb-2{padding-bottom:calc(var(--spacing) * 2)}.pb-3{padding-bottom:calc(var(--spacing) * 3)}.pb-4{padding-bottom:calc(var(--spacing) * 4)}.pb-12{padding-bottom:calc(var(--spacing) * 12)}.pb-16{padding-bottom:calc(var(--spacing) * 16)}.pl-10{padding-left:calc(var(--spacing) * 10)}.text-center{text-align:center}.text-left{text-align:left}.font-mono{font-family:var(--font-mono)}.font-sans{font-family:var(--font-sans)}.text-brand-reveal{font-size:var(--text-brand-reveal);line-height:var(--tw-leading,var(--text-brand-reveal--line-height));letter-spacing:var(--tw-tracking,var(--text-brand-reveal--letter-spacing))}.text-capability{font-size:var(--text-capability);line-height:var(--tw-leading,var(--text-capability--line-height));letter-spacing:var(--tw-tracking,var(--text-capability--letter-spacing))}.text-label{font-size:var(--text-label);line-height:var(--tw-leading,var(--text-label--line-height));letter-spacing:var(--tw-tracking,var(--text-label--letter-spacing))}.text-section-heading{font-size:var(--text-section-heading);line-height:var(--tw-leading,var(--text-section-heading--line-height));letter-spacing:var(--tw-tracking,var(--text-section-heading--letter-spacing))}.text-2xl{font-size:var(--text-2xl);line-height:var(--tw-leading,var(--text-2xl--line-height))}.text-base{font-size:var(--text-base);line-height:var(--tw-leading,var(--text-base--line-height))}.text-lg{font-size:var(--text-lg);line-height:var(--tw-leading,var(--text-lg--line-height))}.text-sm{font-size:var(--text-sm);line-height:var(--tw-leading,var(--text-sm--line-height))}.text-xs{font-size:var(--text-xs);line-height:var(--tw-leading,var(--text-xs--line-height))}.text-\[1\.1rem\]{font-size:1.1rem}.text-\[1\.25rem\]{font-size:1.25rem}.text-\[1\.75rem\]{font-size:1.75rem}.text-\[2\.56rem\]{font-size:2.56rem}.text-\[2rem\]{font-size:2rem}.text-\[9px\]{font-size:9px}.text-\[10px\]{font-size:10px}.leading-none{--tw-leading:1;line-height:1}.leading-relaxed{--tw-leading:var(--leading-relaxed);line-height:var(--leading-relaxed)}.leading-tight{--tw-leading:var(--leading-tight);line-height:var(--leading-tight)}.font-medium{--tw-font-weight:var(--font-weight-medium);font-weight:var(--font-weight-medium)}.font-normal{--tw-font-weight:var(--font-weight-normal);font-weight:var(--font-weight-normal)}.font-semibold{--tw-font-weight:var(--font-weight-semibold);font-weight:var(--font-weight-semibold)}.tracking-\[0\.18em\]{--tw-tracking:.18em;letter-spacing:.18em}.tracking-\[0\.136em\]{--tw-tracking:.136em;letter-spacing:.136em}.tracking-tight{--tw-tracking:var(--tracking-tight);letter-spacing:var(--tracking-tight)}.tracking-wide{--tw-tracking:var(--tracking-wide);letter-spacing:var(--tracking-wide)}.tracking-wider{--tw-tracking:var(--tracking-wider);letter-spacing:var(--tracking-wider)}.whitespace-nowrap{white-space:nowrap}.whitespace-pre-wrap{white-space:pre-wrap}.text-brand-dark{color:var(--color-brand-dark)}.text-brand-dark\/40{color:#05242466}@supports (color:color-mix(in lab, red, red)){.text-brand-dark\/40{color:color-mix(in oklab, var(--color-brand-dark) 40%, transparent)}}.text-brand-lime{color:var(--color-brand-lime)}.text-brand-lime\/60{color:#abff0299}@supports (color:color-mix(in lab, red, red)){.text-brand-lime\/60{color:color-mix(in oklab, var(--color-brand-lime) 60%, transparent)}}.text-brand-lime\/70{color:#abff02b3}@supports (color:color-mix(in lab, red, red)){.text-brand-lime\/70{color:color-mix(in oklab, var(--color-brand-lime) 70%, transparent)}}.text-gray-200{color:var(--color-gray-200)}.text-gray-400{color:var(--color-gray-400)}.text-gray-600{color:var(--color-gray-600)}.text-lime-dark{color:var(--color-lime-dark)}.text-white{color:var(--color-white)}.text-white\/20{color:#fff3}@supports (color:color-mix(in lab, red, red)){.text-white\/20{color:color-mix(in oklab, var(--color-white) 20%, transparent)}}.text-white\/50{color:#ffffff80}@supports (color:color-mix(in lab, red, red)){.text-white\/50{color:color-mix(in oklab, var(--color-white) 50%, transparent)}}.text-white\/60{color:#fff9}@supports (color:color-mix(in lab, red, red)){.text-white\/60{color:color-mix(in oklab, var(--color-white) 60%, transparent)}}.text-white\/70{color:#ffffffb3}@supports (color:color-mix(in lab, red, red)){.text-white\/70{color:color-mix(in oklab, var(--color-white) 70%, transparent)}}.text-white\/80{color:#fffc}@supports (color:color-mix(in lab, red, red)){.text-white\/80{color:color-mix(in oklab, var(--color-white) 80%, transparent)}}.text-white\/90{color:#ffffffe6}@supports (color:color-mix(in lab, red, red)){.text-white\/90{color:color-mix(in oklab, var(--color-white) 90%, transparent)}}.uppercase{text-transform:uppercase}.italic{font-style:italic}.underline{text-decoration-line:underline}.underline-offset-2{text-underline-offset:2px}.antialiased{-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}.opacity-0{opacity:0}.shadow{--tw-shadow:0 1px 3px 0 var(--tw-shadow-color,#0000001a), 0 1px 2px -1px var(--tw-shadow-color,#0000001a);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.ring{--tw-ring-shadow:var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.outline{outline-style:var(--tw-outline-style);outline-width:1px}.blur{--tw-blur:blur(8px);filter:var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)}.filter{filter:var(--tw-blur,) var(--tw-brightness,) var(--tw-contrast,) var(--tw-grayscale,) var(--tw-hue-rotate,) var(--tw-invert,) var(--tw-saturate,) var(--tw-sepia,) var(--tw-drop-shadow,)}.backdrop-filter{-webkit-backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,);backdrop-filter:var(--tw-backdrop-blur,) var(--tw-backdrop-brightness,) var(--tw-backdrop-contrast,) var(--tw-backdrop-grayscale,) var(--tw-backdrop-hue-rotate,) var(--tw-backdrop-invert,) var(--tw-backdrop-opacity,) var(--tw-backdrop-saturate,) var(--tw-backdrop-sepia,)}.transition{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to,opacity,box-shadow,transform,translate,scale,rotate,filter,-webkit-backdrop-filter,backdrop-filter,display,content-visibility,overlay,pointer-events;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-all{transition-property:all;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-colors{transition-property:color,background-color,border-color,outline-color,text-decoration-color,fill,stroke,--tw-gradient-from,--tw-gradient-via,--tw-gradient-to;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-opacity{transition-property:opacity;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.transition-transform{transition-property:transform,translate,scale,rotate;transition-timing-function:var(--tw-ease,var(--default-transition-timing-function));transition-duration:var(--tw-duration,var(--default-transition-duration))}.duration-200{--tw-duration:.2s;transition-duration:.2s}.duration-300{--tw-duration:.3s;transition-duration:.3s}.ease-out{--tw-ease:var(--ease-out);transition-timing-function:var(--ease-out)}@media (hover:hover){.group-hover\:bg-brand-lime\/10:is(:where(.group):hover *){background-color:#abff021a}@supports (color:color-mix(in lab, red, red)){.group-hover\:bg-brand-lime\/10:is(:where(.group):hover *){background-color:color-mix(in oklab, var(--color-brand-lime) 10%, transparent)}}.group-hover\:text-brand-lime:is(:where(.group):hover *){color:var(--color-brand-lime)}.group-hover\:text-lime-dark:is(:where(.group):hover *){color:var(--color-lime-dark)}.group-hover\:text-white:is(:where(.group):hover *){color:var(--color-white)}.group-hover\:opacity-100:is(:where(.group):hover *){opacity:1}}.placeholder\:text-gray-200::placeholder{color:var(--color-gray-200)}@media (hover:hover){.hover\:border-brand-lime\/30:hover{border-color:#abff024d}@supports (color:color-mix(in lab, red, red)){.hover\:border-brand-lime\/30:hover{border-color:color-mix(in oklab, var(--color-brand-lime) 30%, transparent)}}.hover\:bg-brand-lime:hover{background-color:var(--color-brand-lime)}.hover\:bg-gray-100:hover{background-color:var(--color-gray-100)}.hover\:bg-white\/25:hover{background-color:#ffffff40}@supports (color:color-mix(in lab, red, red)){.hover\:bg-white\/25:hover{background-color:color-mix(in oklab, var(--color-white) 25%, transparent)}}.hover\:bg-white\/\[0\.1\]:hover{background-color:#ffffff1a}@supports (color:color-mix(in lab, red, red)){.hover\:bg-white\/\[0\.1\]:hover{background-color:color-mix(in oklab, var(--color-white) 10%, transparent)}}.hover\:bg-white\/\[0\.12\]:hover{background-color:#ffffff1f}@supports (color:color-mix(in lab, red, red)){.hover\:bg-white\/\[0\.12\]:hover{background-color:color-mix(in oklab, var(--color-white) 12%, transparent)}}.hover\:text-brand-dark:hover{color:var(--color-brand-dark)}.hover\:text-brand-lime:hover{color:var(--color-brand-lime)}.hover\:text-white:hover{color:var(--color-white)}}.focus\:border-brand-lime\/50:focus{border-color:#abff0280}@supports (color:color-mix(in lab, red, red)){.focus\:border-brand-lime\/50:focus{border-color:color-mix(in oklab, var(--color-brand-lime) 50%, transparent)}}.focus\:ring-1:focus{--tw-ring-shadow:var(--tw-ring-inset,) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color,currentcolor);box-shadow:var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow)}.focus\:ring-brand-lime\/20:focus{--tw-ring-color:#abff0233}@supports (color:color-mix(in lab, red, red)){.focus\:ring-brand-lime\/20:focus{--tw-ring-color:color-mix(in oklab, var(--color-brand-lime) 20%, transparent)}}.focus\:outline-none:focus{--tw-outline-style:none;outline-style:none}.focus-visible\:outline-2:focus-visible{outline-style:var(--tw-outline-style);outline-width:2px}.focus-visible\:outline-offset-4:focus-visible{outline-offset:4px}.focus-visible\:outline-brand-lime:focus-visible{outline-color:var(--color-brand-lime)}@media (width>=40rem){.sm\:mt-8{margin-top:calc(var(--spacing) * 8)}.sm\:mt-10{margin-top:calc(var(--spacing) * 10)}.sm\:mt-16{margin-top:calc(var(--spacing) * 16)}.sm\:mb-10{margin-bottom:calc(var(--spacing) * 10)}.sm\:mb-14{margin-bottom:calc(var(--spacing) * 14)}.sm\:mb-20{margin-bottom:calc(var(--spacing) * 20)}.sm\:block{display:block}.sm\:hidden{display:none}.sm\:inline-block{display:inline-block}.sm\:w-auto{width:auto}.sm\:max-w-none{max-width:none}.sm\:grid-cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}.sm\:flex-row{flex-direction:row}.sm\:items-center{align-items:center}.sm\:gap-4{gap:calc(var(--spacing) * 4)}.sm\:gap-8{gap:calc(var(--spacing) * 8)}:where(.sm\:space-y-20>:not(:last-child)){--tw-space-y-reverse:0;margin-block-start:calc(calc(var(--spacing) * 20) * var(--tw-space-y-reverse));margin-block-end:calc(calc(var(--spacing) * 20) * calc(1 - var(--tw-space-y-reverse)))}.sm\:p-5{padding:calc(var(--spacing) * 5)}.sm\:p-8{padding:calc(var(--spacing) * 8)}.sm\:px-5{padding-inline:calc(var(--spacing) * 5)}.sm\:px-\[50px\]{padding-inline:50px}.sm\:py-4{padding-block:calc(var(--spacing) * 4)}.sm\:py-16{padding-block:calc(var(--spacing) * 16)}.sm\:py-20{padding-block:calc(var(--spacing) * 20)}.sm\:py-28{padding-block:calc(var(--spacing) * 28)}.sm\:py-32{padding-block:calc(var(--spacing) * 32)}.sm\:py-\[25px\]{padding-block:25px}.sm\:pb-16{padding-bottom:calc(var(--spacing) * 16)}.sm\:text-label{font-size:var(--text-label);line-height:var(--tw-leading,var(--text-label--line-height));letter-spacing:var(--tw-tracking,var(--text-label--letter-spacing))}.sm\:text-\[1\.5rem\]{font-size:1.5rem}.sm\:text-\[2\.5rem\]{font-size:2.5rem}.sm\:text-\[2\.25rem\]{font-size:2.25rem}}@media (width>=64rem){.lg\:sticky{position:sticky}.lg\:top-24{top:calc(var(--spacing) * 24)}.lg\:col-span-1{grid-column:span 1/span 1}.lg\:mt-0{margin-top:0}.lg\:mb-0{margin-bottom:0}.lg\:block{display:block}.lg\:flex{display:flex}.lg\:hidden{display:none}.lg\:w-32{width:calc(var(--spacing) * 32)}.lg\:w-\[45\%\]{width:45%}.lg\:w-\[55\%\]{width:55%}.lg\:w-\[960px\]{width:960px}.lg\:w-fit{width:fit-content}.lg\:max-w-full{max-width:100%}.lg\:grid-cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}.lg\:flex-row{flex-direction:row}.lg\:items-start{align-items:flex-start}.lg\:gap-8{gap:calc(var(--spacing) * 8)}.lg\:gap-16{gap:calc(var(--spacing) * 16)}.lg\:px-0{padding-inline:0}.lg\:px-6{padding-inline:calc(var(--spacing) * 6)}.lg\:py-24{padding-block:calc(var(--spacing) * 24)}.lg\:py-32{padding-block:calc(var(--spacing) * 32)}.lg\:py-36{padding-block:calc(var(--spacing) * 36)}.lg\:py-40{padding-block:calc(var(--spacing) * 40)}.lg\:text-display{font-size:var(--text-display);line-height:var(--tw-leading,var(--text-display--line-height));letter-spacing:var(--tw-tracking,var(--text-display--letter-spacing))}.lg\:text-hero{font-size:var(--text-hero);line-height:var(--tw-leading,var(--text-hero--line-height));letter-spacing:var(--tw-tracking,var(--text-hero--letter-spacing))}.lg\:text-section-heading{font-size:var(--text-section-heading);line-height:var(--tw-leading,var(--text-section-heading--line-height));letter-spacing:var(--tw-tracking,var(--text-section-heading--letter-spacing))}}}@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:400;src:url(/assets/inter-latin-400-normal-C38fXH4l.woff2)format("woff2"),url(/assets/inter-latin-400-normal-CyCys3Eg.woff)format("woff")}@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:500;src:url(/assets/inter-latin-500-normal-Cerq10X2.woff2)format("woff2"),url(/assets/inter-latin-500-normal-BL9OpVg8.woff)format("woff")}@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:600;src:url(/assets/inter-latin-600-normal-LgqL8muc.woff2)format("woff2"),url(/assets/inter-latin-600-normal-CiBQ2DWP.woff)format("woff")}@font-face{font-family:Inter;font-style:normal;font-display:swap;font-weight:700;src:url(/assets/inter-latin-700-normal-Yt3aPRUw.woff2)format("woff2"),url(/assets/inter-latin-700-normal-BLAVimhd.woff)format("woff")}@font-face{font-family:Geist Mono;font-style:normal;font-display:swap;font-weight:400;src:url(/assets/geist-mono-latin-400-normal-DTRLJnHl.woff2)format("woff2"),url(/assets/geist-mono-latin-400-normal-B2yvC1Cq.woff)format("woff")}@font-face{font-family:Geist Mono;font-style:normal;font-display:swap;font-weight:600;src:url(/assets/geist-mono-latin-600-normal-V-KvD_pi.woff2)format("woff2"),url(/assets/geist-mono-latin-600-normal-bZn07FKM.woff)format("woff")}:root{--ease-out:cubic-bezier(0, 0, .58, 1);--ease-in-out:cubic-bezier(.42, 0, .58, 1);--ease-spring:cubic-bezier(.34, 1.56, .64, 1);--duration-fast:.2s;--duration-base:.4s;--duration-slow:.6s;--duration-crawl:1s}*,:before,:after{box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:var(--font-sans);color:#fff;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;background-color:#000;margin:0}svg[data-diagram]{content-visibility:auto}@media (width>=1024px){.container-page{padding-inline:var(--container-padding-x)}}.install-scroller{scrollbar-width:thin;scrollbar-color:gray transparent;padding-top:var(--sb,0px)}@property --tw-translate-x{syntax:"*";inherits:false;initial-value:0}@property --tw-translate-y{syntax:"*";inherits:false;initial-value:0}@property --tw-translate-z{syntax:"*";inherits:false;initial-value:0}@property --tw-rotate-x{syntax:"*";inherits:false}@property --tw-rotate-y{syntax:"*";inherits:false}@property --tw-rotate-z{syntax:"*";inherits:false}@property --tw-skew-x{syntax:"*";inherits:false}@property --tw-skew-y{syntax:"*";inherits:false}@property --tw-space-y-reverse{syntax:"*";inherits:false;initial-value:0}@property --tw-border-style{syntax:"*";inherits:false;initial-value:solid}@property --tw-leading{syntax:"*";inherits:false}@property --tw-font-weight{syntax:"*";inherits:false}@property --tw-tracking{syntax:"*";inherits:false}@property --tw-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-shadow-color{syntax:"*";inherits:false}@property --tw-shadow-alpha{syntax:"<percentage>";inherits:false;initial-value:100%}@property --tw-inset-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-inset-shadow-color{syntax:"*";inherits:false}@property --tw-inset-shadow-alpha{syntax:"<percentage>";inherits:false;initial-value:100%}@property --tw-ring-color{syntax:"*";inherits:false}@property --tw-ring-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-inset-ring-color{syntax:"*";inherits:false}@property --tw-inset-ring-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-ring-inset{syntax:"*";inherits:false}@property --tw-ring-offset-width{syntax:"<length>";inherits:false;initial-value:0}@property --tw-ring-offset-color{syntax:"*";inherits:false;initial-value:#fff}@property --tw-ring-offset-shadow{syntax:"*";inherits:false;initial-value:0 0 #0000}@property --tw-outline-style{syntax:"*";inherits:false;initial-value:solid}@property --tw-blur{syntax:"*";inherits:false}@property --tw-brightness{syntax:"*";inherits:false}@property --tw-contrast{syntax:"*";inherits:false}@property --tw-grayscale{syntax:"*";inherits:false}@property --tw-hue-rotate{syntax:"*";inherits:false}@property --tw-invert{syntax:"*";inherits:false}@property --tw-opacity{syntax:"*";inherits:false}@property --tw-saturate{syntax:"*";inherits:false}@property --tw-sepia{syntax:"*";inherits:false}@property --tw-drop-shadow{syntax:"*";inherits:false}@property --tw-drop-shadow-color{syntax:"*";inherits:false}@property --tw-drop-shadow-alpha{syntax:"<percentage>";inherits:false;initial-value:100%}@property --tw-drop-shadow-size{syntax:"*";inherits:false}@property --tw-backdrop-blur{syntax:"*";inherits:false}@property --tw-backdrop-brightness{syntax:"*";inherits:false}@property --tw-backdrop-contrast{syntax:"*";inherits:false}@property --tw-backdrop-grayscale{syntax:"*";inherits:false}@property --tw-backdrop-hue-rotate{syntax:"*";inherits:false}@property --tw-backdrop-invert{syntax:"*";inherits:false}@property --tw-backdrop-opacity{syntax:"*";inherits:false}@property --tw-backdrop-saturate{syntax:"*";inherits:false}@property --tw-backdrop-sepia{syntax:"*";inherits:false}@property --tw-duration{syntax:"*";inherits:false}@property --tw-ease{syntax:"*";inherits:false}
+</style>
+  </head>
+  <body class="antialiased">
+    <main class="doc-page">
+<h1 id="quick-start">Quick Start</h1>
+<p>Get from zero to a working Outlook Local MCP server in minutes.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li><strong>Go 1.24+</strong> installed (<a href="https://go.dev/dl/">download</a>)</li>
+<li>A <strong>Microsoft account</strong> (personal, work, or school)</li>
+</ul>
+<h2 id="1-build">1. Build</h2>
+<pre><code class="language-bash">git clone https://github.com/desek/outlook-local-mcp.git
+cd outlook-local-mcp
+go build ./cmd/outlook-local-mcp/
+</code></pre>
+<p>Or install directly:</p>
+<pre><code class="language-bash">go install github.com/desek/outlook-local-mcp/cmd/outlook-local-mcp@latest
+</code></pre>
+<h2 id="2-configure-claude-desktop">2. Configure Claude Desktop</h2>
+<p>Add the server to your Claude Desktop configuration file:</p>
+<p><strong>macOS</strong>: <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>
+<strong>Windows</strong>: <code>%APPDATA%\Claude\claude_desktop_config.json</code></p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;outlook-local&quot;: {
+      &quot;command&quot;: &quot;/absolute/path/to/outlook-local-mcp&quot;
+    }
+  }
+}
+</code></pre>
+<p>Replace <code>/absolute/path/to/outlook-local-mcp</code> with the actual path to the built binary.</p>
+<p>To set environment variables:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;outlook-local&quot;: {
+      &quot;command&quot;: &quot;/absolute/path/to/outlook-local-mcp&quot;,
+      &quot;env&quot;: {
+        &quot;OUTLOOK_MCP_DEFAULT_TIMEZONE&quot;: &quot;America/New_York&quot;,
+        &quot;OUTLOOK_MCP_LOG_LEVEL&quot;: &quot;info&quot;
+      }
+    }
+  }
+}
+</code></pre>
+<h2 id="2b-configure-claude-code">2b. Configure Claude Code</h2>
+<p>Add an <code>.mcp.json</code> file to your project root:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;outlook-local&quot;: {
+      &quot;command&quot;: &quot;/absolute/path/to/outlook-local-mcp&quot;
+    }
+  }
+}
+</code></pre>
+<p>Replace <code>/absolute/path/to/outlook-local-mcp</code> with the actual path to the built binary.</p>
+<h2 id="3-authenticate-and-verify">3. Authenticate and Verify</h2>
+<p>Restart Claude Desktop (or reload MCP servers in Claude Code) and verify the server is reachable:</p>
+<pre><code>{tool: &quot;system&quot;, args: {operation: &quot;about&quot;}}
+</code></pre>
+<p>This returns the build version, Go runtime, OS, and auth backend in use — no authentication required. Keep this output handy when reporting issues (see <a href="troubleshooting#before-you-file-an-issue">Before you file an issue</a>).</p>
+<p>Then ask:</p>
+<blockquote>
+<p>&quot;List my calendars&quot;</p>
+</blockquote>
+<p>On first use, the server has no cached credentials. The default authentication method (<code>auth_code</code>) opens the system browser for Microsoft login. After signing in, the browser shows a blank page -- copy the full URL from the address bar and paste it when prompted (via MCP Elicitation) or use the <code>complete_auth</code> tool if your client does not support elicitation (e.g., Claude Code). After authentication completes, the tool call is retried automatically and your calendars are returned. Tokens are cached in your OS keychain -- subsequent requests authenticate silently.</p>
+<h2 id="4-tool-examples">4. Tool Examples</h2>
+<h3 id="read">Read</h3>
+<p><strong>List calendars</strong> -- no parameters required:</p>
+<blockquote>
+<p>&quot;Show me all my calendars&quot;</p>
+</blockquote>
+<p><strong>List events</strong> in a time range:</p>
+<blockquote>
+<p>&quot;What meetings do I have tomorrow?&quot;</p>
+</blockquote>
+<p>Parameters: <code>start_datetime</code> (required), <code>end_datetime</code> (required), <code>calendar_id</code>, <code>max_results</code>, <code>timezone</code>.</p>
+<p><strong>Get event</strong> details by ID:</p>
+<blockquote>
+<p>&quot;Get the full details of event AAMkAD...&quot;</p>
+</blockquote>
+<p>Parameters: <code>event_id</code> (required), <code>timezone</code>.</p>
+<h3 id="search">Search</h3>
+<p><strong>Search events</strong> by subject, importance, sensitivity, and more:</p>
+<blockquote>
+<p>&quot;Find all high-importance meetings in the next two weeks&quot;</p>
+</blockquote>
+<p>Parameters: <code>query</code>, <code>start_datetime</code>, <code>end_datetime</code>, <code>importance</code>, <code>sensitivity</code>, <code>is_all_day</code>, <code>show_as</code>, <code>is_cancelled</code>, <code>categories</code>, <code>max_results</code>, <code>timezone</code>. All optional; defaults to next 30 days.</p>
+<p><strong>Free/busy</strong> availability:</p>
+<blockquote>
+<p>&quot;When am I free next Monday?&quot;</p>
+</blockquote>
+<p>Parameters: <code>start_datetime</code> (required), <code>end_datetime</code> (required), <code>timezone</code>.</p>
+<h3 id="write">Write</h3>
+<p><strong>Create event</strong>:</p>
+<blockquote>
+<p>&quot;Schedule a team standup tomorrow at 9 AM Eastern for 30 minutes with <a href="mailto:alice@example.com">alice@example.com</a>&quot;</p>
+</blockquote>
+<p>Required: <code>subject</code>, <code>start_datetime</code>, <code>start_timezone</code>, <code>end_datetime</code>, <code>end_timezone</code>.
+Optional: <code>body</code>, <code>location</code>, <code>attendees</code> (JSON array), <code>is_online_meeting</code>, <code>is_all_day</code>, <code>importance</code>, <code>sensitivity</code>, <code>show_as</code>, <code>categories</code>, <code>recurrence</code> (JSON object), <code>reminder_minutes</code>, <code>calendar_id</code>.</p>
+<p><strong>Update event</strong> -- only specified fields change (PATCH semantics):</p>
+<blockquote>
+<p>&quot;Move my 2pm meeting to 3pm&quot;</p>
+</blockquote>
+<p>Required: <code>event_id</code>. All other fields are optional.</p>
+<h3 id="delete">Delete</h3>
+<p><strong>Delete event</strong>:</p>
+<blockquote>
+<p>&quot;Delete the event AAMkAD...&quot;</p>
+</blockquote>
+<p>Parameters: <code>event_id</code> (required). Cancellation notices are sent to attendees automatically if you are the organizer.</p>
+<p><strong>Cancel event</strong> with a message to attendees:</p>
+<blockquote>
+<p>&quot;Cancel tomorrow&#39;s team meeting and let everyone know it&#39;s rescheduled&quot;</p>
+</blockquote>
+<p>Parameters: <code>event_id</code> (required), <code>comment</code> (optional cancellation message). Only the organizer can cancel.</p>
+<h2 id="5-configuration">5. Configuration</h2>
+<p>All environment variables are prefixed with <code>OUTLOOK_MCP_</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>CLIENT_ID</code></td>
+<td>Microsoft Office client ID</td>
+<td>OAuth 2.0 client ID</td>
+</tr>
+<tr>
+<td><code>TENANT_ID</code></td>
+<td><code>common</code></td>
+<td>Entra ID tenant (<code>common</code>, <code>organizations</code>, <code>consumers</code>, or a GUID)</td>
+</tr>
+<tr>
+<td><code>DEFAULT_TIMEZONE</code></td>
+<td><code>UTC</code></td>
+<td>IANA timezone for calendar operations</td>
+</tr>
+<tr>
+<td><code>LOG_LEVEL</code></td>
+<td><code>warn</code></td>
+<td>Log level: <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code></td>
+</tr>
+<tr>
+<td><code>READ_ONLY</code></td>
+<td><code>false</code></td>
+<td>Disable write tools (create, update, delete, cancel)</td>
+</tr>
+<tr>
+<td><code>LOG_FORMAT</code></td>
+<td><code>json</code></td>
+<td>Log format: <code>json</code> or <code>text</code></td>
+</tr>
+<tr>
+<td><code>LOG_SANITIZE</code></td>
+<td><code>true</code></td>
+<td>Mask PII in log output</td>
+</tr>
+<tr>
+<td><code>LOG_FILE</code></td>
+<td><em>(empty = disabled)</em></td>
+<td>Log file path for persistent file output</td>
+</tr>
+<tr>
+<td><code>ACCOUNTS_PATH</code></td>
+<td><code>~/.outlook-local-mcp/accounts.json</code></td>
+<td>Path to the persistent accounts file for multi-account support (see CR-0032)</td>
+</tr>
+</tbody></table>
+<h2 id="getting-help-in-session">Getting help in-session</h2>
+<p>The server embeds its own documentation so the LLM can look up answers without leaving the conversation.</p>
+<p>List available documents:</p>
+<pre><code>{tool: &quot;system&quot;, args: {operation: &quot;list_docs&quot;}}
+</code></pre>
+<p>Search across all embedded docs:</p>
+<pre><code>{tool: &quot;system&quot;, args: {operation: &quot;search_docs&quot;, query: &quot;token refresh&quot;}}
+</code></pre>
+<p>Fetch a document or a specific section by heading anchor:</p>
+<pre><code>{tool: &quot;system&quot;, args: {operation: &quot;get_docs&quot;, slug: &quot;troubleshooting&quot;}}
+{tool: &quot;system&quot;, args: {operation: &quot;get_docs&quot;, slug: &quot;troubleshooting&quot;, section: &quot;keychain-locked&quot;}}
+</code></pre>
+<p>The embedded bundle contains <code>readme</code>, <code>quickstart</code>, and <code>troubleshooting</code>. Each document is also exposed as an MCP resource at <code>doc://outlook-local-mcp/{slug}</code> for clients that support <code>resources/list</code> and <code>resources/read</code>. Run <code>system.status</code> to discover the base URI and the troubleshooting slug. See CR-0061 for implementation details.</p>
+<h2 id="container-deployment">Container deployment</h2>
+<p>The server is available as an OCI image at <code>ghcr.io/desek/outlook-local-mcp</code>. No Go toolchain is required.</p>
+<h3 id="recommended-invocation">Recommended invocation</h3>
+<pre><code class="language-bash">docker run -i --rm \
+  -v outlook-mcp-auth:/data/auth \
+  -e OUTLOOK_MCP_TENANT_ID=&lt;tenant&gt; \
+  -e OUTLOOK_MCP_CLIENT_ID=&lt;client&gt; \
+  ghcr.io/desek/outlook-local-mcp:latest
+</code></pre>
+<p>The named volume <code>outlook-mcp-auth</code> persists the token cache across container restarts so the device-code or browser auth flow does not repeat on every session.</p>
+<h3 id="claude-desktop--generic-mcp-client-config">Claude Desktop / generic MCP client config</h3>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;outlook-local&quot;: {
+      &quot;command&quot;: &quot;docker&quot;,
+      &quot;args&quot;: [
+        &quot;run&quot;, &quot;-i&quot;, &quot;--rm&quot;,
+        &quot;-v&quot;, &quot;outlook-mcp-auth:/data/auth&quot;,
+        &quot;-e&quot;, &quot;OUTLOOK_MCP_TENANT_ID&quot;,
+        &quot;-e&quot;, &quot;OUTLOOK_MCP_CLIENT_ID&quot;,
+        &quot;ghcr.io/desek/outlook-local-mcp:latest&quot;
+      ],
+      &quot;env&quot;: {
+        &quot;OUTLOOK_MCP_TENANT_ID&quot;: &quot;your-tenant-id&quot;,
+        &quot;OUTLOOK_MCP_CLIENT_ID&quot;: &quot;your-client-id&quot;
+      }
+    }
+  }
+}
+</code></pre>
+<h3 id="non-root-variant-distroless">Non-root variant (distroless)</h3>
+<p>For deployment targets that enforce non-root containers (Kubernetes PSA <code>restricted</code>, OpenShift, hardened CI), use the <code>:distroless</code> tag:</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;outlook-local&quot;: {
+      &quot;command&quot;: &quot;docker&quot;,
+      &quot;args&quot;: [
+        &quot;run&quot;, &quot;-i&quot;, &quot;--rm&quot;,
+        &quot;--user&quot;, &quot;65532:65532&quot;,
+        &quot;-v&quot;, &quot;outlook-mcp-auth:/data/auth&quot;,
+        &quot;-e&quot;, &quot;OUTLOOK_MCP_TENANT_ID&quot;,
+        &quot;-e&quot;, &quot;OUTLOOK_MCP_CLIENT_ID&quot;,
+        &quot;ghcr.io/desek/outlook-local-mcp:distroless&quot;
+      ],
+      &quot;env&quot;: {
+        &quot;OUTLOOK_MCP_TENANT_ID&quot;: &quot;your-tenant-id&quot;,
+        &quot;OUTLOOK_MCP_CLIENT_ID&quot;: &quot;your-client-id&quot;
+      }
+    }
+  }
+}
+</code></pre>
+<p>For more on image variants and the keychain trade-off, see <a href="concepts#container-runtime">Container runtime</a>.</p>
+<h2 id="further-reading">Further Reading</h2>
+<p>See <a href="README.md">README.md</a> for the full reference documentation.</p>
+
+    </main>
+    <footer class="doc-footer">
+      <p>Last updated <time datetime="2026-07-30">July 30, 2026</time></p>
+    </footer>
+  </body>
+</html>
