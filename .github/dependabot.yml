@@ -45,3 +45,19 @@ updates:
         applies-to: version-updates
         patterns:
           - "*"
+
+  # The site's npm tree under /site, added by CR-0072. The pnpm lockfile lives here,
+  # and this is where the @lhci/cli transitive advisories (tmp, uuid) surface — the
+  # `npm` ecosystem covers pnpm workspaces. Grouped version bumps arrive as one weekly
+  # PR (same convention as gomod); security updates stay UNGROUPED so an urgent fix is
+  # reviewable in isolation. This is also the channel through which a future @lhci/cli
+  # release — the only thing that can retire this CR's tmp/uuid overrides — arrives.
+  - package-ecosystem: "npm"
+    directory: "/site"
+    schedule:
+      interval: "weekly"
+    groups:
+      npm-version-updates:
+        applies-to: version-updates
+        patterns:
+          - "*"

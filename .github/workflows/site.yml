@@ -55,6 +55,22 @@ jobs:
       - name: Install site dependencies
         run: pnpm --dir site install --frozen-lockfile
 
+      # Gate the SHIPPED tree before a line of it is built or executed (CR-0072, FR-11).
+      # This is the CI enforcement of the boundary the whole CR rests on: the vulnerable
+      # tmp/uuid live only under @lhci/cli in devDependencies and reach no visitor, so a
+      # non-zero `pnpm audit` here means a *runtime* dependency became vulnerable — the one
+      # case that does ship — and the job must fail before the build runs it.
+      #
+      # Deliberately `--prod`, not the full tree. The production tree is seven packages and
+      # clean today; the full tree would fail right now on @lhci/cli transitives nobody will
+      # fix (their upstream is already at its latest published version), and a gate that
+      # fails for reasons nobody acts on acquires `continue-on-error` within a month. The
+      # narrow gate is the one this project can keep green, which is the only kind worth
+      # adding. The build-time tree is left to the `npm` Dependabot entry instead — a
+      # notification can tolerate the false-alarm rate a blocking gate cannot.
+      - name: Audit production dependencies
+        run: pnpm --dir site audit --prod --audit-level=moderate
+
       # `tsc -b` runs inside the build script, so a type error fails here.
       - name: Build site
         run: pnpm --dir site run build
