@@ -186,7 +186,22 @@ const HERO_FONTS = [
   'geist-mono-latin-400-normal',
   'geist-mono-latin-600-normal',
 ]
-const DOC_FONTS = ['inter-latin-400-normal', 'geist-mono-latin-400-normal']
+// The documentation pages lead with prose in Inter and inline code in Geist Mono, and
+// both appear in bold above the fold: `**text**` and `**`code`**` are ordinary in these
+// documents. The bold faces were missing from this list, which cost `concepts.html` a
+// Cumulative Layout Shift of 0.016 — the same defect as the landing page's, on the page
+// set that was not re-checked after the landing page was fixed.
+//
+// It did not reproduce on macOS, where the fallback font's metrics happen to make the
+// swap land in nearly the same place, and was only visible on a Linux CI runner. Chrome
+// named both files outright in the `layout-shifts` audit; the local zero was the
+// misleading measurement, not the CI figure.
+const DOC_FONTS = [
+  'inter-latin-400-normal',
+  'inter-latin-700-normal',
+  'geist-mono-latin-400-normal',
+  'geist-mono-latin-600-normal',
+]
 
 // Only the landing page's script is deferred. The documentation pages' entry is 26 bytes
 // (it exists solely so Vite bundles the stylesheet for them), so there is nothing to move.
