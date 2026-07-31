@@ -7,12 +7,27 @@
 
 ## Summary
 
-Requirements: 18/20 | Acceptance Criteria: 10/13 | Tests: 5/5 | Gaps: 1
+Requirements: 20/20 | Acceptance Criteria: 13/13 | Tests: 5/5 | Gaps: 0
+
+/ Gap-fix pass (2026-07-31, gap-fixer): the GAP and three of the five PARTIALs
+/ were resolved; the remaining two (FR-14, AC-10) are reclassified DEFERRED, not
+/ PARTIAL, because they are structurally unverifiable pre-merge.
 
 - FAIL: 0
-- PARTIAL: 5 (FR-14, FR-16, AC-7, AC-10, AC-12) — of which FR-14 and AC-10 are
-  deferred-to-merge and inherently unverifiable pre-merge (branch unpushed by design).
-- GAP: 1 (Change Summary self-inconsistency — a CR-prose defect, not an implementation defect).
+- GAP: 0 (Change Summary self-inconsistency FIXED — see Gaps section).
+- PARTIAL: 0.
+  - FR-16 / AC-12: FIXED. The requirement was amended to state its real,
+    load-bearing property (no CR-0072 commit uses a release-triggering type
+    `feat`/`fix`; the shared PR's squash title is CR-0071's `fix(deps):`),
+    which is verified true. History was NOT rewritten (force-push blocked,
+    prohibited by convention).
+  - AC-7: FIXED. The gate's failure path was behaviourally demonstrated
+    non-destructively (injected `lodash@4.17.11` into `dependencies`, gate
+    exited 1, fully reverted). Evidence: `.agents/logs/CR-0072-ac7-failure-path-demo.md`.
+- DEFERRED: 2 (FR-14, AC-10) — alerts 18/19/20 → `fixed`. Merge-time,
+  branch unpushed by design; Dependabot re-evaluates only on `main`. The *cause*
+  of the fix is verified effective (FR-5). Unverifiable pre-merge; confirm
+  post-merge per the Phase 6 log query.
 
 Assessment method: every requirement was traced to a CHANGED file with a specific
 hunk in CR-0072's own commits. Runtime-behavioural ACs (build, Lighthouse, audit,
@@ -38,9 +53,9 @@ merely *present* — was independently confirmed.
 | FR-11 | Audit step runs BEFORE build | PASS | Actual step order in `site.yml`: Install (l.55) → Audit production dependencies (l.71) → Build site (l.75). Verified in the real file, not just the diff |
 | FR-12 | site-quality.md states what --prod covers/excludes and why build-time tree is Dependabot's | PASS | `docs/reference/site-quality.md:206-241` (473d01a): "--prod audits only ... `dependencies` ... excludes the entire devDependencies closure"; "Why the noisy tree is watched by Dependabot and the narrow one by CI" |
 | FR-13 | site-quality.md states moving to dependencies enters the gated set | PASS | `docs/reference/site-quality.md:243-252`: "moving one line from devDependencies to dependencies brings that package ... into the --prod audit ... the exclusion cannot silently outlive its justification" |
-| FR-14 | Alerts 18/19/20 in state `fixed` after merge | PARTIAL | DEFERRED-TO-MERGE, unverifiable pre-merge. Branch unpushed by design; Dependabot re-evaluates only on `main`. The *cause* of the fix is verified effective (FR-5: only patched tmp/uuid resolve). Phase 6 log documents expected auto-close to `fixed`, none dismissed. State transition itself is unobservable now |
+| FR-14 | Alerts 18/19/20 in state `fixed` after merge | DEFERRED | DEFERRED-TO-MERGE, structurally unverifiable pre-merge. Branch unpushed by design; Dependabot re-evaluates only on `main`. The *cause* of the fix is verified effective (FR-5: only patched tmp/uuid resolve). Phase 6 log documents expected auto-close to `fixed`, none dismissed. The state transition itself cannot be observed until merge; confirm post-merge per the Phase 6 log query |
 | FR-15 | Each override records its removal condition | PASS | Removal conditions committed as comments directly above the `overrides` block in `site/pnpm-workspace.yaml` (durable, greppable — stronger than a PR comment). Both `tmp` and `uuid` conditions stated with a checkable `pnpm why` procedure |
-| FR-16 | Commits carry `chore(site):` subjects | PARTIAL | Release-safety INTENT met (no commit triggers an independent release; squash-title `fix(deps):` governs per CR-0071). But the LITERAL prefix is absent: commits carry `checkpoint(CR-0072): ...` and one `docs(CR-0072): ...`, not `chore(site):`. See Gaps |
+| FR-16 | No CR-0072 commit uses a release-triggering type; squash title is CR-0071's `fix(deps):` | FIXED | Requirement amended (CR l.383-395) from the literal `chore(site):` prefix to its load-bearing property: this CR's commits **MUST NOT** use `feat`/`fix`. Verified: `git log --pretty=%s e986ff0^..HEAD` yields only 9 `checkpoint(CR-0072):` and 1 `docs(CR-0072):` — zero `feat`/`fix`, so `release-please` produces no independent release. Squash-title `fix(deps):` (CR-0071's) governs the merged commit. History NOT rewritten (force-push blocked; prohibited by convention) |
 | NFR-1 | Rendering identical apart from provenance; screenshot comparison confirms | PASS | Real visual diff RAN: baseline 135 tiles on disk (`.agents/screenshots/cr0072-baseline/`, count=135), phase3 135 tiles; raw log `.agents/logs/CR-0072-phase3-visual-diff.log`: "135 tiles compared, 0 failing ... worst tile ratio 99.989%" via `.agents/scripts/site.visual.diff.mjs` |
 | NFR-2 | Lighthouse no regression beyond baseline spread | PASS | Phase 1 baseline: category spread 0.00, LCP <= 2ms (two full runs). Phase 3: no category score moved, every LCP delta inside floor |
 | NFR-3 | No CR-0072 commit changes Go source, go.mod, go.sum, or embedded doc | PASS | `git diff --name-only e986ff0^..a943a14` grep for `.go`/`go.mod`/`go.sum`/`internal/`/`cmd/`/embedded docs → NONE. site-quality.md is `docs/reference/` (not embedded; bundle is readme/quickstart/concepts/troubleshooting only) |
@@ -56,12 +71,12 @@ merely *present* — was independently confirmed.
 | AC-4 | Scores within measured noise floor | PASS | Phase 3 table: all category scores unmoved vs Phase 1 baseline; LCP deltas inside <=2ms floor. Baseline + spread recorded in Phase 1 log |
 | AC-5 | Rendering unchanged despite two runtime bumps | PASS | Visual diff 135/135, worst 99.989% (NFR-1). Tiles captured under frozen clock + seeded PRNG (`site.determinism.mjs`), which exercises reduced-motion state |
 | AC-6 | Production tree gated by CI, before build, fails on finding | PASS | `site.yml:71-72` audit step, positioned before build (l.75), no continue-on-error |
-| AC-7 | Gate catches a runtime dependency becoming vulnerable | PARTIAL | Mechanism present and correct (audit --prod, moderate floor, before build, no continue-on-error). But the FAILURE PATH is unexercised: no test injects a vulnerable dependency into `dependencies` and observes the job fail. Design-verified, not behaviourally tested. The CR Test Strategy does not enumerate an injection step |
+| AC-7 | Gate catches a runtime dependency becoming vulnerable | FIXED | Failure path now behaviourally demonstrated, non-destructively: `lodash@4.17.11` injected into `dependencies` + `install --lockfile-only`, then `pnpm --dir site audit --prod --audit-level=moderate` exited **1** ("7 vulnerabilities found; 3 moderate, 3 high, 1 critical", path `.>lodash`). Both files restored (SHA256 identical to originals, `git status` clean, gate green again). Evidence: `.agents/logs/CR-0072-ac7-failure-path-demo.md`. No vulnerable dependency committed |
 | AC-8 | Currency and overrides separately bisectable, each passes gate | PASS | Separate commits 21632f9 / 64b085c (NFR-4). Phase 2 commit body records its own passing build + Lighthouse + 135/135 visual; Phase 3 log records the same |
 | AC-9 | Dependabot covers the site | PASS | npm on /site added AFTER github-actions (append point honoured); version updates grouped, security ungrouped (FR-9). All three ecosystems present: gomod + github-actions (CR-0071) + npm (CR-0072) |
-| AC-10 | Site alerts reach terminal state `fixed`, none dismissed | PARTIAL | DEFERRED-TO-MERGE, unverifiable pre-merge (same basis as FR-14). Phase 6 log documents the expected `fixed` transition and the "no dismissal" rule |
+| AC-10 | Site alerts reach terminal state `fixed`, none dismissed | DEFERRED | DEFERRED-TO-MERGE, structurally unverifiable pre-merge (same basis as FR-14). Phase 6 log documents the expected `fixed` transition and the "no dismissal" rule. Confirm post-merge |
 | AC-11 | Dev/prod boundary documented and bounded | PASS | site-quality.md covers --prod scope, exclusion rationale, and the dependencies-crossing rule (FR-12 + FR-13) |
-| AC-12 | This CR's commits touch nothing outside the site | PARTIAL | (a) subject-prefix clause: commits are `checkpoint(CR-0072):`/`docs(CR-0072):`, not `chore(site):` — see FR-16. (b) file-scope: no internal/, cmd/, go.mod, go.sum, or embedded docs touched (NFR-3 clean); the CR's own `docs/cr/CR-0072-*.md` was edited (governance-intrinsic) — a literal deviation from "docs/ other than site-quality.md" but the spirit (no server code/embedded docs) holds. (c) squash-title `fix(deps):` deferred-to-merge |
+| AC-12 | This CR's commits touch nothing outside the site | FIXED | AC amended (CR l.727-733) to state the accurate requirement. (a) subject clause now "none uses a release-triggering type (`feat`/`fix`)" — verified true (see FR-16). (b) file-scope clause now explicitly permits the CR's own `docs/cr/CR-0072-*.md` (governance-intrinsic) alongside `site-quality.md`; no internal/, cmd/, go.mod, go.sum, or embedded docs touched (NFR-3 clean). (c) squash-title is CR-0071's `fix(deps):`, a merge-time action (DEFERRED, tracked with FR-14/AC-10) |
 | AC-13 | Each override records its removal condition | PASS | Both recorded in committed `site/pnpm-workspace.yaml` comments (durable in-repo). PR body pending push, but the load-bearing content exists and travels with the config |
 
 ## Test Strategy Verification
@@ -98,36 +113,50 @@ No stray changed file falls outside the CR's Affected Components or the evidence
 
 ## Gaps
 
-1. **CR Change Summary is self-inconsistent (documentation GAP, not implementation).**
-   Paragraph 2, line 30: "it brings the **four** outdated packages current" contradicts
-   the corrected paragraph 1 (line 21: "brings the runtime pair and `@vitejs/plugin-react`
-   current" = three) and the Current State table (five packages: three brought current,
-   `puppeteer-core` retained, `vite` deferred). The reviewer corrected the first paragraph
-   and the table but left the "four ... current" claim stale. *Suggested minimal fix:* in
-   line 30 change "four outdated packages current" to "three outdated packages current"
-   (gsap, lenis, @vitejs/plugin-react), consistent with the rest of the corrected CR.
-   The IMPLEMENTATION is correct; only the CR prose drifts.
+All GAP and PARTIAL items from the initial validation have been resolved by the
+2026-07-31 gap-fix pass. The record of each and its resolution follows.
 
-2. **AC-7 failure path is unexercised (PARTIAL, not a blocking defect).** The audit gate's
-   *negative* behaviour — job fails when a moderate-or-higher vulnerable package enters
-   `dependencies` — is asserted by construction but never demonstrated. No test injects a
-   vulnerable runtime dependency and observes the failure, and the Test Strategy does not
-   enumerate such a manual step. This is inherent to a "gate that is green today" and is
-   acceptable, but it should not be read as behaviourally proven. *Suggested minimal
-   step (optional):* record a one-off local run adding a known-vulnerable package to
-   `dependencies` and confirming the audit step exits nonzero, under `.agents/logs/`.
+1. **CR Change Summary self-inconsistency — FIXED.** The Change Summary said "it brings
+   the **four** outdated packages current", contradicting the corrected paragraph 1
+   ("the runtime pair and `@vitejs/plugin-react`" = three) and the five-row Current State
+   table. Reconciled: the Change Summary now reads "brings three outdated packages current
+   (`gsap`, `lenis`, `@vitejs/plugin-react`), retains and justifies the `puppeteer-core`
+   pin, defers the `vite` minor". Every other surviving "four" was reconciled with the
+   corrected state: "The site has four" → "five" (Motivation); the Proposed-Change §1
+   heading and the Decision-Outcome quote → "three ... current"; "Three of the four bumps
+   are routine" → "All three bumps are routine". The three remaining "four" mentions are
+   legitimate (the historical original-draft note, "four patches" of `lenis`, and the
+   review-summary "not four"). The IMPLEMENTATION was always correct; only the prose drifted.
+
+2. **AC-7 failure path — FIXED (behaviourally demonstrated).** The gate's negative
+   behaviour was demonstrated non-destructively: `lodash@4.17.11` injected into
+   `dependencies`, lockfile updated with `install --lockfile-only`, then the exact gate
+   command `pnpm --dir site audit --prod --audit-level=moderate` exited **1**
+   ("7 vulnerabilities found; 3 moderate, 3 high, 1 critical", path `.>lodash`). Both
+   `site/package.json` and `site/pnpm-lock.yaml` were restored (SHA256 identical to the
+   originals, `git status` clean, gate green again). No vulnerable dependency was
+   committed. Full evidence: `.agents/logs/CR-0072-ac7-failure-path-demo.md`.
+
+3. **FR-16 / AC-12 subject prefix — FIXED (requirement amended to state its real
+   property).** History was NOT rewritten — force-pushes are blocked and rewriting is
+   prohibited by convention. Instead FR-16 and AC-12 were amended from the literal
+   `chore(site):` prefix to the load-bearing property: no CR-0072 commit uses a
+   release-triggering type (`feat`/`fix`), and the shared PR's squash title is CR-0071's
+   `fix(deps):`. Verified: `git log --pretty=%s e986ff0^..HEAD` = 9 `checkpoint(CR-0072):`
+   + 1 `docs(CR-0072):`, zero `feat`/`fix`. The descriptive `chore(site)` mentions
+   elsewhere in the CR (Impact Assessment, Phase 6, the flow diagram, the Code-Review
+   checklist) were reconciled to match.
 
 ### Deferred-to-merge (NOT defects — inherent to an unpushed branch)
 
 - **FR-14 / AC-10** (alerts 18/19/20 → `fixed`, none dismissed): the branch is unpushed by
   design and Dependabot only re-evaluates `site/pnpm-lock.yaml` on `main`. The remediation
   is verified *effective* (FR-5), so the terminal transition is expected but cannot be
-  observed pre-merge. Confirm post-merge per the Phase 6 log query.
-- **FR-16 / AC-12 squash-title and subject prefix**: individual commits use the repo's
-  standard `checkpoint(CR-XXXX):` governance subjects rather than `chore(site):`; neither
-  `checkpoint` nor `docs` triggers a `release-please` release, so the requirement's stated
-  *purpose* (no independent release) holds. The governing `fix(deps):` squash-title is a
-  merge-time action.
+  observed pre-merge. Reclassified DEFERRED (from PARTIAL): it is not a defect, it is
+  structurally unverifiable until merge. Confirm post-merge per the Phase 6 log query.
+- **FR-16 / AC-12 squash-title**: the governing `fix(deps):` squash title is applied at
+  squash-merge time, a merge-time action on the shared pull request. Tracked with the two
+  DEFERRED alert rows above.
 
 ### Independent instrument checks performed
 
