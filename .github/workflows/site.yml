@@ -77,6 +77,32 @@ jobs:
       - name: Run site tests if present
         run: pnpm --dir site run --if-present test
 
+      # Exercise a `.agents/scripts` harness against the build this job just produced.
+      #
+      # Why this step exists, and why it earns its runtime. The three harnesses under
+      # `.agents/scripts/*.mjs` drive headless Chrome through `puppeteer-core`, and they run
+      # only when a developer runs them by hand — CI has never executed them. Dependabot PR
+      # #34 bumped `puppeteer-core` 24 to 25, which moved the module's internal layout and
+      # broke all three at import (ERR_MODULE_NOT_FOUND), and every check still passed
+      # green. The break was found only because the bump was run by hand during triage. That
+      # is the exact failure CR-0074 exists to close: a script CI never invokes reports as a
+      # script that works, and the one it silently disarmed is the visual-regression harness
+      # `site/AGENTS.md` mandates. Running one harness here makes a future import-breaking
+      # bump fail this check instead of shipping unnoticed. One is enough: all three share
+      # the same `site.puppeteer.mjs` resolver, so exercising any one exercises the import
+      # path that broke.
+      #
+      # It reuses `site/dist` from the "Build site" step above and the `puppeteer-core`
+      # devDependency from "Install site dependencies"; it adds no second build and no
+      # credentials or network services (NFR-4). CHROME_PATH points the harness (whose
+      # default is a local macOS Chrome bundle) at the Google Chrome the ubuntu-latest
+      # runner ships pre-installed, so the same script runs unchanged on a developer's Mac
+      # and in CI.
+      - name: Exercise the site content-check harness
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node .agents/scripts/site.content.check.mjs
+
       # The same gate the deploy runs, against thresholds committed in
       # site/lighthouserc.json so a change to them appears as a diff (FR-38).
       - name: Lighthouse budget gate

@@ -31,7 +31,11 @@ import { puppeteer } from './site.puppeteer.mjs'
 import { serve } from './site.serve.mjs'
 import { PAGES } from './site.pages.mjs'
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
+// Chrome binary to drive. Defaults to the macOS Google Chrome bundle so local runs on a
+// developer machine need no configuration. CI (ubuntu-latest) has no such bundle, so the
+// workflow exports CHROME_PATH pointing at the runner's pre-installed Chrome; the override
+// keeps local usage unchanged while letting the same script run in CI.
+const CHROME = process.env.CHROME_PATH ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'
 const distDir = process.argv[2] ?? 'site/dist'
 
 /**
