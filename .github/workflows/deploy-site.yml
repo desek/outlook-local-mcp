@@ -31,12 +31,12 @@ jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Node plus corepack, which resolves pnpm from the "packageManager" field in
       # site/package.json, so no pnpm version is pinned in this workflow. The local
       # dev pin lives in .mise.toml (FR-3); both agree on 11.18.0.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Enable corepack

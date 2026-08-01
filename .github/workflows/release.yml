@@ -16,7 +16,7 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
+      - uses: googleapis/release-please-action@v5
         id: release
         with:
           config-file: release-please-config.json
@@ -42,7 +42,7 @@ jobs:
     env:
       MISE_AUTO_INSTALL: "false"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: jdx/mise-action@v4
@@ -59,7 +59,7 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
         run: goreleaser build --single-target --id desktop --clean
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-desktop-${{ matrix.goos }}-${{ matrix.goarch }}
           path: dist/
@@ -69,12 +69,12 @@ jobs:
     needs: [release-please, build-desktop]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: jdx/mise-action@v4
         with:
           install_args: "npm:@anthropic-ai/mcpb"
       - name: Download desktop artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: dist-desktop-*
           path: dist-parts/
@@ -132,12 +132,12 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.release-please.outputs.tag_name }}
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -150,7 +150,7 @@ jobs:
       - name: Stage binaries via GoReleaser
         run: ./scripts/stage-container-binaries.sh --release
       - name: Build and push scratch image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: runtime-scratch
@@ -160,7 +160,7 @@ jobs:
             ghcr.io/desek/outlook-local-mcp:${{ needs.release-please.outputs.tag_name }}
             ghcr.io/desek/outlook-local-mcp:latest
       - name: Build and push distroless image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: runtime-distroless
@@ -170,7 +170,7 @@ jobs:
             ghcr.io/desek/outlook-local-mcp:${{ needs.release-please.outputs.tag_name }}-distroless
             ghcr.io/desek/outlook-local-mcp:distroless
       - name: Build and push debug image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: runtime-debug
