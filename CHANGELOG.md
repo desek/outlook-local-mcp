@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1](https://github.com/desek/outlook-local-mcp/compare/v0.5.0...v0.5.1) (2026-08-01)
+
+
+### Bug Fixes
+
+* **deps:** bring the Go module, toolchain, and site tree current ([#32](https://github.com/desek/outlook-local-mcp/issues/32)) ([2b4c914](https://github.com/desek/outlook-local-mcp/commit/2b4c914cbbcd524d0894ee97c425115b6541127d))
+* **scripts:** resolve puppeteer-core by package metadata and bump to 25.4.0 ([#36](https://github.com/desek/outlook-local-mcp/issues/36)) ([4cf6d23](https://github.com/desek/outlook-local-mcp/commit/4cf6d234eba3aee4af0449c4bd809a81b098f365))
+
 ## [0.5.0](https://github.com/desek/outlook-local-mcp/compare/v0.4.0...v0.5.0) (2026-07-31)
 
 
