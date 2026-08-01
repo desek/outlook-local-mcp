@@ -28,7 +28,7 @@
 
 import { mkdir, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
-import puppeteer from '../../site/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js'
+import { puppeteer } from './site.puppeteer.mjs'
 import { serve } from './site.serve.mjs'
 import { PAGES, WIDTHS } from './site.pages.mjs'
 import { DETERMINISM_INIT } from './site.determinism.mjs'

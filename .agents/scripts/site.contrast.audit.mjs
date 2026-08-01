@@ -20,7 +20,7 @@
  * Exits 0 when no text fails AA, 1 otherwise.
  */
 
-import puppeteer from '../../site/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js'
+import { puppeteer } from './site.puppeteer.mjs'
 import { serve } from './site.serve.mjs'
 import { PAGES, WIDTHS } from './site.pages.mjs'
 
