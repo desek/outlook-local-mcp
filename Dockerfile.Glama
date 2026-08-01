@@ -6,5 +6,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 WORKDIR /app
 RUN git clone https://github.com/desek/outlook-local-mcp . && git checkout 326f3d74ad5d847860c537affcf97ebb842199e8
 ENV PATH="/app/node_modules/.bin:$PATH"
-RUN (apt-get update && apt-get install -y --no-install-recommends curl ca-certificates) && (curl -fsSL https://go.dev/dl/go1.25.9.linux-amd64.tar.gz -o /tmp/go.tgz && tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz) && (CGO_ENABLED=0 /usr/local/go/bin/go build -trimpath -ldflags '-s -w' -o /usr/local/bin/outlook-local-mcp ./cmd/outlook-local-mcp)
+RUN (apt-get update && apt-get install -y --no-install-recommends curl ca-certificates) && (curl -fsSL https://go.dev/dl/go1.25.12.linux-amd64.tar.gz -o /tmp/go.tgz && tar -C /usr/local -xzf /tmp/go.tgz && rm /tmp/go.tgz) && (CGO_ENABLED=0 /usr/local/go/bin/go build -trimpath -ldflags '-s -w' -o /usr/local/bin/outlook-local-mcp ./cmd/outlook-local-mcp)
 CMD ["mcp-proxy","--","/usr/local/bin/outlook-local-mcp"]

@@ -3,3 +3,25 @@
 # uses; nothing else is permitted to run scripts.
 onlyBuiltDependencies:
   - esbuild
+
+# Security overrides (CR-0072). pnpm 11 reads overrides from this file, not from
+# a "pnpm.overrides" field in package.json (see comment above), so the CR's
+# named location is superseded by the tool's actual config home. These force the
+# patched transitive versions that close Dependabot alerts #18/#19/#20; all
+# three arrive via @lhci/cli@0.15.1, which is already the latest published
+# release, so an override is the only available mechanism.
+#
+# Removal conditions (FR-15) — each is checkable:
+#   tmp:  remove once @lhci/cli (currently 0.15.1) ships a release whose tree no
+#         longer resolves tmp below 0.2.6. Check with `pnpm --dir site why tmp`
+#         after deleting this line and reinstalling: if every path is >= 0.2.6
+#         the override is redundant. Closes GHSA-ph9p-34f9-6g65 (< 0.2.6) and
+#         GHSA-52f5-9888-hmc6 (<= 0.2.3) together.
+#   uuid: remove once @lhci/cli depends on uuid >= 11.1.1 (it currently pulls
+#         uuid@8.3.2). Check the same way with `pnpm --dir site why uuid`.
+#         Closes GHSA-w5hq-g745-h8pq; pinned to ^11.1.1, the lowest patched
+#         range, because 12.x (< 12.0.1) and 13.x (< 13.0.1) have their own
+#         vulnerable entries in the same advisory.
+overrides:
+  tmp: ^0.2.7
+  uuid: ^11.1.1

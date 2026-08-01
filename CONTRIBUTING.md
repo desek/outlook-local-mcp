@@ -16,7 +16,7 @@ Use GitHub Issues with a feature request description.
 
 ### Prerequisites
 
-- Go 1.24+
+- Go 1.25+ (the exact toolchain is pinned in `.mise.toml`; `mise install` provisions it)
 - golangci-lint
 - Node.js 22+ and pnpm 11.18.0 (required for the website in `site/`; see below)
 - pre-commit
