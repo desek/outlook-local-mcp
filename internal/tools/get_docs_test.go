@@ -2,9 +2,99 @@
 package tools
 
 import (
+	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/desek/outlook-local-mcp/internal/docs"
 )
+
+// explicitAnchorRe matches a trailing "{#custom-id}" tag on a heading line and
+// captures the identifier. This mirrors the GitHub-flavoured Markdown convention
+// the embedded documents use to pin a section's anchor independently of its
+// display text.
+var explicitAnchorRe = regexp.MustCompile(`\s*\{#([^}]+)\}\s*$`)
+
+// intendedAnchor computes the anchor an author expects a heading to resolve
+// under, independently of the (possibly buggy) production headingToAnchor.
+//
+// When the heading carries a trailing "{#custom-id}" tag the identifier is used
+// verbatim. Otherwise the anchor is derived from the heading text the same way a
+// correct GitHub-flavoured Markdown renderer would: lower-cased, spaces to
+// hyphens, all other non-alphanumeric characters dropped.
+//
+// This helper is deliberately independent of the code under test so the corpus
+// reachability test can fail when get_docs cannot reach a heading the documents
+// legitimately declare. Computing the anchor via the production helper would make
+// the test agree with the implementation rather than with the corpus.
+func intendedAnchor(heading string) string {
+	heading = strings.TrimSpace(heading)
+	if m := explicitAnchorRe.FindStringSubmatch(heading); m != nil {
+		return strings.ToLower(strings.TrimSpace(m[1]))
+	}
+	heading = strings.ToLower(heading)
+	var b strings.Builder
+	for _, r := range heading {
+		switch {
+		case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '-':
+			b.WriteRune(r)
+		case r == ' ':
+			b.WriteRune('-')
+		}
+	}
+	return b.String()
+}
+
+// TestGetDocs_EveryHeadingReachable walks every H2 heading in every embedded
+// document, computes the anchor the author intends it to resolve under, and
+// asserts that get_docs returns non-empty content for that anchor.
+//
+// This is the corpus reachability check the defect survived because the prior
+// tests drew their cases from the implementation rather than from the documents.
+// It fails for any heading the production parser cannot reach — including the
+// five headings carrying explicit "{#...}" anchors — and names the document and
+// heading so the failure is actionable. It requires no editing to catch a future
+// unreachable heading.
+func TestGetDocs_EveryHeadingReachable(t *testing.T) {
+	h := HandleGetDocs()
+
+	for _, entry := range docs.MustCatalog() {
+		slug := entry.Slug
+		data, err := docs.ReadSlug(slug)
+		if err != nil {
+			t.Fatalf("ReadSlug(%q): %v", slug, err)
+		}
+
+		for _, line := range strings.Split(string(data), "\n") {
+			if !strings.HasPrefix(line, "## ") {
+				continue
+			}
+			heading := strings.TrimPrefix(line, "## ")
+			anchor := intendedAnchor(heading)
+
+			req := buildRequest("system", map[string]any{
+				"operation": "get_docs",
+				"slug":      slug,
+				"section":   anchor,
+			})
+
+			result, hErr := h(t.Context(), req)
+			if hErr != nil {
+				t.Fatalf("get_docs(slug=%q, section=%q) unexpected Go error: %v", slug, anchor, hErr)
+			}
+			if result == nil {
+				t.Fatalf("get_docs(slug=%q, section=%q) returned nil result", slug, anchor)
+			}
+			if result.IsError {
+				t.Errorf("unreachable heading: document %q heading %q (anchor %q) is not reachable via get_docs", slug, strings.TrimSpace(heading), anchor)
+				continue
+			}
+			if strings.TrimSpace(dispatchResultText(t, result)) == "" {
+				t.Errorf("empty section: document %q heading %q (anchor %q) resolved but returned empty content", slug, strings.TrimSpace(heading), anchor)
+			}
+		}
+	}
+}
 
 // TestSystemGetDocs_Section verifies that get_docs with slug=troubleshooting and
 // a valid section anchor returns only the body of that section.
