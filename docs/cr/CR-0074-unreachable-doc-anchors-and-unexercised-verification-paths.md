@@ -1,5 +1,5 @@
 ---
-id: "CR-0073"
+id: "CR-0074"
 status: "proposed"
 date: 2026-08-01
 requestor: desek
