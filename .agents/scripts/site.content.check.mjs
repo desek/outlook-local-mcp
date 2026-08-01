@@ -27,7 +27,7 @@
 
 import { readFile, access } from 'node:fs/promises'
 import { join } from 'node:path'
-import puppeteer from '../../site/node_modules/puppeteer-core/lib/esm/puppeteer/puppeteer-core.js'
+import { puppeteer } from './site.puppeteer.mjs'
 import { serve } from './site.serve.mjs'
 import { PAGES } from './site.pages.mjs'
 
