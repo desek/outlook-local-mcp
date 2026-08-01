@@ -203,6 +203,69 @@ func TestGetDocs_CrossLinksResolve(t *testing.T) {
 	t.Logf("checked %d embedded section cross-links", checked)
 }
 
+// TestGetDocs_ExplicitAnchorSections asserts that each of the five sections this
+// CR exists to repair resolves by its documented explicit "{#...}" anchor and
+// returns its own content with no bleed from an adjacent section (CR-0074 FR-5,
+// AC-1, AC-2).
+//
+// It complements TestGetDocs_EveryHeadingReachable, which proves the corpus is
+// reachable in aggregate: this test names the five anchors literally, so a
+// regression that re-breaks any one of them fails with that section named rather
+// than as one anonymous row in the corpus walk. Each section carries a marker
+// unique to it; asserting the other four markers are absent is the no-cross-
+// section-bleed check the general corpus test does not make.
+func TestGetDocs_ExplicitAnchorSections(t *testing.T) {
+	h := HandleGetDocs()
+
+	// Each section is keyed by its (slug, anchor) and identified by a phrase that
+	// appears only in that section across the five. The bleed assertion requires
+	// these markers to be mutually exclusive, which they are by construction.
+	sections := []struct {
+		slug   string
+		anchor string
+		marker string
+	}{
+		{"troubleshooting", "before-you-file-an-issue", "before opening a GitHub issue"},
+		{"troubleshooting", "auto-default-account", "Ghost-default scenario"},
+		{"troubleshooting", "container-no-keychain", "keychain unavailable, falling back to file storage"},
+		{"quickstart", "container-deployment", "No Go toolchain is required"},
+		{"concepts", "container-runtime", "image uses stdio transport"},
+	}
+
+	for _, s := range sections {
+		req := buildRequest("system", map[string]any{
+			"operation": "get_docs",
+			"slug":      s.slug,
+			"section":   s.anchor,
+		})
+		result, err := h(t.Context(), req)
+		if err != nil {
+			t.Fatalf("get_docs(slug=%q, section=%q) unexpected Go error: %v", s.slug, s.anchor, err)
+		}
+		if result == nil {
+			t.Fatalf("get_docs(slug=%q, section=%q) returned nil result", s.slug, s.anchor)
+		}
+		if result.IsError {
+			t.Errorf("section %q in %q did not resolve via its documented anchor", s.anchor, s.slug)
+			continue
+		}
+		text := dispatchResultText(t, result)
+		if !strings.Contains(text, s.marker) {
+			t.Errorf("section %q in %q resolved but is missing its own marker %q", s.anchor, s.slug, s.marker)
+		}
+		// No cross-section bleed: none of the other four sections' markers may
+		// appear in this section's returned content.
+		for _, other := range sections {
+			if other.anchor == s.anchor {
+				continue
+			}
+			if strings.Contains(text, other.marker) {
+				t.Errorf("cross-section bleed: section %q in %q contains marker %q belonging to section %q", s.anchor, s.slug, other.marker, other.anchor)
+			}
+		}
+	}
+}
+
 // TestSystemGetDocs_Section verifies that get_docs with slug=troubleshooting and
 // a valid section anchor returns only the body of that section.
 func TestSystemGetDocs_Section(t *testing.T) {

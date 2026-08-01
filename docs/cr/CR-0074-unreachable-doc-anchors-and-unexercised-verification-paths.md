@@ -355,8 +355,13 @@ flowchart TD
 13. `docs/prompts/mcp-tool-crud-test.md` **MUST** name each mail parameter by
     its registry name: `message_id` (not `id`) for `get_message` at Steps 32
     and 34; `conversation_id` (not `id`) for `get_conversation` at Step 35,
-    because the value passed there is a conversation ID; and `folder_id` (not
-    `folder`) for `list_messages` at Steps 30b–30e, 33, 35, and 36.
+    because the value passed there is a conversation ID; `folder_id` (not
+    `folder`) for `list_messages` at Steps 30b–30e, 33, 35, and 36;
+    `provenance` as a boolean value `true` (not the string
+    `"created_by_mcp"`) for `list_messages` at Step 30d, because the registry
+    declares `provenance` with `WithBoolean`; and `max_results` (not `top`)
+    for `list_messages` at Steps 35 and 36, because `top` is not a registry
+    parameter.
 14. `docs/prompts/mcp-tool-crud-test.md` **MUST NOT** instruct the agent to
     match a provenance search by event ID in text output at Steps 5 and 6,
     because `search_events` text output does not contain an event ID.

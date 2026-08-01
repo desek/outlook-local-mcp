@@ -560,7 +560,7 @@ Call `{tool: "mail", args: {operation: "list_messages", ...}}` four times with t
 |------|-----------------------------------------------------------|------------------------------------------------------------------|
 | 30b  | `folder_id: "Inbox", is_read: false`                      | Only unread messages are listed; count matches folder unread     |
 | 30c  | `folder_id: "Inbox", flag_status: "flagged"`              | Only flagged messages are listed                                |
-| 30d  | `folder_id: "Inbox", provenance: "created_by_mcp"`        | Only MCP-tagged messages (may be empty if none created yet)     |
+| 30d  | `folder_id: "Inbox", provenance: true`                    | Only MCP-tagged messages (may be empty if none created yet)     |
 | 30e  | `folder_id: "Inbox"` (no filters, baseline)               | Baseline message count recorded for comparison                  |
 
 - **Verify:** All calls return plain text. The filtered counts are less than or equal to the baseline.
@@ -606,7 +606,7 @@ Then call `{tool: "mail", args: {operation: "delete_draft", message_id: "<draft 
 
 ### Step 35 -- Get conversation
 
-Call `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox", top: 1}}` and record the first message's `conversationId` as **conversation ID**. If Inbox is empty, skip Step 35.
+Call `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox", max_results: 1}}` and record the first message's `conversationId` as **conversation ID**. If Inbox is empty, skip Step 35.
 
 Call `{tool: "mail", args: {operation: "get_conversation", conversation_id: "<conversation ID>"}}`.
 
@@ -615,7 +615,7 @@ Call `{tool: "mail", args: {operation: "get_conversation", conversation_id: "<co
 
 ### Step 36 -- Get attachment
 
-Using `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox", has_attachments: true, top: 1}}` pick a message that has attachments. If none found, skip Step 36.
+Using `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox", has_attachments: true, max_results: 1}}` pick a message that has attachments. If none found, skip Step 36.
 
 Call `{tool: "mail", args: {operation: "get_message", message_id: "<message ID>", output: "summary"}}` to enumerate its attachment IDs. Then call:
 
