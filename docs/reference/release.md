@@ -14,6 +14,22 @@ The release pipeline produces three artifact types:
 
 All three are produced by CI from a Git tag. One step is **not** automated: the [Glama directory listing](#directory-listings) publishes its own release from a pinned commit, and a tagged release is not complete until that release is published too.
 
+One gate is **not** automated either: [`make crud-test`](#required-manual-gate-make-crud-test) exercises the live tool surface against a real mailbox and MUST be run by hand before a release is cut.
+
+---
+
+## Required manual gate: `make crud-test`
+
+`make crud-test` is a **required manual gate before a release is cut**. It drives the full MCP tool surface through a create-read-update-delete lifecycle (`docs/prompts/mcp-tool-crud-test.md`) and is the only check that exercises the tools end to end against a real tenant. It has caught defects no unit test could, including the `get_docs` explicit-anchor failure recorded in CR-0074, which every automated check reported as passing.
+
+### Why it cannot run in CI
+
+The harness needs live Microsoft 365 credentials and performs real create, update, and delete operations against a real mailbox and calendar. CI has neither the credentials nor a mailbox it may mutate, so the gate cannot be wired into a workflow without a dedicated test tenant, which is out of scope for CR-0074 and named there as the real long-term fix.
+
+### Honest limitation
+
+A documented manual gate is weaker than an automated one, and this document says so rather than implying otherwise. Its value is that its absence becomes a visible omission a maintainer can be held to, not a silent one. It does not run unless a human remembers to run it, so a release checklist MUST treat a missing `make crud-test` run as a blocking omission. The durable fix is a dedicated test tenant that lets the gate run in CI; until that exists, the run is manual and its evidence (the `docs/bench/crud-runs.csv` row for the run) is the record that it happened.
+
 ---
 
 ## GoReleaser

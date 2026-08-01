@@ -153,3 +153,87 @@ Measurement chain: the finding, both `vuln-scan` runs (byte-identical on the
 unchanged tree, confirming the instrument agrees with itself), the grype DB
 freshness check, and the per-stage bisectability are recorded in
 `.agents/logs/CR-0071-phase6-verification.md`.
+
+## The unexercised-path rule
+
+A job that is skipped, a script CI never invokes, and a test whose cases are
+drawn from the implementation all report success without evidence. Before
+trusting a green signal, confirm the thing it names actually ran.
+
+This is the same class of failure as trusting an instrument that has never been
+validated: a check that does not execute the code it claims to cover is not a
+weaker check, it is no check. Its green is the green of absence, not of
+correctness. CR-0074 recorded this rule because three incidents of exactly this
+shape surfaced within one week, none of them found by CI, because in each case
+CI was structurally incapable of finding them.
+
+### Worked example: the container publish job (skipped, then 403)
+
+CR-0066 shipped container distribution in April. Its publish job in
+`.github/workflows/release.yml` was reported `skipped` in **every** release from
+April until 2026-07-31, when it ran for the first time and failed immediately on
+a 403. Four months of green releases, and the documented procedure described a
+path that had never once executed. The job's absence from every run was not a
+signal anyone read as failure, because "skipped" looks like "not applicable"
+rather than "never tested".
+
+### Worked example: Dependabot PR #34 (all checks green, all harnesses broken)
+
+The `puppeteer-core` 24 to 25 bump (Dependabot PR #34) passed **every** check
+while breaking all three `.agents/scripts/` harnesses at import, including the
+visual-regression harness `site/AGENTS.md` mandates. CI could not observe those
+scripts, so nothing went red. The break was caught only because the bump was run
+by hand during triage. CR-0072 subsequently recorded the `puppeteer-core` pin as
+load-bearing, and CR-0074 wired one harness into `site.yml` so the import path is
+exercised by a check that can go red.
+
+### Worked example: `TestHeadingToAnchor` (agreed with the bug)
+
+`TestHeadingToAnchor` passed with four hand-listed cases, none of which used an
+explicit `{#...}` anchor. The cases were drawn from the implementation rather
+than from the documents the parser must handle, so the test asserted precisely
+the inputs the code already handled and confirmed the implementation against
+itself. It therefore agreed with the defect CR-0074 fixed: five documented
+section anchors were unreachable through `get_docs`, and the test was green
+throughout. The durable form is a corpus test that derives its cases from the
+embedded documents, so it can fail for an input shape the implementer never
+considered.
+
+### Corollary: a new gate MUST be proven to fail before it is trusted
+
+A gate not proven to fail is not proven to be a gate. When CR-0074 added the
+`site.yml` harness job, the import was deliberately pointed at a non-existent
+path to confirm the job goes red, then reverted (see CR-0074 Phase 4 and AC-9).
+This step is not optional: it is the direct application of the rule above to the
+very change that records it. Adding a check without watching it fail once repeats
+the mistake the check exists to prevent.
+
+## The `grype` symbol-stripping caveat
+
+`grype`'s passing verdict on the release SBOM is coarser than it appears, and
+this is an instrument caveat rather than a defect.
+
+The release build strips symbols with `-s -w` (`.goreleaser.yaml`), so the built
+binary carries no function symbols. On such a binary `grype` emits:
+
+> go binary packages were found but none carry function symbols; go
+> vulnerability matching falls back to module granularity and may report false
+> positives
+
+With no symbols to match against, `grype` cannot perform reachability analysis
+and falls back to **module-granularity** matching: it reports whatever
+vulnerable module is present in the SBOM, reachable or not. Its `--fail-on high`
+verdict is therefore about module presence, not about whether this server can
+reach the vulnerable code. This did not affect the 0.5.1 result, where
+`govulncheck` established reachability separately (0 reachable findings), but it
+means a passing `grype` run alone is a weaker statement than a reachability-aware
+one. The warning text is recorded in the 0.5.1 security run and in
+`.agents/logs/CR-0071-phase6-verification.md`.
+
+**What would restore reachability-precision:** generating the SBOM with function
+symbols captured, so `grype` matches at symbol granularity rather than module
+granularity. That requires the analysed binary to retain its symbol table, which
+the release build deliberately strips for size. Regenerating SBOMs with symbol
+capture to sharpen `grype` is recorded in CR-0074 as a ceiling with what would
+move it; acting on it is its own change, and until then `govulncheck` remains the
+reachability instrument of record.
