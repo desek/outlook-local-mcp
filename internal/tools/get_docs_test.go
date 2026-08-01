@@ -96,6 +96,113 @@ func TestGetDocs_EveryHeadingReachable(t *testing.T) {
 	}
 }
 
+// crossLinkRe matches a Markdown inline link target and captures whatever is
+// inside the parentheses, e.g. the "troubleshooting#container-no-keychain" in
+// "](troubleshooting#container-no-keychain)". Targets without a "#" are filtered
+// out by the test body, so only section cross-links are examined.
+var crossLinkRe = regexp.MustCompile(`\]\(([^)]+)\)`)
+
+// TestGetDocs_CrossLinksResolve extracts every section cross-link from each
+// embedded document and asserts that each resolves to a real section in the
+// correct document, through the production get_docs path (CR-0074 FR-7, AC-7).
+//
+// The corpus writes section cross-links in two forms, and both are covered:
+//
+//   - Intra-document: "](#anchor)" — the target has no slug prefix, so the
+//     anchor is resolved against the document containing the link.
+//   - Inter-document: "](slug#anchor)" — the target names an embedded document
+//     by its bare slug (no ".md" suffix), so the anchor is resolved against that
+//     target document. Four of the five cross-links this CR names take this
+//     form, including the primary Change Driver
+//     (concepts.md → troubleshooting#container-no-keychain).
+//
+// Only anchors targeting the four embedded documents are in scope. Links to
+// external URLs, to non-embedded files (e.g. docs/reference/*), and bare file
+// links without an anchor are ignored rather than failed: they are out of scope
+// for the in-server documentation surface get_docs serves.
+//
+// Resolving through HandleGetDocs (not a private index) is deliberate: it is the
+// exact path an LLM follows when it reads a document, follows a cross-link, and
+// calls get_docs with that anchor. On the unfixed parser the four explicit
+// anchors these links point at do not resolve, so this test goes red there.
+func TestGetDocs_CrossLinksResolve(t *testing.T) {
+	h := HandleGetDocs()
+
+	// validSlug is the set of embedded document slugs. An inter-document link is
+	// only in scope when its slug prefix names one of these.
+	validSlug := map[string]bool{}
+	for _, entry := range docs.MustCatalog() {
+		validSlug[entry.Slug] = true
+	}
+
+	checked := 0
+	for _, entry := range docs.MustCatalog() {
+		slug := entry.Slug
+		data, err := docs.ReadSlug(slug)
+		if err != nil {
+			t.Fatalf("ReadSlug(%q): %v", slug, err)
+		}
+
+		for lineNo, line := range strings.Split(string(data), "\n") {
+			for _, m := range crossLinkRe.FindAllStringSubmatch(line, -1) {
+				target := m[1]
+				if !strings.Contains(target, "#") {
+					continue // bare file link without an anchor: out of scope.
+				}
+
+				var targetSlug, anchor string
+				if strings.HasPrefix(target, "#") {
+					// Intra-document: resolve against the current document.
+					targetSlug = slug
+					anchor = strings.TrimPrefix(target, "#")
+				} else {
+					parts := strings.SplitN(target, "#", 2)
+					left := strings.TrimSuffix(parts[0], ".md")
+					anchor = parts[1]
+					// External URLs and non-embedded file paths carry a scheme or
+					// a path separator; neither names an embedded document.
+					if strings.ContainsAny(left, "/:") {
+						continue
+					}
+					if !validSlug[left] {
+						continue // points outside the embedded bundle: out of scope.
+					}
+					targetSlug = left
+				}
+				if strings.TrimSpace(anchor) == "" {
+					continue
+				}
+
+				checked++
+				req := buildRequest("system", map[string]any{
+					"operation": "get_docs",
+					"slug":      targetSlug,
+					"section":   anchor,
+				})
+				result, hErr := h(t.Context(), req)
+				if hErr != nil {
+					t.Fatalf("get_docs(slug=%q, section=%q) unexpected Go error: %v", targetSlug, anchor, hErr)
+				}
+				if result == nil {
+					t.Fatalf("get_docs(slug=%q, section=%q) returned nil result", targetSlug, anchor)
+				}
+				if result.IsError {
+					t.Errorf("broken cross-link %q in document %q (line %d) → target document %q has no section %q",
+						target, slug, lineNo+1, targetSlug, anchor)
+				}
+			}
+		}
+	}
+
+	// Guard against a vacuous pass: if the extractor stops matching the corpus,
+	// the test would silently check nothing. The corpus contains in-scope
+	// cross-links today, so zero checks means the extractor is broken.
+	if checked == 0 {
+		t.Fatal("no section cross-links were checked; the link extractor matched nothing in the corpus")
+	}
+	t.Logf("checked %d embedded section cross-links", checked)
+}
+
 // TestSystemGetDocs_Section verifies that get_docs with slug=troubleshooting and
 // a valid section anchor returns only the body of that section.
 func TestSystemGetDocs_Section(t *testing.T) {
