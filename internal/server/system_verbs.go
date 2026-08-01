@@ -180,7 +180,7 @@ func buildSystemVerbs(c systemVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 	getDocsVerb := tools.Verb{
 		Name:        "get_docs",
 		Summary:     "fetch a document or section by slug; use search_docs first to identify the slug",
-		Description: "Fetches the full content of an embedded document by slug, or a single H2 section when a section anchor is supplied. Slugs are: readme, quickstart, concepts, troubleshooting. Section anchors are lowercase heading text with spaces replaced by hyphens. Use search_docs first to identify the relevant slug and section.",
+		Description: "Fetches the full content of an embedded document by slug, or a single H2 section when a section anchor is supplied. Slugs are: readme, quickstart, concepts, troubleshooting. Section anchors are lowercase heading text with spaces replaced by hyphens, unless the heading carries an explicit '{#custom-id}' tag, in which case that id is the anchor and the text-derived form does not resolve. Use search_docs first to identify the relevant slug and section.",
 		Examples: []tools.Example{
 			{Args: map[string]any{"slug": "troubleshooting"}, Comment: "fetch the full troubleshooting guide"},
 			{Args: map[string]any{"slug": "troubleshooting", "section": "token-refresh"}, Comment: "fetch the token refresh section only"},
@@ -200,7 +200,7 @@ func buildSystemVerbs(c systemVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 				mcp.Description("Document slug (e.g., 'troubleshooting', 'readme', 'quickstart'). Use list_docs to enumerate slugs."),
 			),
 			mcp.WithString("section",
-				mcp.Description("Optional H2 heading anchor to extract a single section (e.g., 'token-refresh'). Anchors are lower-cased heading text with spaces replaced by hyphens."),
+				mcp.Description("Optional H2 heading anchor to extract a single section (e.g., 'token-refresh'). Anchors are lower-cased heading text with spaces replaced by hyphens, unless the heading carries an explicit '{#custom-id}' tag, in which case that id is the anchor (e.g., 'container-no-keychain')."),
 			),
 			mcp.WithString("output",
 				mcp.Description("Output mode: 'text' (default) returns trimmed plain text, 'raw' returns unmodified markdown."),

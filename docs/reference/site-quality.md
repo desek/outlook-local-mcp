@@ -288,6 +288,16 @@ document opens with, the one the visual gate depends on. The pin is not cargo cu
 search that stopped at `site/` simply missed the consumers, and that is worth recording
 because the missed search is the lesson.
 
+CR-0074 closed the other half of that lesson: the pin is load-bearing, but nothing in CI
+exercised it, so PR #34's 24-to-25 bump broke all three harnesses at import and every check
+still passed. `site.yml` now runs `site.content.check.mjs` against the built `site/dist` on
+every pull request. All three harnesses share the `site.puppeteer.mjs` resolver, so
+exercising one exercises the import path that broke, and a future bump that moves the
+internal layout fails that step instead of shipping unnoticed. The harness step sets
+`CHROME_PATH` to the runner's pre-installed Chrome; the script defaults to the local macOS
+bundle, so `node .agents/scripts/site.content.check.mjs` runs unchanged on a developer's
+Mac and needs `CHROME_PATH` only where Chrome lives elsewhere.
+
 ## The dependency-currency noise floor
 
 CR-0072 Phase 1 baselined the Lighthouse gate on the unchanged tree by running the full
