@@ -194,15 +194,32 @@ func TestHeadingToAnchor(t *testing.T) {
 		heading string
 		want    string
 	}{
+		// Text-derived cases (FR-2): no explicit anchor tag.
 		{"Token Refresh", "token-refresh"},
 		{"Keychain Locked / Unavailable", "keychain-locked--unavailable"},
 		{"Graph 429 Throttling", "graph-429-throttling"},
 		{"Authentication Failures", "authentication-failures"},
+		// Explicit-anchor cases (FR-1): the trailing "{#custom-id}" tag wins and
+		// the heading text is ignored.
+		{"Container deployment {#container-deployment}", "container-deployment"},
+		{"Auto-default account {#auto-default-account}", "auto-default-account"},
+		// FR-8: the explicit anchor differs materially from the text-derived form.
+		{"Container has no keychain access {#container-no-keychain}", "container-no-keychain"},
 	}
 	for _, c := range cases {
 		got := headingToAnchor(c.heading)
 		if got != c.want {
 			t.Errorf("headingToAnchor(%q) = %q, want %q", c.heading, got, c.want)
 		}
+	}
+
+	// FR-3: a heading carrying an explicit anchor MUST NOT also resolve under its
+	// text-derived form. The explicit anchor is the only one that addresses the
+	// section; accepting the derived form too would give one section two names and
+	// silently override the author's explicit choice.
+	const explicitHeading = "Container has no keychain access {#container-no-keychain}"
+	const derivedForm = "container-has-no-keychain-access"
+	if got := headingToAnchor(explicitHeading); got == derivedForm {
+		t.Errorf("headingToAnchor(%q) = %q; the text-derived form must not resolve for an explicit-anchor heading", explicitHeading, got)
 	}
 }

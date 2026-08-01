@@ -7,6 +7,7 @@ package tools_test
 import (
 	"context"
 	"encoding/json"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -293,14 +294,13 @@ func buildHeadingIndex(t *testing.T) map[string]map[string]bool {
 			if !ok {
 				continue
 			}
-			// Strip inline `{#anchor}` if present (handled but not recommended per CR-0065 risk #6).
-			if i := strings.Index(text, " {#"); i != -1 {
-				// Also register the explicit anchor id.
-				explicit := strings.TrimSuffix(strings.TrimPrefix(text[i+3:], ""), "}")
-				explicit = strings.TrimSuffix(explicit, "}")
-				anchors[strings.TrimSpace(explicit)] = true
-				text = strings.TrimSpace(text[:i])
-			}
+			// Register exactly the single anchor the production get_docs parser
+			// resolves this heading under. When the heading carries an explicit
+			// "{#custom-id}" tag that is the id verbatim; otherwise it is the
+			// text-derived form. Registering only that one anchor keeps this index
+			// consistent with FR-3: the text-derived form of an explicit-anchor
+			// heading is not a reachable anchor and must not be accepted here
+			// (CR-0074).
 			anchors[headingToAnchor(text)] = true
 		}
 		index[slug] = anchors
@@ -308,10 +308,25 @@ func buildHeadingIndex(t *testing.T) map[string]map[string]bool {
 	return index
 }
 
-// headingToAnchor converts a heading string to its GitHub-compatible anchor.
-// Lowercase, replace spaces with hyphens, strip most punctuation.
+// headingAnchorTagRe matches a trailing "{#custom-id}" anchor tag on a heading
+// and captures the identifier. It mirrors the production regexp in
+// internal/tools/get_docs.go; this file is package tools_test and cannot call
+// the unexported production helper, so the derivation is kept behaviourally
+// identical rather than literally shared (CR-0074).
+var headingAnchorTagRe = regexp.MustCompile(`\s*\{#([^}]+)\}\s*$`)
+
+// headingToAnchor converts a heading string to the anchor the production
+// get_docs parser resolves it under. When the heading ends with an explicit
+// "{#custom-id}" tag the identifier is used verbatim and the heading text is
+// ignored (FR-1, FR-3); otherwise the anchor is derived from the text:
+// lowercase, spaces to hyphens, other punctuation stripped (FR-2). Keeping this
+// identical to production prevents the heading index from accepting anchors that
+// get_docs cannot reach (CR-0074).
 func headingToAnchor(heading string) string {
-	// Strip inline code markers and common punctuation, keep alphanumerics, spaces, hyphens.
+	heading = strings.TrimSpace(heading)
+	if m := headingAnchorTagRe.FindStringSubmatch(heading); m != nil {
+		return strings.ToLower(strings.TrimSpace(m[1]))
+	}
 	var b strings.Builder
 	for _, r := range strings.ToLower(heading) {
 		switch {
