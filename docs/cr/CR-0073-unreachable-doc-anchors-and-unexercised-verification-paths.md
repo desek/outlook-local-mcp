@@ -127,8 +127,17 @@ with that anchor receives `section "..." not found`. The workaround is
 `output=raw`, which returns the whole document and spends the context the
 section parameter exists to save.
 
-`SeeDocs` is not currently populated in the registry, so no verb points at
-these anchors yet. The documents' own cross-links are what an LLM follows.
+`SeeDocs` is populated for exactly one verb today — `system.help` points at
+`concepts#in-server-documentation-surface` (`internal/tools/help/verb.go:43`),
+a text-derived anchor that resolves. No verb's `SeeDocs` points at any of the
+five broken explicit anchors, so the failure surfaces only through the
+documents' own cross-links, which is what an LLM follows.
+
+Note that `SeeDocs` anchors are already guarded by `TestSeeDocsAnchorsResolve`
+(`internal/tools/verb_metadata_test.go:227`), but that test resolves anchors
+against its own `buildHeadingIndex` helper rather than through the production
+`get_docs` path — see "Why the test suite does not catch it" below for why that
+gap is load-bearing here.
 
 ### Why the test suite does not catch it
 
@@ -145,6 +154,25 @@ explicit anchor:
 `TestSystemGetDocs_Section` exercises one section that has no explicit anchor.
 The suite therefore describes the implementation rather than the corpus, and
 would keep passing if a sixth explicit anchor were added tomorrow.
+
+There is a second, more dangerous copy of the parser. `internal/tools/verb_metadata_test.go`
+(package `tools_test`) carries its **own** `headingToAnchor` (line 313) and a
+`buildHeadingIndex` helper (line ~285) that `TestSeeDocsAnchorsResolve` uses.
+That helper strips `{#...}` and registers **both** the explicit anchor **and**
+the text-derived anchor for each heading. Two consequences follow, and both
+must be handled by this CR:
+
+* The heading-index copy is **more correct than production**: it already
+  registers `container-no-keychain` as a valid anchor, so a verb whose
+  `SeeDocs` pointed at an explicit anchor would pass `TestSeeDocsAnchorsResolve`
+  while `get_docs` returned `section not found`. The test's notion of a
+  reachable anchor already diverges from what the production path can retrieve —
+  a latent instance of the exact class this CR names.
+* After the parser fix makes the derived form stop resolving (FR-3),
+  `buildHeadingIndex` will still register that derived form, so it will accept
+  anchors `get_docs` can no longer reach. `buildHeadingIndex` and its duplicate
+  `headingToAnchor` **MUST** be reconciled with the production parser in the
+  same change, or the new corpus test built on it will contradict FR-3.
 
 ### Unexercised verification paths
 
@@ -163,11 +191,12 @@ have. The test agent reconciles these against `help` output on every run,
 which works but means each run silently absorbs an error the prompt should not
 contain:
 
-| Prompt says | Registry has | Step |
-|-------------|--------------|------|
-| `id` | `message_id` | 33 |
-| `folder` | `folder_id` | 30 |
-| "match by event ID in the text" | `search_events` text output has no event ID | 5, 16 |
+| Prompt says | Registry has | Step(s) |
+|-------------|--------------|---------|
+| `get_message` with `id` | `message_id` | 32, 34 |
+| `get_conversation` with `id` | `conversation_id` (the value passed is a conversation ID, not a message ID) | 35 |
+| `list_messages` with `folder` | `folder_id` | 30b–30e, 33, 35, 36 |
+| "match by event ID in the text" | `search_events` text output has no event ID | 5, 6 |
 
 ### The `grype` instrument caveat
 
@@ -224,10 +253,17 @@ Keep `TestHeadingToAnchor` for the derivation rules themselves and extend it
 with explicit-anchor cases, including the case where the explicit anchor
 differs from the derived one.
 
-Add a second test asserting that every intra-document cross-link of the form
-`](#anchor)` in an embedded document resolves to a real section in that
-document. That is what turns a broken cross-reference into a build failure
-rather than a runtime disappointment.
+Add a second test asserting that every section cross-link in an embedded
+document resolves to a real section. The test **MUST** cover both forms the
+corpus actually uses: intra-document links (`](#anchor)`, resolving in the same
+document) and inter-document links (`](slug#anchor)`, resolving in the target
+document). This matters because four of the five cross-links this CR names are
+inter-document — for example `concepts.md` links `troubleshooting#container-no-keychain`,
+the very link the first Change Driver cites — so a test restricted to the
+`](#anchor)` form would guard only one of the five. That is what turns a broken
+cross-reference into a build failure rather than a runtime disappointment.
+`TestSeeDocsAnchorsResolve` already parses the `slug#anchor` form, so the
+resolution helper this needs already exists in the test package.
 
 ### 3. Close the unexercised-path gap where it is cheap
 
@@ -297,8 +333,10 @@ flowchart TD
    `container-runtime`.
 6. A test **MUST** walk every H2 heading in every embedded document and assert
    that `get_docs` with the computed anchor returns non-empty content.
-7. A test **MUST** assert that every intra-document `](#anchor)` cross-link in
-   an embedded document resolves to a section in that document.
+7. A test **MUST** assert that every section cross-link in an embedded document
+   resolves to a real section, covering both the intra-document form
+   (`](#anchor)`, resolving in the same document) and the inter-document form
+   (`](slug#anchor)`, resolving in the target document).
 8. `TestHeadingToAnchor` **MUST** include a case where the explicit anchor
    differs from the text-derived anchor.
 9. `.github/workflows/site.yml` **MUST** run at least one `.agents/scripts/`
@@ -313,19 +351,22 @@ flowchart TD
     caveat, stating that the release build strips symbols, that matching
     therefore falls back to module granularity, and what would restore
     reachability-precision.
-13. `docs/prompts/mcp-tool-crud-test.md` **MUST** name `message_id` rather
-    than `id`, and `folder_id` rather than `folder`.
+13. `docs/prompts/mcp-tool-crud-test.md` **MUST** name each mail parameter by
+    its registry name: `message_id` (not `id`) for `get_message` at Steps 32
+    and 34; `conversation_id` (not `id`) for `get_conversation` at Step 35,
+    because the value passed there is a conversation ID; and `folder_id` (not
+    `folder`) for `list_messages` at Steps 30b–30e, 33, 35, and 36.
 14. `docs/prompts/mcp-tool-crud-test.md` **MUST NOT** instruct the agent to
-    match a provenance search by event ID in text output, because that output
-    does not contain one.
+    match a provenance search by event ID in text output at Steps 5 and 6,
+    because `search_events` text output does not contain an event ID.
 15. `docs/prompts/mcp-tool-crud-test.md` **MUST** record that a mail list
     capped at `max_results` is expected on large mailboxes and is not a
     finding.
 
 ### Non-Functional Requirements
 
-1. No verb **MUST** be added, removed, renamed, or re-signatured; the change
-   is a defect fix behind existing signatures.
+1. The change **MUST NOT** add, remove, rename, or re-signature any verb; it is
+   a defect fix behind existing signatures.
 2. The embedded bundle **MUST** remain exactly four files.
 3. `make ci` **MUST** pass, including `-race`.
 4. The `site.yml` harness job **MUST NOT** add a dependency on live
@@ -338,6 +379,12 @@ flowchart TD
 * `internal/tools/get_docs.go`: `headingToAnchor` and `extractSection`.
 * `internal/tools/get_docs_test.go`: extended derivation cases, new corpus and
   cross-link tests.
+* `internal/tools/verb_metadata_test.go`: the duplicate `headingToAnchor` (line
+  313) and `buildHeadingIndex` (line ~285) helper. Both **MUST** be reconciled
+  with the fixed production parser so the heading index no longer accepts the
+  text-derived anchor of an explicit-anchor heading, keeping
+  `TestSeeDocsAnchorsResolve` consistent with FR-3 and with the production
+  `get_docs` path.
 * `.github/workflows/site.yml`: new harness job.
 * `docs/reference/release.md`: `make crud-test` as a manual release gate.
 * `docs/reference/security.md`: the unexercised-path rule, the three
@@ -490,7 +537,7 @@ flowchart LR
 | Test File | Test Name | Description | Inputs | Expected Output |
 |-----------|-----------|-------------|--------|-----------------|
 | `internal/tools/get_docs_test.go` | `TestGetDocs_EveryHeadingReachable` | Walks every H2 heading in all four embedded documents, computes its anchor, and asserts `get_docs` returns non-empty content for it. Fails for any future unreachable heading without being edited | The embedded bundle | Every heading resolves; failure names the document and heading |
-| `internal/tools/get_docs_test.go` | `TestGetDocs_CrossLinksResolve` | Extracts every intra-document `](#anchor)` link from each embedded document and asserts each resolves to a section in that document | The embedded bundle | Every cross-link resolves; failure names the link and source line |
+| `internal/tools/get_docs_test.go` | `TestGetDocs_CrossLinksResolve` | Extracts every section cross-link from each embedded document — both intra-document `](#anchor)` and inter-document `](slug#anchor)` — and asserts each resolves to a section in the correct document | The embedded bundle | Every cross-link resolves; failure names the link and source line |
 | `internal/tools/get_docs_test.go` | `TestGetDocs_ExplicitAnchorSections` | Asserts the five specific sections resolve by their documented anchors | `before-you-file-an-issue`, `auto-default-account`, `container-no-keychain`, `container-deployment`, `container-runtime` | All five return their own content, no cross-section bleed |
 
 ### Tests to Modify
@@ -498,6 +545,7 @@ flowchart LR
 | Test File | Test Name | Current Behavior | New Behavior | Reason for Change |
 |-----------|-----------|------------------|--------------|-------------------|
 | `internal/tools/get_docs_test.go` | `TestHeadingToAnchor` | Four cases, none with an explicit anchor | Adds explicit-anchor cases, including one where the explicit anchor differs from the derived form, and one asserting the derived form does **not** resolve for such a heading | FR-1, FR-3, FR-8. The current cases describe the implementation rather than the corpus, which is why the defect survived |
+| `internal/tools/verb_metadata_test.go` | `buildHeadingIndex` (helper for `TestSeeDocsAnchorsResolve`) | Registers both the explicit anchor and the text-derived anchor for a `{#...}` heading, via a duplicate `headingToAnchor` | Register only the anchor the fixed `get_docs` can retrieve, so its derivation matches the production parser (the file is `package tools_test` and cannot call the unexported production helper, so the derivation must be kept behaviourally identical rather than literally shared) | FR-3. Otherwise the index accepts anchors `get_docs` cannot resolve, silently permitting the same class of defect through `SeeDocs` |
 
 ### Tests to Remove
 
@@ -618,8 +666,8 @@ Then it states that the passing verdict is coarser than it appears
 ```gherkin
 Given the CRUD prompt named parameters the registry does not have
 When a maintainer compares docs/prompts/mcp-tool-crud-test.md against the domain help output
-Then the prompt names message_id and folder_id
-  And it does not instruct matching a provenance search by event ID in text output
+Then the prompt names message_id for get_message, conversation_id for get_conversation, and folder_id for list_messages
+  And it does not instruct matching a provenance search by event ID in text output at Steps 5 and 6
   And it records that a max_results-capped mail list is expected on large mailboxes
 ```
 
@@ -801,3 +849,101 @@ The uncomfortable implication is that the sample is not three. It is three
 the rule down and for the AC-9 requirement that a new gate be proven to fail
 before it is trusted, rather than for treating the three as fixed and moving
 on.
+
+<!-- review-summary -->
+## Review Summary (cr-reviewer, 2026-08-01)
+
+Reviewed against the live tree at branch `docs/cr-0073` / source commit
+`dcfbadd` (confirmed `chore(main): release 0.5.1`).
+
+### Verified accurate (no change)
+
+* The central defect: `internal/tools/get_docs.go:115` `headingToAnchor` drops
+  `{`, `#`, `}` but keeps the letters, concatenating the explicit anchor onto
+  the derived one. Confirmed by reading the source.
+* All five explicit anchors exist verbatim at the cited headings:
+  `troubleshooting.md:7` (before-you-file-an-issue), `troubleshooting.md:288`
+  (auto-default-account), `troubleshooting.md:319` (container-no-keychain),
+  `quickstart.md:186` (container-deployment), `concepts.md:155`
+  (container-runtime). Distribution across three of four embedded docs is
+  correct.
+* All five cross-link line numbers are exact: `concepts.md:183`,
+  `concepts.md:149`, `quickstart.md:83`, `quickstart.md:251`,
+  `troubleshooting.md:284`.
+* `TestHeadingToAnchor` has exactly four hand-listed cases, none with an
+  explicit anchor. `TestSystemGetDocs_Section` uses a derived anchor. Confirmed.
+* No workflow references `crud-test` (grep of `.github/workflows/` empty).
+* The `-s -w` symbol-stripping build flags are present (`.goreleaser.yaml:28,43`)
+  and the specific grype "no function symbols" caveat is **not** yet in
+  `docs/reference/security.md`, so FR-12 is a genuine addition, not drift.
+
+### Findings by category
+
+**Drift (3):**
+
+1. **SeeDocs claim false.** The CR stated "`SeeDocs` is not currently populated
+   in the registry." It **is** populated for `system.help`
+   (`internal/tools/help/verb.go:43` → `concepts#in-server-documentation-surface`),
+   and `TestSeeDocsAnchorsResolve` already guards SeeDocs anchors. The true
+   point (no verb targets the five broken anchors) survives. **Fixed:** Current
+   State rewritten.
+2. **Duplicate parser and heading-index helper unmentioned.**
+   `internal/tools/verb_metadata_test.go` (package `tools_test`) carries its own
+   `headingToAnchor` (line 313) and `buildHeadingIndex` (line ~285), which
+   registers **both** the explicit and the text-derived anchor. This (a) is a
+   latent instance of the same bug — a `SeeDocs` pointing at an explicit anchor
+   passes the metadata test while `get_docs` fails — and (b) directly conflicts
+   with FR-3 once the fix lands. **Fixed:** added to Current State, Affected
+   Components, and a Tests-to-Modify row requiring reconciliation.
+3. **Harness-prompt drift table inaccurate.** Verified against the live prompt
+   and registry: the bare-`id` defect is at Steps 32/34 (`get_message` →
+   `message_id`) and Step 35 (`get_conversation` → **`conversation_id`**, not
+   `message_id` as the CR claimed — the value is a conversation ID); the
+   `folder` → `folder_id` defect (`list_messages`) is at Steps 30b–30e, 33, 35,
+   36; and "match by event ID in the text" is at Steps 5 and 6 (not "5, 16").
+   The CR's cited "Step 33" for `id` is wrong — Step 33 already uses
+   `message_id`. **Fixed:** Current State table, FR-13, FR-14, and AC-13
+   corrected.
+
+**Requirement/AC coverage (1):**
+
+4. **Cross-link test scoped too narrowly.** FR-7 and `TestGetDocs_CrossLinksResolve`
+   covered only intra-document `](#anchor)` links, but four of the five cited
+   cross-links — including the primary Change Driver
+   (`concepts.md` → `troubleshooting#container-no-keychain`) — are
+   inter-document `](slug#anchor)`. As scoped, the test would guard only one of
+   the five. AC-7 was already general, so FR-7 was narrower than its own AC.
+   **Fixed:** Proposed Change #2, FR-7, and the Test Strategy row broadened to
+   both forms.
+
+**Ambiguity (1):**
+
+5. **NFR-1 RFC-2119 construction.** "No verb **MUST** be added, removed…" reads
+   as "it is not required that a verb be added," the opposite of the intended
+   prohibition. **Fixed:** rewritten to "The change **MUST NOT** add, remove,
+   rename, or re-signature any verb."
+
+### Fixes applied
+
+Current State (SeeDocs, duplicate-parser subsection, harness-prompt table);
+Affected Components (added `verb_metadata_test.go`); FR-7, FR-13, FR-14, NFR-1;
+AC-13; Proposed Change #2; Test Strategy (cross-link row broadened, new
+`buildHeadingIndex` modify-row). Path/symbol updates from drift reconciliation:
+`internal/tools/help/verb.go:43`, `internal/tools/verb_metadata_test.go:227/285/313`.
+
+### Not changed (deliberate)
+
+* `make crud-test` not wired into CI, and the embedded documents not edited —
+  both reasoned in Scope Boundaries; left intact per author intent.
+* Em-dash usage left as-is: the repo's docs and CRs use em-dashes throughout, so
+  this is not enforced as a project convention here.
+* Change Summary/Decision Outcome use "replace" while Proposed Change #2 keeps
+  `TestHeadingToAnchor` and adds the corpus test. The FRs (FR-6 add, FR-8 keep
+  and extend) are unambiguous, so this is framing, not a requirement conflict;
+  left as-is.
+
+### Unresolvable items requiring human decision
+
+None. The `buildHeadingIndex`/duplicate-parser reconciliation is specified as an
+implementable scope addition rather than left open.
+<!-- /review-summary -->
