@@ -40,13 +40,13 @@ jobs:
   build-and-audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Node plus corepack, which resolves pnpm from the "packageManager" field in
       # site/package.json, so no pnpm version is pinned here. Kept identical to
       # deploy-site.yml on purpose: a gate that passes on the pull request and fails on
       # the deploy, because the two ran different toolchains, would be worse than no gate.
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
       - name: Enable corepack
