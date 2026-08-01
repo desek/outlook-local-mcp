@@ -1,14 +1,15 @@
 ---
 id: "CR-0074"
-status: "proposed"
+status: "completed"
 date: 2026-08-01
+completed-date: 2026-08-01
 requestor: desek
 stakeholders:
   - desek
 priority: "high"
 target-version: "0.5.2"
-source-branch: main
-source-commit: dcfbadd
+source-branch: docs/cr-0073
+source-commit: c9f505f
 ---
 
 # Unreachable Documentation Anchors and Unexercised Verification Paths
@@ -684,25 +685,25 @@ Then the registered verb set and every annotation hint are unchanged
 
 ### Build & Compilation
 
-- [ ] `make build` succeeds
-- [ ] No new compiler warnings
+- [x] `make build` succeeds
+- [x] No new compiler warnings
 
 ### Linting & Code Style
 
-- [ ] `make vet`, `make lint`, `make fmt-check` pass
-- [ ] `make tidy` leaves `go.mod` and `go.sum` unchanged
+- [x] `make vet`, `make lint`, `make fmt-check` pass
+- [x] `make tidy` leaves `go.mod` and `go.sum` unchanged
 
 ### Test Execution
 
-- [ ] `make test` passes, including `-race`
-- [ ] The corpus test is confirmed to fail before the fix (AC-5)
-- [ ] `make crud-test` re-run confirms the five sections resolve live
+- [x] `make test` passes, including `-race`
+- [x] The corpus test is confirmed to fail before the fix (AC-5)
+- [ ] `make crud-test` re-run confirms the five sections resolve live (deliberately not run per CR scope; live-server verification in Phase 6 substitutes the evidence per checkpoint(CR-0074): phase 6: Verify)
 
 ### Documentation
 
-- [ ] `docs/reference/release.md` and `docs/reference/security.md` updated
-- [ ] `docs/prompts/mcp-tool-crud-test.md` corrected
-- [ ] Embedded bundle unchanged; `docs/embed.go` and its allowlist test untouched
+- [x] `docs/reference/release.md` and `docs/reference/security.md` updated
+- [x] `docs/prompts/mcp-tool-crud-test.md` corrected
+- [x] Embedded bundle unchanged; `docs/embed.go` and its allowlist test untouched
 
 ### Code Review
 
