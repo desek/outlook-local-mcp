@@ -98,6 +98,12 @@ type BusyPeriod struct {
 	Status string `json:"status"`
 	// Subject is the event subject line.
 	Subject string `json:"subject"`
+	// DisplayTime is the localised, human-readable rendering of Start and End,
+	// built with graph.FormatDisplayTime so that text output matches the
+	// convention event listings already use. Start and End remain the raw ISO
+	// 8601 values for machine consumers, so raw and summary output are
+	// unchanged. Empty when Graph supplied no usable start or end.
+	DisplayTime string `json:"displayTime,omitempty"`
 }
 
 // NewHandleGetFreeBusy creates a tool handler that retrieves busy periods
@@ -273,6 +279,12 @@ func NewHandleGetFreeBusy(retryCfg graph.RetryConfig, timeout time.Duration, def
 				if e := event.GetEnd(); e != nil {
 					bp.End = graph.SafeStr(e.GetDateTime())
 				}
+				// Reuse the helper event listings already use, rather than
+				// re-deriving the localisation here. Previously this code read
+				// only GetDateTime and discarded GetTimeZone, which is why
+				// free/busy text showed unlabelled UTC clock times while event
+				// text showed localised ones.
+				bp.DisplayTime = formatEventDisplayTime(event)
 				busyPeriods = append(busyPeriods, bp)
 			}
 			return true

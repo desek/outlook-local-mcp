@@ -571,7 +571,7 @@ Call `{tool: "mail", args: {operation: "list_messages", ...}}` four times with t
 
 If `config.features.mail_manage_enabled` from Step 0c is `false`, **skip** Steps 31 through 35 and record them as SKIP.
 
-Call `{tool: "mail", args: {operation: "create_draft", to: "<own UPN>", subject: "CRUD test draft", body: "Created by MCP CRUD lifecycle test.", importance: "normal"}}`.
+Call `{tool: "mail", args: {operation: "create_draft", to_recipients: "<own UPN>", subject: "CRUD test draft", body: "Created by MCP CRUD lifecycle test.", importance: "normal"}}`.
 
 - **Verify:** Response is a plain text confirmation including the draft's message ID.
 - **Record:** The draft's message ID as **draft ID**.
@@ -617,7 +617,7 @@ Call `{tool: "mail", args: {operation: "get_conversation", conversation_id: "<co
 
 Using `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox", has_attachments: true, max_results: 1}}` pick a message that has attachments. If none found, skip Step 36.
 
-Call `{tool: "mail", args: {operation: "get_message", message_id: "<message ID>", output: "summary"}}` to enumerate its attachment IDs. Then call:
+Call `{tool: "mail", args: {operation: "list_attachments", message_id: "<message ID>"}}` to enumerate its attachment IDs. Note that `get_message` does not return them at any output tier: its summary carries `hasAttachments` only, so `list_attachments` is the verb that yields an attachment ID. Then call:
 
 `{tool: "mail", args: {operation: "get_attachment", message_id: "<message ID>", attachment_id: "<first attachment ID>"}}`.
 

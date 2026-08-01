@@ -8,6 +8,8 @@ package tools
 import (
 	"strings"
 	"testing"
+
+	"github.com/microsoftgraph/msgraph-sdk-go/models"
 )
 
 // TestFormatEventsText_MultipleEvents verifies that multiple events are
@@ -123,6 +125,39 @@ func TestFormatFreeBusyText(t *testing.T) {
 	}
 	if !strings.Contains(result, "Busy") {
 		t.Error("expected title-cased 'Busy' in output")
+	}
+	// No DisplayTime is set on these periods, so the raw ISO fallback applies.
+	if !strings.Contains(result, "2026-03-19T14:00:00 - 2026-03-19T15:00:00") {
+		t.Error("expected the raw start-end fallback when DisplayTime is empty")
+	}
+}
+
+// TestFormatFreeBusyText_PrefersDisplayTime verifies that a busy period
+// carrying a localised DisplayTime renders that rather than the raw ISO
+// timestamps. The harness run of 2026-08-01 found free/busy text showing
+// unlabelled UTC clock times while event listings showed localised ones, which
+// misreports the time to anyone reading the text output at face value.
+func TestFormatFreeBusyText_PrefersDisplayTime(t *testing.T) {
+	data := FreeBusyResponse{
+		TimeRange: FreeBusyTimeRange{Start: "2026-08-08T00:00:00", End: "2026-08-08T23:59:59"},
+		BusyPeriods: []BusyPeriod{
+			{
+				Start:       "2026-08-08T12:00:00",
+				End:         "2026-08-08T13:00:00",
+				Status:      "busy",
+				Subject:     "CRUD test event",
+				DisplayTime: "Fri, 08 Aug 2026 14:00 - 15:00 (CEST)",
+			},
+		},
+	}
+
+	result := FormatFreeBusyText(data)
+
+	if !strings.Contains(result, "Fri, 08 Aug 2026 14:00 - 15:00 (CEST)") {
+		t.Errorf("expected the localised DisplayTime in output, got %q", result)
+	}
+	if strings.Contains(result, "2026-08-08T12:00:00") {
+		t.Errorf("expected the raw UTC timestamp to be replaced by DisplayTime, got %q", result)
 	}
 }
 
@@ -640,5 +675,47 @@ func TestFormatAccountLine_EmptyLabel(t *testing.T) {
 	result := FormatAccountLine("", "user@example.com")
 	if result != "" {
 		t.Errorf("FormatAccountLine with empty label = %q, want empty string", result)
+	}
+}
+
+// TestFormatEventDisplayTime_CarriesTimezone verifies that the shared
+// display-time helper honours the timezone Graph returns alongside the
+// timestamp, rather than rendering the bare UTC clock value.
+//
+// This covers the population path for both event listings and free/busy. The
+// free/busy handler previously read GetDateTime and discarded GetTimeZone, so
+// its text output showed unlabelled UTC times while event text showed
+// localised ones. The formatter test alone could not catch that, because it
+// supplies DisplayTime by hand.
+func TestFormatEventDisplayTime_CarriesTimezone(t *testing.T) {
+	mk := func(dt, tz string) *models.DateTimeTimeZone {
+		d := models.NewDateTimeTimeZone()
+		d.SetDateTime(&dt)
+		d.SetTimeZone(&tz)
+		return d
+	}
+
+	event := models.NewEvent()
+	event.SetStart(mk("2026-08-08T14:00:00.0000000", "W. Europe Standard Time"))
+	event.SetEnd(mk("2026-08-08T15:00:00.0000000", "W. Europe Standard Time"))
+	allDay := false
+	event.SetIsAllDay(&allDay)
+
+	got := formatEventDisplayTime(event)
+
+	if got == "" {
+		t.Fatal("expected a non-empty display time")
+	}
+	// The raw Graph timestamp must not survive into the display string.
+	if strings.Contains(got, "2026-08-08T14:00:00.0000000") {
+		t.Errorf("expected the raw ISO timestamp to be formatted away, got %q", got)
+	}
+	// The wall-clock hour Graph reported must be preserved, not shifted. The
+	// helper renders 12-hour time, so 14:00 appears as "2:00 PM".
+	if !strings.Contains(got, "2:00 PM") {
+		t.Errorf("expected the 14:00 start preserved as 2:00 PM, got %q", got)
+	}
+	if !strings.Contains(got, "3:00 PM") {
+		t.Errorf("expected the 15:00 end preserved as 3:00 PM, got %q", got)
 	}
 }

@@ -221,7 +221,15 @@ func FormatFreeBusyText(data FreeBusyResponse) string {
 			subject = "(No subject)"
 		}
 		fmt.Fprintf(&b, "%d. %s\n", i+1, subject)
-		fmt.Fprintf(&b, "   %s - %s | %s\n", bp.Start, bp.End, strings.Title(bp.Status)) //nolint:staticcheck // strings.Title is sufficient for single-word enum values
+
+		// Prefer the localised rendering so free/busy text matches the
+		// convention event listings use. Falling back to the raw ISO values
+		// keeps output useful when Graph supplied no usable timezone.
+		when := bp.DisplayTime
+		if when == "" {
+			when = fmt.Sprintf("%s - %s", bp.Start, bp.End)
+		}
+		fmt.Fprintf(&b, "   %s | %s\n", when, strings.Title(bp.Status)) //nolint:staticcheck // strings.Title is sufficient for single-word enum values
 
 		if i < len(data.BusyPeriods)-1 {
 			b.WriteString("\n")
