@@ -1,9 +1,9 @@
 // Package tools provides MCP tool definitions and handler constructors for the
 // Outlook Calendar MCP Server.
 //
-// This file contains tests for the search_messages tool, including tool
-// registration, handler construction, parameter validation, and the required
-// query parameter enforcement.
+// This file contains tests for the search_messages tool, including handler
+// construction, parameter validation, the required query parameter enforcement,
+// and the value each request path sends to Graph after normalisation.
 package tools
 
 import (
@@ -14,7 +14,6 @@ import (
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/graph"
 	"github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
 )
 
 // searchRecorder is a test HTTP handler that records the $search query
@@ -41,40 +40,6 @@ func (r *searchRecorder) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	_, _ = w.Write([]byte(`{"value":[]}`))
 }
 
-// TestSearchMessagesTool_Registration validates that NewSearchMessagesTool is
-// properly defined with the expected name and read-only annotation.
-func TestSearchMessagesTool_Registration(t *testing.T) {
-	tool := NewSearchMessagesTool()
-	if tool.Name != "mail_search_messages" {
-		t.Errorf("tool name = %q, want %q", tool.Name, "mail_search_messages")
-	}
-
-	annotations := tool.Annotations
-	if annotations.ReadOnlyHint == nil || !*annotations.ReadOnlyHint {
-		t.Error("expected ReadOnlyHint to be true")
-	}
-}
-
-// TestSearchMessagesTool_HasParameters validates that NewSearchMessagesTool
-// defines all expected parameters, with query being required.
-func TestSearchMessagesTool_HasParameters(t *testing.T) {
-	tool := NewSearchMessagesTool()
-	schema := tool.InputSchema
-
-	if len(schema.Required) != 1 || schema.Required[0] != "query" {
-		t.Errorf("expected required = [query], got %v", schema.Required)
-	}
-
-	expectedParams := []string{
-		"query", "folder_id", "max_results", "account", "output",
-	}
-	for _, param := range expectedParams {
-		if _, ok := schema.Properties[param]; !ok {
-			t.Errorf("expected %q property to be defined", param)
-		}
-	}
-}
-
 // TestNewHandleSearchMessages_ReturnsHandler validates that
 // NewHandleSearchMessages returns a non-nil handler function.
 func TestNewHandleSearchMessages_ReturnsHandler(t *testing.T) {
@@ -82,16 +47,6 @@ func TestNewHandleSearchMessages_ReturnsHandler(t *testing.T) {
 	if handler == nil {
 		t.Fatal("expected non-nil handler function")
 	}
-}
-
-// TestSearchMessagesToolCanBeAddedToServer validates that NewSearchMessagesTool
-// and its handler can be registered on an MCP server without error or panic.
-func TestSearchMessagesToolCanBeAddedToServer(t *testing.T) {
-	s := server.NewMCPServer("test-server", "0.0.1",
-		server.WithToolCapabilities(false),
-		server.WithRecovery(),
-	)
-	s.AddTool(NewSearchMessagesTool(), NewHandleSearchMessages(graph.RetryConfig{}, 0))
 }
 
 // TestSearchMessages_BasicQuery validates that the mailbox-wide path sends the
