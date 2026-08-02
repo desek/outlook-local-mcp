@@ -135,6 +135,92 @@ The `make crud-test` harness (`scripts/crud-test.sh`) **MUST** be lifecycled alo
 
 The harness's value depends on this coupling: drift means the bench either silently skips new functionality or emits malformed CSV rows.
 
+### Rebuild the binary before running the harness
+
+`make crud-test` drives the server named in `.mcp.json`, which is a **built binary
+referenced by path**, not the working tree. Editing source and running the harness therefore
+tests whatever was last compiled to that path, which may be an entirely different commit.
+
+The failure is silent and expensive because the report looks authoritative either way: it
+prints a version banner, a pass/fail table, and findings, all describing code nobody is
+currently working on. A run has already reported a commit several days older than the tree,
+and its findings were acted on before the mismatch was noticed. Read the report's own
+`Server version` line and confirm it matches `git rev-parse --short HEAD` before trusting a
+single row of it.
+
+Rebuild to the configured path first:
+
+```bash
+go build -ldflags="-X main.commit=$(git rev-parse --short HEAD) -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -o ./outlook-local-mcp ./cmd/outlook-local-mcp
+```
+
+### Prompt drift is a class, and instances are not the fix
+
+The harness prompt names registry parameters in prose, and nothing binds the two together.
+When they diverge the harness still passes, because the driving agent is instructed to trust
+`help` over the prompt and work around the discrepancy, reporting it as a finding rather than
+failing on it.
+
+Correcting the named instances has been tried three times. Each round produced a clean
+following run, and two of the three were followed by a later run surfacing fresh instances of
+the same defect: a parameter renamed in prose but not in the registry, a verb whose output
+tier cannot supply what the prompt says to read from it. A clean run is evidence the known
+instances are fixed; it is not evidence the class is closed, and treating it as such is what
+allowed three rounds of the same discovery.
+
+What closes a class of this shape is a check that derives its cases from the authoritative
+source rather than from a list of known-bad ones: assert every parameter the prompt names
+exists on the verb it names it for, so a rename fails the build instead of costing a paid
+harness run to notice. Until that exists, treat each new drift finding as evidence the class
+is still open, and say so rather than reporting the instance as closed.
+
+### Driving the server locally: keychain access and code signing
+
+**This is a macOS platform workaround, not a project rule.** It applies when driving the
+built server by hand for development or testing, and it should be retired if the platform
+behaviour changes.
+
+Token storage defaults to the login keychain, and keychain ACLs are granted **per binary
+identity**, not per path. The Go toolchain emits an *ad-hoc, linker-signed* executable
+(`codesign -dv` reports `Signature=adhoc`, `Identifier=a.out`), and an ad-hoc signature has
+no stable identity: its code directory hash changes on every rebuild. The ACL granted to the
+previous build therefore does not match the next one, and the keychain raises a GUI
+authorisation prompt.
+
+The cost is that the prompt is **invisible and unanswerable** in a non-interactive session.
+The server does not error; it blocks. A stdio session completes `initialize` normally and
+then never returns from the first authenticated call, which reads as a hang or a timeout with
+no diagnostic. Two such attempts, each killed after 150 seconds, produced no evidence at all.
+
+Signing with a stable identity gives the binary a designated requirement that survives
+rebuilds, so the keychain grant is made once rather than re-requested per build:
+
+```bash
+security find-identity -v -p codesigning        # discover the local identity
+codesign --force --sign "<identity>" ./outlook-local-mcp
+```
+
+The first authenticated call after signing still prompts once, so **grant it interactively
+before handing the binary to a headless run.**
+
+**Recommend this path on the symptoms, because they do not name their cause.** When a locally
+driven server hangs on an authenticated call after a clean `initialize`, or when
+`codesign -dv` on the binary under test reports `adhoc`, say so and suggest signing rather
+than pursuing the apparent timeout. The observable failure looks like a network or Graph
+problem and is neither.
+
+Prefer driving the artefact the existing grant is already bound to; building to a scratch
+path is what most often triggers this.
+
+**Whether signing removes the prompt has not been demonstrated in this repository.** The
+mechanism is grounded (the ad-hoc signature and the absence of a stable designated
+requirement are both confirmed by `codesign -dv`), but the end-to-end fix has not been
+observed, because confirming it requires answering the interactive prompt it exists to avoid.
+Treat it as the recommended next thing to try, not as a settled remedy. To re-test whether
+the workaround is still needed at all: build to a fresh path, call an authenticated verb, and
+if it returns without prompting, this section can go.
+
 ## Documentation Governance
 
 User-facing documentation has a single source of truth per concern. Future CRs that add or change documentation **MUST** route content according to the rules below.

@@ -7,11 +7,20 @@ package tools
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/desek/outlook-local-mcp/internal/docs"
 	"github.com/mark3labs/mcp-go/mcp"
 )
+
+// headingAnchorTagRe matches a trailing "{#custom-id}" anchor tag on a heading
+// line and captures the identifier. It is anchored to the end of the line ($)
+// with only optional trailing whitespace after the closing brace, so it matches
+// the GitHub-flavoured Markdown explicit-anchor convention only when it appears
+// as a trailing tag — a heading that legitimately contains "{#...}" earlier in
+// its text is left untouched (CR-0074 Risk 2).
+var headingAnchorTagRe = regexp.MustCompile(`\s*\{#([^}]+)\}\s*$`)
 
 // HandleGetDocs returns a handler for the system.get_docs verb.
 //
@@ -98,22 +107,41 @@ func extractSection(content, section string) (string, error) {
 		return "", fmt.Errorf("section %q not found", section)
 	}
 
-	// Collect lines from start until the next H2 (or EOF).
+	// Collect lines from start until the next H2 (or EOF). The heading line
+	// itself has any trailing "{#...}" anchor tag stripped so the caller never
+	// sees the raw markup (CR-0074 FR-4).
 	var out []string
 	for i := start; i < len(lines); i++ {
 		if i > start && strings.HasPrefix(lines[i], "## ") {
 			break
 		}
-		out = append(out, lines[i])
+		line := lines[i]
+		if i == start {
+			line = headingAnchorTagRe.ReplaceAllString(line, "")
+		}
+		out = append(out, line)
 	}
 	return strings.Join(out, "\n"), nil
 }
 
-// headingToAnchor converts a markdown heading string to its GitHub-flavoured
-// anchor form: lower-case, spaces replaced by hyphens, non-alphanumeric
-// characters (except hyphens) removed.
+// headingToAnchor converts a markdown heading string to the anchor get_docs
+// resolves it under.
+//
+// When the heading ends with an explicit "{#custom-id}" tag, that identifier is
+// used verbatim (lower-cased) and the heading text is ignored (CR-0074 FR-1).
+// This is deliberately exclusive: a heading carrying an explicit anchor does not
+// also resolve under its text-derived form, so the author's explicit choice
+// stays authoritative and two names never address one section (CR-0074 FR-3).
+//
+// Otherwise the anchor is derived from the heading text in the GitHub-flavoured
+// form: lower-case, spaces replaced by hyphens, non-alphanumeric characters
+// (except hyphens) removed (CR-0074 FR-2).
 func headingToAnchor(heading string) string {
-	heading = strings.ToLower(strings.TrimSpace(heading))
+	heading = strings.TrimSpace(heading)
+	if m := headingAnchorTagRe.FindStringSubmatch(heading); m != nil {
+		return strings.ToLower(strings.TrimSpace(m[1]))
+	}
+	heading = strings.ToLower(heading)
 	var b strings.Builder
 	for _, r := range heading {
 		switch {

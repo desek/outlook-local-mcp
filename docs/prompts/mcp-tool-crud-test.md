@@ -202,7 +202,7 @@ Call `{tool: "calendar", args: {operation: "create_event", ...}}` with:
 
 Call `{tool: "calendar", args: {operation: "search_events", created_by_mcp: true, query: "<timestamp portion>", date: "<test date>"}}`.
 
-- **Verify:** The text results contain the event created in Step 4 (match by event ID in the text).
+- **Verify:** The text results contain the event created in Step 4 (match by subject; `search_events` text output lists subjects, times, and locations but no event ID, so the unique timestamp in the subject is the match key).
 - **Verify:** The `created_by_mcp` filter correctly narrows results to MCP-created events only.
 - **Fail:** If the event is missing, the provenance tag was not stamped during creation.
 
@@ -210,7 +210,7 @@ Call `{tool: "calendar", args: {operation: "search_events", created_by_mcp: true
 
 Call `{tool: "calendar", args: {operation: "search_events", query: "<timestamp portion>", date: "next_week"}}`.
 
-- **Verify:** The text results contain the event created in Step 4 (match by event ID in the text).
+- **Verify:** The text results contain the event created in Step 4 (match by subject; `search_events` text output lists subjects, times, and locations but no event ID, so the unique timestamp in the subject is the match key).
 - **Fail:** If the event is not found, the `next_week` date shorthand is not resolving correctly.
 
 ### Step 7 -- Search with "this_week" date shorthand
@@ -558,19 +558,20 @@ Call `{tool: "mail", args: {operation: "list_messages", ...}}` four times with t
 
 | Call | Parameters                                                | Expected                                                         |
 |------|-----------------------------------------------------------|------------------------------------------------------------------|
-| 30b  | `folder: "Inbox", is_read: false`                         | Only unread messages are listed; count matches folder unread     |
-| 30c  | `folder: "Inbox", flag_status: "flagged"`                 | Only flagged messages are listed                                |
-| 30d  | `folder: "Inbox", provenance: "created_by_mcp"`           | Only MCP-tagged messages (may be empty if none created yet)     |
-| 30e  | `folder: "Inbox"` (no filters, baseline)                  | Baseline message count recorded for comparison                  |
+| 30b  | `folder_id: "Inbox", is_read: false`                      | Only unread messages are listed; count matches folder unread     |
+| 30c  | `folder_id: "Inbox", flag_status: "flagged"`              | Only flagged messages are listed                                |
+| 30d  | `folder_id: "Inbox", provenance: true`                    | Only MCP-tagged messages (may be empty if none created yet)     |
+| 30e  | `folder_id: "Inbox"` (no filters, baseline)               | Baseline message count recorded for comparison                  |
 
 - **Verify:** All calls return plain text. The filtered counts are less than or equal to the baseline.
 - **Fail:** If any call returns an error or ignores the filter.
+- **Expected scale artifact (not a finding):** On a large mailbox a list is capped at `max_results` (default 25, max 100), so a folder unread total far larger than the returned list is expected. A prior run recorded 27,214 unread against a default cap of 25; this is the cap working as designed, not a defect. Read the folder's own unread total from the count line, not from the number of rows returned, and do not raise it as a finding.
 
 ### Step 31 -- Create draft (skip if mail management disabled)
 
 If `config.features.mail_manage_enabled` from Step 0c is `false`, **skip** Steps 31 through 35 and record them as SKIP.
 
-Call `{tool: "mail", args: {operation: "create_draft", to: "<own UPN>", subject: "CRUD test draft", body: "Created by MCP CRUD lifecycle test.", importance: "normal"}}`.
+Call `{tool: "mail", args: {operation: "create_draft", to_recipients: "<own UPN>", subject: "CRUD test draft", body: "Created by MCP CRUD lifecycle test.", importance: "normal"}}`.
 
 - **Verify:** Response is a plain text confirmation including the draft's message ID.
 - **Record:** The draft's message ID as **draft ID**.
@@ -581,14 +582,14 @@ Call `{tool: "mail", args: {operation: "create_draft", to: "<own UPN>", subject:
 Call `{tool: "mail", args: {operation: "update_draft", message_id: "<draft ID>", subject: "CRUD test draft (updated)"}}`.
 
 - **Verify:** Response is plain text confirming the update.
-- **Verify:** A subsequent `{tool: "mail", args: {operation: "get_message", id: "<draft ID>"}}` call shows the updated subject.
+- **Verify:** A subsequent `{tool: "mail", args: {operation: "get_message", message_id: "<draft ID>"}}` call shows the updated subject.
 - **Fail:** If the update is not reflected.
 
 ### Step 33 -- Create reply draft
 
 Call `{tool: "mail", args: {operation: "create_reply_draft", message_id: "<draft ID>", comment: "Replying to my own draft."}}`. **Note:** `create_reply_draft` cannot reply to a draft message (Microsoft Graph constraint); the call is expected to return an error indicating the source must be a received or sent message. Fall back to using a recent Inbox message ID for this step.
 
-If the server rejects replying to a draft, instead pick the most recent message from `{tool: "mail", args: {operation: "list_messages", folder: "Inbox"}}` and reply to it. Record the reply draft ID as **reply draft ID**.
+If the server rejects replying to a draft, instead pick the most recent message from `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox"}}` and reply to it. Record the reply draft ID as **reply draft ID**.
 
 - **Verify:** Response is plain text confirming the reply draft creation with a new message ID.
 - **Fail:** If no reply draft is created.
@@ -600,23 +601,23 @@ Call `{tool: "mail", args: {operation: "delete_draft", message_id: "<reply draft
 Then call `{tool: "mail", args: {operation: "delete_draft", message_id: "<draft ID>"}}`.
 
 - **Verify:** Both calls return plain text delete confirmations.
-- **Verify:** A subsequent `{tool: "mail", args: {operation: "get_message", id: "<draft ID>"}}` returns an error (message no longer exists).
+- **Verify:** A subsequent `{tool: "mail", args: {operation: "get_message", message_id: "<draft ID>"}}` returns an error (message no longer exists).
 - **Fail:** If any draft remains retrievable.
 
 ### Step 35 -- Get conversation
 
-Call `{tool: "mail", args: {operation: "list_messages", folder: "Inbox", top: 1}}` and record the first message's `conversationId` as **conversation ID**. If Inbox is empty, skip Step 35.
+Call `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox", max_results: 1}}` and record the first message's `conversationId` as **conversation ID**. If Inbox is empty, skip Step 35.
 
-Call `{tool: "mail", args: {operation: "get_conversation", id: "<conversation ID>"}}`.
+Call `{tool: "mail", args: {operation: "get_conversation", conversation_id: "<conversation ID>"}}`.
 
 - **Verify:** Response is plain text listing one or more messages in chronological order.
 - **Fail:** If the call errors for a valid conversation ID.
 
 ### Step 36 -- Get attachment
 
-Using `{tool: "mail", args: {operation: "list_messages", folder: "Inbox", has_attachments: true, top: 1}}` pick a message that has attachments. If none found, skip Step 36.
+Using `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox", has_attachments: true, max_results: 1}}` pick a message that has attachments. If none found, skip Step 36.
 
-Call `{tool: "mail", args: {operation: "get_message", id: "<message ID>", output: "summary"}}` to enumerate its attachment IDs. Then call:
+Call `{tool: "mail", args: {operation: "list_attachments", message_id: "<message ID>"}}` to enumerate its attachment IDs. Note that `get_message` does not return them at any output tier: its summary carries `hasAttachments` only, so `list_attachments` is the verb that yields an attachment ID. Then call:
 
 `{tool: "mail", args: {operation: "get_attachment", message_id: "<message ID>", attachment_id: "<first attachment ID>"}}`.
 

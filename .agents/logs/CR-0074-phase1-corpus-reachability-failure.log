@@ -1,0 +1,10 @@
+=== RUN   TestGetDocs_EveryHeadingReachable
+    get_docs_test.go:89: unreachable heading: document "quickstart" heading "Container deployment {#container-deployment}" (anchor "container-deployment") is not reachable via get_docs
+    get_docs_test.go:89: unreachable heading: document "concepts" heading "Container runtime {#container-runtime}" (anchor "container-runtime") is not reachable via get_docs
+    get_docs_test.go:89: unreachable heading: document "troubleshooting" heading "Before you file an issue {#before-you-file-an-issue}" (anchor "before-you-file-an-issue") is not reachable via get_docs
+    get_docs_test.go:89: unreachable heading: document "troubleshooting" heading "Auto-default account {#auto-default-account}" (anchor "auto-default-account") is not reachable via get_docs
+    get_docs_test.go:89: unreachable heading: document "troubleshooting" heading "Container has no keychain access {#container-no-keychain}" (anchor "container-no-keychain") is not reachable via get_docs
+--- FAIL: TestGetDocs_EveryHeadingReachable (0.00s)
+FAIL
+FAIL	github.com/desek/outlook-local-mcp/internal/tools	1.367s
+FAIL

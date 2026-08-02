@@ -101,8 +101,12 @@ other's build:
 
 * `site.yml` — pull requests touching `site/**` or `docs/**`. Runs a production
   dependency audit (`pnpm --dir site audit --prod --audit-level=moderate`) before the
-  build, then builds and runs the Lighthouse gate, uploading the reports as an artifact
-  on failure as well as success.
+  build, then builds, exercises the `site.content.check.mjs` harness against the built
+  `site/dist` (so a `puppeteer-core` bump that breaks the harness import fails the check
+  rather than shipping silently, per CR-0074), and runs the Lighthouse gate, uploading
+  the reports as an artifact on failure as well as success. The harness step sets
+  `CHROME_PATH` to the runner's pre-installed Chrome; the script defaults to the local
+  macOS bundle, so it runs unchanged on a developer's Mac.
 * `deploy-site.yml` — push to `main`. The same build and gate, then publishes `dist/` to
   `gh-pages`. The gate runs *before* the publish step, so a regression blocks the deploy.
 * `ci.yml` — the Go pipeline; ignores site-only paths.
