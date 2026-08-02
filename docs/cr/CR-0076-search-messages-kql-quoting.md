@@ -1,14 +1,15 @@
 ---
 id: "CR-0076"
-status: "proposed"
+status: "completed"
 date: 2026-08-02
+completed-date: 2026-08-02
 requestor: desek
 stakeholders:
   - desek
 priority: "high"
 target-version: "0.6.1"
 source-branch: feat/cr-0073-surface-manifest
-source-commit: cbeafc5
+source-commit: f4e237c
 ---
 
 # Correct the KQL Quoting of `mail.search_messages`, and Make the Documented Syntax Executable
@@ -541,31 +542,31 @@ Then no third-party dependency has been added
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
-- [ ] Any linter exceptions are documented with justification
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
+- [x] Any linter exceptions are documented with justification
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass, including under the race detector
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass, including under the race detector
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] The new file carries a package-consistent docstring and an index annotation
-- [ ] The verb description states the parenthesised phrase rule and the first-token rule
-- [ ] The troubleshooting entry carries a stable anchor
+- [x] The new file carries a package-consistent docstring and an index annotation
+- [x] The verb description states the parenthesised phrase rule and the first-token rule
+- [x] The troubleshooting entry carries a stable anchor
 
 ### Code Review
 
-- [ ] Changes submitted via pull request
-- [ ] PR title follows Conventional Commits format
+- [x] Changes submitted via pull request
+- [x] PR title follows Conventional Commits format
 - [ ] Code review completed and approved
 - [ ] Changes squash-merged to maintain linear history
 
