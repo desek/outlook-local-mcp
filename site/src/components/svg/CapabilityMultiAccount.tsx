@@ -211,7 +211,7 @@ export default function CapabilityMultiAccount({ className }: Props) {
           <text x="0" y="4" textAnchor="middle" fontFamily="monospace" fontSize="10" fill="#abff02" fontWeight="700">{'>'}</text>
         </g>
         {/* Hub sub-label */}
-        <text x="354" y="196" textAnchor="middle" fontFamily="monospace" fontSize="7" fill="#7f7f7f">account_list · account_add</text>
+        <text x="354" y="196" textAnchor="middle" fontFamily="monospace" fontSize="7" fill="#7f7f7f">account · list · account · add</text>
       </g>
 
       {/* ══════════════════════════════════════

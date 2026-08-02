@@ -14,6 +14,9 @@
  *     - every `SeeDocs` anchor in the Go verb registry resolves to an id in the built docs
  *     - the six crawler files exist
  *     - `/index.md` still carries its Mermaid diagrams
+ *     - no bare tool-surface figure is transcribed into a source file (CR-0073)
+ *     - the served landing page presents verbs as operation values, not flat tool
+ *       names, and names no domain the manifest does not have (CR-0073)
  *
  * Usage:
  *   node .agents/scripts/site.content.check.mjs [dist-dir]
@@ -25,7 +28,7 @@
  * Exits 0 when every assertion holds, 1 otherwise.
  */
 
-import { readFile, access } from 'node:fs/promises'
+import { readFile, access, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { puppeteer } from './site.puppeteer.mjs'
 import { serve } from './site.serve.mjs'
@@ -62,11 +65,26 @@ const distDir = process.argv[2] ?? 'site/dist'
  * measured the same way on both sides of the comparison.
  */
 const TEXT_FLOOR = {
-  'index.html': 11853,
+  'index.html': 11714,
   'quickstart.html': 7390,
   'concepts.html': 15582,
   'troubleshooting.html': 17468,
 }
+
+/**
+ * The landing-page floor was re-baselined by CR-0073, from 11,853 to 11,714, a reduction
+ * of 139 characters measured on the corrected build with this script's own method
+ * (`document.body.textContent.length`, JavaScript disabled).
+ *
+ * The reduction is accounted for in full by the removal of the obsolete flat tool-name
+ * inventory. CR-0073 replaced the hand-written flat tool names the landing page rendered
+ * (the long `calendar_list_events` form, shown in the capability cards and the capability
+ * SVG diagrams) with the shorter `operation` values the aggregate-tool interface actually
+ * exposes, read from the generated surface manifest. Shorter names over the always-rendered
+ * capability content are a net loss of characters even though a few more verbs are now
+ * listed; no prose section was shortened or deleted. The other three page floors did not
+ * move, because CR-0073 changed no content outside the landing page's tool-surface figures.
+ */
 
 /** Crawler-facing files the CR requires the build to emit. */
 const CRAWLER_FILES = ['robots.txt', 'sitemap.xml', 'llms.txt', 'index.md', 'CNAME', 'build-info.json']
@@ -139,6 +157,21 @@ const fences = (indexMd.match(/```mermaid/g) ?? []).length
 if (fences < MIN_MERMAID_FENCES) fail(`/index.md has ${fences} Mermaid fences, expected >= ${MIN_MERMAID_FENCES}`)
 else console.log(`ok /index.md: ${fences} Mermaid fences`)
 
+// Claims assertion (CR-0073 FR-24): the site holds no figure of its own. A bare numeric
+// claim about tools, verbs, domains, or configuration variables in a source file under
+// site/src is a transcribed figure that the generated manifest already owns; it is
+// rejected here, named by file and line, so a rename in the code cannot leave a stale
+// number on the page. Manifest-derived counts reach the page as `${expr}` interpolations,
+// which carry no literal digit and so never match.
+await assertNoBareClaims('site/src')
+
+// Tool-surface shape assertion (CR-0073 AC-5, AC-6): the served landing page must present
+// verbs as `operation` values of the four aggregate tools, never as flat top-level tool
+// names, and must not name a domain the server does not have. The obsolete flat names are
+// derived from the manifest itself (every `domain_verb` concatenation), so a verb added or
+// renamed in the code is covered without editing this script.
+await assertToolSurfaceShape(join(distDir, 'index.html'))
+
 /**
  * Read the distinct `slug#anchor` documentation references declared by the Go verb registry.
  *
@@ -157,6 +190,100 @@ async function collectSeeDocsAnchors() {
     if (/^(concepts|quickstart|troubleshooting|readme)#[a-z0-9-]+$/.test(value)) found.add(value)
   }
   return [...found].sort()
+}
+
+/**
+ * Fail on any bare numeric claim about the tool surface reintroduced under a source tree.
+ *
+ * Walks every `.ts`/`.tsx` file beneath `root`, excluding the generated manifest, and
+ * matches a number immediately followed (within a few words) by tool, verb, domain, or
+ * variable. Each match is reported with its file and 1-indexed line so the author is sent
+ * straight to the transcribed figure. The generated `src/generated/` tree is skipped: it is
+ * the manifest, the one place a number about the surface is allowed to live.
+ *
+ * @param {string} root Source directory to scan, relative to the process working directory.
+ */
+async function assertNoBareClaims(root) {
+  // A number, then up to three intervening words, then the noun a surface claim is about.
+  const claimRe = /\b\d+\s+(?:[A-Za-z][A-Za-z-]*\s+){0,3}(?:tools?|verbs?|domains?|variables?)\b/i
+  let scanned = 0
+  let flagged = 0
+  for await (const file of walkSources(root)) {
+    scanned++
+    const source = await readFile(file, 'utf8')
+    source.split('\n').forEach((line, i) => {
+      const match = claimRe.exec(line)
+      if (match) {
+        flagged++
+        fail(`bare tool-surface claim "${match[0].trim()}" at ${file}:${i + 1} (derive it from src/generated/surface.json)`)
+      }
+    })
+  }
+  if (flagged === 0) console.log(`ok claims: no bare tool-surface figure in ${scanned} source files under ${root}`)
+}
+
+/**
+ * Yield every `.ts`/`.tsx` file beneath a directory, skipping the generated manifest tree.
+ *
+ * @param {string} dir Directory to walk.
+ * @returns {AsyncGenerator<string>} Absolute-or-relative file paths, matching the input base.
+ */
+async function* walkSources(dir) {
+  const entries = await readdir(dir, { withFileTypes: true })
+  for (const entry of entries) {
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) {
+      if (entry.name === 'generated') continue
+      yield* walkSources(path)
+    } else if (/\.(ts|tsx)$/.test(entry.name)) {
+      yield path
+    }
+  }
+}
+
+/**
+ * Fail when the served landing page presents the tool surface with the wrong model.
+ *
+ * Two properties are asserted against the built HTML. First, no obsolete flat tool name
+ * appears: the obsolete names are every `domain_verb` concatenation the manifest implies,
+ * so the check tracks the code rather than a hand-kept denylist. Second, no domain outside
+ * the manifest's four is named as a category, checked against the specific obsolete label
+ * ("Diagnostics") CR-0073 removed. Each manifest domain name is also confirmed present, so
+ * the page cannot silently drop the true surface.
+ *
+ * @param {string} htmlPath Path to the built landing-page HTML.
+ */
+async function assertToolSurfaceShape(htmlPath) {
+  const html = await readFile(htmlPath, 'utf8').catch(() => '')
+  if (!html) {
+    fail(`tool-surface shape: could not read ${htmlPath}`)
+    return
+  }
+  const manifest = JSON.parse(await readFile('site/src/generated/surface.json', 'utf8'))
+  const domains = manifest.domains ?? []
+
+  // Every domain_verb concatenation is an obsolete flat tool name; none may be served.
+  let flatHits = 0
+  for (const domain of domains) {
+    for (const verb of domain.verbs ?? []) {
+      const flat = `${domain.name}_${verb.name}`
+      if (html.includes(flat)) {
+        flatHits++
+        fail(`flat tool name in served HTML: "${flat}" (present verbs as operation values of the ${domain.name} tool)`)
+      }
+    }
+  }
+  if (flatHits === 0) console.log('ok tool-surface: no flat tool name in served HTML')
+
+  // No invented domain category. "Diagnostics" is the specific label CR-0073 removed.
+  if (/\bDiagnostics\b/.test(html)) fail('served HTML names a "Diagnostics" domain, which does not exist')
+  else console.log('ok tool-surface: no Diagnostics category')
+
+  // The four true domains must each still be named on the page.
+  for (const domain of domains) {
+    if (!html.includes(domain.name)) fail(`served HTML does not name the ${domain.name} domain`)
+  }
+  console.log(`ok tool-surface: ${domains.length} domains named (${domains.map((d) => d.name).join(', ')})`)
 }
 
 console.log(failures.length === 0 ? 'content-check: all assertions hold' : `content-check: ${failures.length} failing`)

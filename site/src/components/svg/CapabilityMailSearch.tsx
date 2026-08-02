@@ -28,7 +28,7 @@ export default function CapabilityMailSearch({ className }: CapabilityMailSearch
     { avatar: 'E', avatarColor: '#1a3a2a', initials: 'EM', from: 'emily@contoso.com', subject: 'Onboarding checklist', date: 'Fri', read: true, match: false },
   ]
 
-  const tools = ['mail_list_folders', 'mail_list_messages', 'mail_search_messages', 'mail_get_message']
+  const tools = ['mail · list_folders', 'mail · list_messages', 'mail · search_messages', 'mail · get_message']
 
   // Layout dimensions
   const W = 440
@@ -339,7 +339,7 @@ export default function CapabilityMailSearch({ className }: CapabilityMailSearch
         const totalW = tools.length * badgeW + (tools.length - 1) * gap
         const startX = (W - totalW) / 2
         const x = startX + i * (badgeW + gap)
-        const isActive = tool === 'mail_search_messages'
+        const isActive = tool === 'mail · search_messages'
 
         return (
           <g key={tool}>

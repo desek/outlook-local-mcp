@@ -1,30 +1,33 @@
 import { useState, useRef, useMemo, useCallback } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
+import { configVars, configVarCount } from '../surface'
 
+/**
+ * A rendered configuration variable, derived from the surface manifest.
+ *
+ * @property name  The full `OUTLOOK_MCP_` environment variable name (the copy target).
+ * @property short  The name with the `OUTLOOK_MCP_` prefix stripped (the display label).
+ * @property description  The one-line purpose of the variable.
+ * @property defaultValue  The default value, or undefined when the variable has none.
+ */
 interface ConfigVar {
-  variable: string
+  name: string
+  short: string
   description: string
   defaultValue?: string
 }
 
-const CONFIG_VARS: ConfigVar[] = [
-  { variable: 'CLIENT_ID', description: 'Override the default Microsoft first-party client ID' },
-  { variable: 'TENANT_ID', description: 'Restrict auth to a specific Entra ID tenant' },
-  { variable: 'AUTH_METHOD', description: 'device (default), browser, authcode', defaultValue: 'device' },
-  { variable: 'DEFAULT_TIMEZONE', description: 'IANA timezone string, e.g. America/New_York' },
-  { variable: 'LOG_LEVEL', description: 'debug, info, warn, error', defaultValue: 'info' },
-  { variable: 'LOG_FORMAT', description: 'json (default) or text', defaultValue: 'json' },
-  { variable: 'LOG_SANITIZE', description: 'Strips PII from logs when enabled', defaultValue: 'true' },
-  { variable: 'LOG_FILE', description: 'Path to write log output' },
-  { variable: 'MAX_RETRIES', description: 'Retry count for transient Graph API errors' },
-  { variable: 'REQUEST_TIMEOUT_SECONDS', description: 'HTTP timeout per Graph API request' },
-  { variable: 'READ_ONLY', description: 'Disables all write operations when true', defaultValue: 'false' },
-  { variable: 'MAIL_ENABLED', description: 'Enables 4 opt-in mail tools when true', defaultValue: 'false' },
-  { variable: 'OTEL_ENABLED', description: 'Enables OpenTelemetry metrics/tracing when true', defaultValue: 'false' },
-  { variable: 'TOKEN_STORAGE', description: 'keychain (default) or file', defaultValue: 'keychain' },
-  { variable: 'PROVENANCE_TAG', description: 'Custom tag written to MCP-created events' },
-]
+/**
+ * CONFIG_VARS is the configuration reference, derived from the surface manifest so the
+ * site holds no variable name, default, or count of its own.
+ */
+const CONFIG_VARS: ConfigVar[] = configVars.map((v) => ({
+  name: v.name,
+  short: v.name.replace(/^OUTLOOK_MCP_/, ''),
+  description: v.description,
+  defaultValue: v.default || undefined,
+}))
 
 export default function ConfigReferenceSection() {
   const sectionRef = useRef<HTMLElement>(null)
@@ -52,7 +55,8 @@ export default function ConfigReferenceSection() {
     const q = searchQuery.toLowerCase()
     return CONFIG_VARS.filter(
       (v) =>
-        v.variable.toLowerCase().includes(q) ||
+        v.short.toLowerCase().includes(q) ||
+        v.name.toLowerCase().includes(q) ||
         v.description.toLowerCase().includes(q),
     )
   }, [searchQuery])
@@ -69,11 +73,10 @@ export default function ConfigReferenceSection() {
     })
   }, [])
 
-  const handleCopyVar = useCallback(async (variable: string) => {
-    const fullVar = `OUTLOOK_MCP_${variable}`
+  const handleCopyVar = useCallback(async (fullVar: string) => {
     try {
       await navigator.clipboard.writeText(fullVar)
-      setCopiedVar(variable)
+      setCopiedVar(fullVar)
       setTimeout(() => setCopiedVar(null), 2000)
     } catch {
       // fallback
@@ -98,7 +101,7 @@ export default function ConfigReferenceSection() {
               <span className="w-0.5 h-6 bg-brand-lime rounded-full" />
             )}
             <span className="font-mono text-label font-semibold tracking-[0.18em] text-brand-dark uppercase">
-              15 Configuration Variables — View Full Reference
+              {configVarCount} Configuration Variables — View Full Reference
             </span>
           </span>
           <span className={`text-brand-dark/40 transition-transform duration-200 ${isOpen ? 'rotate-45' : ''}`}>
@@ -149,20 +152,20 @@ export default function ConfigReferenceSection() {
             <div className="space-y-0.5">
               {filteredVars.map((v, i) => (
                 <div
-                  key={v.variable}
+                  key={v.name}
                   className={`border-b border-brand-dark/5 ${i % 2 === 0 ? 'bg-brand-dark/[0.02]' : ''}`}
                 >
                   <div className="flex items-center gap-3 py-2.5 px-3">
                     {/* Variable name with copy */}
                     <button
-                      onClick={() => handleCopyVar(v.variable)}
+                      onClick={() => handleCopyVar(v.name)}
                       className="shrink-0 flex items-center gap-1.5 group"
-                      aria-label={`Copy OUTLOOK_MCP_${v.variable}`}
+                      aria-label={`Copy ${v.name}`}
                     >
                       <code className="font-mono text-xs text-brand-dark bg-brand-off-white px-1.5 py-0.5 rounded group-hover:bg-brand-lime/10 transition-colors">
-                        {v.variable}
+                        {v.short}
                       </code>
-                      {copiedVar === v.variable ? (
+                      {copiedVar === v.name ? (
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-lime-dark)" strokeWidth="2" className="shrink-0">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
@@ -188,15 +191,15 @@ export default function ConfigReferenceSection() {
 
                     {/* Expand toggle */}
                     <button
-                      onClick={() => toggleRow(v.variable)}
+                      onClick={() => toggleRow(v.name)}
                       className="shrink-0 w-6 h-6 flex items-center justify-center text-gray-400 hover:text-brand-dark transition-colors"
-                      aria-expanded={expandedRows.has(v.variable)}
-                      aria-label={`${expandedRows.has(v.variable) ? 'Collapse' : 'Expand'} ${v.variable} details`}
+                      aria-expanded={expandedRows.has(v.name)}
+                      aria-label={`${expandedRows.has(v.name) ? 'Collapse' : 'Expand'} ${v.short} details`}
                     >
                       <svg
                         width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                         strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                        className={`transition-transform duration-200 ${expandedRows.has(v.variable) ? 'rotate-180' : ''}`}
+                        className={`transition-transform duration-200 ${expandedRows.has(v.name) ? 'rotate-180' : ''}`}
                       >
                         <polyline points="6 9 12 15 18 9" />
                       </svg>
@@ -204,13 +207,13 @@ export default function ConfigReferenceSection() {
                   </div>
 
                   {/* Expanded detail */}
-                  {expandedRows.has(v.variable) && (
+                  {expandedRows.has(v.name) && (
                     <div className="px-3 pb-3 pt-1">
                       <div className="bg-brand-off-white rounded-md p-3 text-sm text-gray-600 font-sans leading-relaxed">
                         <p className="mb-2">{v.description}</p>
                         <p className="font-mono text-xs text-gray-400">
                           Full env var:{' '}
-                          <code className="text-brand-dark">OUTLOOK_MCP_{v.variable}</code>
+                          <code className="text-brand-dark">{v.name}</code>
                         </p>
                         {v.defaultValue && (
                           <p className="font-mono text-xs text-gray-400 mt-1">

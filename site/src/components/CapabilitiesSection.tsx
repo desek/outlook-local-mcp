@@ -7,42 +7,47 @@ import CapabilityMultiAccount from './svg/CapabilityMultiAccount'
 import CapabilityMailSearch from './svg/CapabilityMailSearch'
 import CapabilityPrivacyDiagram from './svg/CapabilityPrivacyDiagram'
 import CapabilityAuthFlow from './svg/CapabilityAuthFlow'
+import { domainByName, fullVerbCount, defaultVerbCount, domainCount } from '../surface'
+
+/**
+ * capabilityVerbNames returns the default-exposed verbs of a domain, as `operation`
+ * values (no flat prefix), read from the surface manifest. A capability card that names a
+ * domain renders these rather than a hand-written list, so the site states no verb name of
+ * its own (CR-0073).
+ *
+ * @param domain  The aggregate tool name (for example "calendar").
+ * @returns The verb names exposed under the default configuration, in manifest order.
+ */
+function capabilityVerbNames(domain: string): string[] {
+  const d = domainByName(domain)
+  return d ? d.verbs.filter((v) => v.gate === null).map((v) => v.name) : []
+}
 
 const CAPABILITIES = [
   {
     id: '01',
     label: 'Calendar Management',
-    toolCount: 14,
+    domain: 'calendar',
     summary: 'Read, search, create, update, and delete calendar events and meetings. Check free/busy availability across accounts.',
     keyDetail: 'Meeting tools include attendee confirmation guidance and extra warnings for external attendees — the LLM won\'t accidentally spam a meeting invite without a check.',
-    tools: [
-      'calendar_list', 'calendar_list_events', 'calendar_get_event', 'calendar_search_events',
-      'calendar_get_free_busy', 'calendar_create_event', 'calendar_create_meeting',
-      'calendar_update_event', 'calendar_update_meeting', 'calendar_delete_event',
-      'calendar_cancel_meeting', 'calendar_respond_event', 'calendar_reschedule_event',
-      'calendar_reschedule_meeting',
-    ],
   },
   {
     id: '02',
     label: 'Multi-Account',
-    toolCount: 3,
+    domain: 'account',
     summary: 'Add, list, and remove Microsoft accounts at runtime. Each account gets isolated token storage. Accounts persist across restarts.',
     keyDetail: 'Lazy auth — no credentials required at startup. Authentication triggers on first tool call per account.',
-    tools: ['account_add', 'account_list', 'account_remove'],
   },
   {
     id: '03',
     label: 'Mail Access (opt-in)',
-    toolCount: 4,
+    domain: 'mail',
     summary: 'Read-only access to mailbox folders, messages, and full-text search via KQL. Disabled by default; enabled with one env var.',
     keyDetail: 'Opt-in only. Set OUTLOOK_MCP_MAIL_ENABLED=true. Never writes to mail.',
-    tools: ['mail_list_folders', 'mail_list_messages', 'mail_search_messages', 'mail_get_message'],
   },
   {
     id: '04',
     label: 'Local Privacy & Security',
-    toolCount: 0,
     summary: 'No data routing through third parties. Every credential and token stays on your machine.',
     keyDetail: 'AES-256-GCM encrypted file fallback when OS keychain is unavailable. OData injection protection on all inputs.',
     bullets: [
@@ -57,7 +62,6 @@ const CAPABILITIES = [
   {
     id: '05',
     label: 'Zero-Config Auth',
-    toolCount: 0,
     summary: 'Three auth methods, all requiring ZERO ENTRA ID app registration.',
     keyDetail: 'Token expiry is ~90 days. Silent refresh is automatic. First-time auth is a one-time browser action.',
     authMethods: [
@@ -264,7 +268,7 @@ export default function CapabilitiesSection() {
             Core Capabilities
           </span>
           <h2 className="text-section-heading font-sans font-normal text-brand-dark tracking-tight leading-tight">
-            23 tools. 5 domains. Every calendar operation covered.
+            {fullVerbCount} verbs across {domainCount} tools, {defaultVerbCount} in the default configuration. Every calendar operation covered.
           </h2>
         </div>
 
@@ -285,7 +289,9 @@ export default function CapabilitiesSection() {
           <div className="w-[45%] relative flex items-center">
             <div className="container-page w-full">
               <div className="relative" style={{ minHeight: 320 }}>
-                {CAPABILITIES.map((cap, i) => (
+                {CAPABILITIES.map((cap, i) => {
+                  const verbs = 'domain' in cap ? capabilityVerbNames(cap.domain) : []
+                  return (
                   <div
                     key={cap.id}
                     ref={(el) => { desktopTextRefs.current[i] = el }}
@@ -296,9 +302,9 @@ export default function CapabilitiesSection() {
                     </span>
                     <h3 className="text-capability font-sans font-medium text-brand-dark tracking-tight mb-4">
                       {cap.label}
-                      {cap.toolCount > 0 && (
+                      {verbs.length > 0 && (
                         <span className="text-sm text-gray-400 ml-2 font-normal">
-                          {cap.toolCount} tools
+                          {verbs.length} verbs
                         </span>
                       )}
                     </h3>
@@ -309,15 +315,15 @@ export default function CapabilitiesSection() {
                       {cap.keyDetail}
                     </p>
 
-                    {/* Tool list for calendar/mail/account */}
-                    {'tools' in cap && cap.tools.length > 0 && (
+                    {/* Verb list (operation values) for calendar/mail/account */}
+                    {verbs.length > 0 && (
                       <div className="mt-5 flex flex-wrap gap-2">
-                        {cap.tools.map((tool) => (
+                        {verbs.map((verb) => (
                           <span
-                            key={tool}
+                            key={verb}
                             className="inline-block bg-brand-off-white text-brand-dark font-mono text-[10px] tracking-wider px-2 py-1 rounded"
                           >
-                            {tool}
+                            {verb}
                           </span>
                         ))}
                       </div>
@@ -349,7 +355,8 @@ export default function CapabilitiesSection() {
                       </div>
                     )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           </div>
@@ -389,7 +396,7 @@ export default function CapabilitiesSection() {
             ref={headingRef}
             className="text-[1.1rem] font-sans font-normal text-brand-dark tracking-tight leading-tight"
           >
-            23 tools. 5 domains. Every calendar operation covered.
+            {fullVerbCount} verbs across {domainCount} tools, {defaultVerbCount} in the default configuration. Every calendar operation covered.
           </h2>
         </div>
 
@@ -406,7 +413,9 @@ export default function CapabilitiesSection() {
         </div>
 
         {/* Panels — stacked absolutely below the header, crossfade via timeline */}
-        {CAPABILITIES.map((cap, i) => (
+        {CAPABILITIES.map((cap, i) => {
+          const verbs = 'domain' in cap ? capabilityVerbNames(cap.domain) : []
+          return (
           <div
             key={cap.id}
             ref={(el) => { mobilePanelRefs.current[i] = el }}
@@ -425,9 +434,9 @@ export default function CapabilitiesSection() {
               </span>
               <h3 className="text-lg font-sans font-medium text-brand-dark tracking-tight mb-3">
                 {cap.label}
-                {cap.toolCount > 0 && (
+                {verbs.length > 0 && (
                   <span className="text-sm text-gray-400 ml-2 font-normal">
-                    {cap.toolCount} tools
+                    {verbs.length} verbs
                   </span>
                 )}
               </h3>
@@ -438,14 +447,14 @@ export default function CapabilitiesSection() {
                 {cap.keyDetail}
               </p>
 
-              {'tools' in cap && cap.tools.length > 0 && (
+              {verbs.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {cap.tools.map((tool) => (
+                  {verbs.map((verb) => (
                     <span
-                      key={tool}
+                      key={verb}
                       className="inline-block bg-brand-off-white text-brand-dark font-mono text-[9px] tracking-wider px-1.5 py-0.5 rounded"
                     >
-                      {tool}
+                      {verb}
                     </span>
                   ))}
                 </div>
@@ -476,7 +485,8 @@ export default function CapabilitiesSection() {
               )}
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </section>
   )
