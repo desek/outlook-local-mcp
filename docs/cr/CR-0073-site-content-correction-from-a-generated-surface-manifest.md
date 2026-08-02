@@ -889,7 +889,12 @@ history, so every code claim was re-verified against the current tree.
 5. Added a Test Strategy row: a content-check-harness tool-surface shape assertion
    that rejects any flat tool name and any domain outside the four (covers AC-5, AC-6).
 
-### Items requiring human decision (unresolved: 1)
+### Items requiring human decision (unresolved: 0, resolved: 1)
+
+* **Resolved 2026-08-02 by the requestor: the wording is accepted and stays as
+  written.** `IntroSection` is not brought into scope, and no qualification is
+  added. The record of the question is kept below, so a later reader finds the
+  decision rather than raising it again.
 
 * `site/src/components/IntroSection.tsx:91` reads "No servers. No registration."
   This section is not in the CR's Affected Components and no requirement names it.
