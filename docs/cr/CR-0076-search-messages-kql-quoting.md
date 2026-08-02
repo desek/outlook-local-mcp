@@ -93,6 +93,14 @@ Without them Graph parses the value as a plain term, in which a colon is not leg
 Every row below was sent through the running server against a live mailbox and the outcome
 observed. Nothing here is inferred from documentation.
 
+The search terms are shown as neutral placeholders. The mailbox they were issued against
+belongs to real correspondents, so the customer and person names in the original queries
+are replaced here by `Contoso`, `Quarterly`, and `contoso.com` addresses. Only the terms
+changed. The syntax under test, the outcome of each row, and the relationships the rows
+establish are exactly as observed. In particular, the discriminating pair still holds: one
+token appears in the message subject and the other appears only in the body, which is what
+separates a translation that scopes to the property from one that leaks.
+
 | # | Value reaching Graph | Outcome |
 |---|---|---|
 | 1 | `subject:Contoso` | Error: character `':'` is not valid at position 7 |
