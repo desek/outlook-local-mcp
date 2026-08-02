@@ -1,0 +1,420 @@
+{
+  "domains": [
+    {
+      "name": "calendar",
+      "verbs": [
+        {
+          "name": "help",
+          "summary": "show detailed documentation for all verbs or a single named verb",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "list_calendars",
+          "summary": "list all calendars accessible to the authenticated user",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "list_events",
+          "summary": "list events in a time window; expands recurring events into occurrences",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "get_event",
+          "summary": "get full event details by ID; bodyPreview by default, full body via output=raw",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "search_events",
+          "summary": "search events by subject, date range, importance, sensitivity, and other filters",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "create_event",
+          "summary": "create a personal calendar event (no attendees); use create_meeting for meetings",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "update_event",
+          "summary": "update a personal event (PATCH); use update_meeting to change attendees",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "delete_event",
+          "summary": "permanently delete an event by ID (organizer deletions notify attendees)",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "respond_event",
+          "summary": "accept, tentatively accept, or decline an invitation; notifies organizer",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "reschedule_event",
+          "summary": "move a personal event to a new start time, preserving its original duration",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "create_meeting",
+          "summary": "create a meeting with attendees; sends invitations; confirm with user first",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "update_meeting",
+          "summary": "update a meeting including attendee changes; sends notifications; confirm first",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "cancel_meeting",
+          "summary": "cancel a meeting and notify attendees; organizer only; confirm with user first",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "reschedule_meeting",
+          "summary": "move a meeting to a new start time, preserving duration; notifies attendees",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "get_free_busy",
+          "summary": "get free/busy availability for a time range; returns busy periods with times",
+          "readOnly": true,
+          "gate": null
+        }
+      ],
+      "fullCount": 15,
+      "defaultCount": 15
+    },
+    {
+      "name": "mail",
+      "verbs": [
+        {
+          "name": "help",
+          "summary": "show detailed documentation for all verbs or a single named verb",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "list_folders",
+          "summary": "list mail folders (Inbox, Sent, Drafts, etc.) with unread and total counts",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "list_messages",
+          "summary": "list messages in a folder or across all folders; filter by date, sender, thread",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "get_message",
+          "summary": "get full message details by ID; bodyPreview by default, full body via output=raw",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "search_messages",
+          "summary": "full-text KQL search across messages; ranked by relevance, not chronologically",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "get_conversation",
+          "summary": "retrieve all messages in an email thread in chronological order",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_MAIL_ENABLED"
+        },
+        {
+          "name": "list_attachments",
+          "summary": "list attachment metadata (id, name, contentType, size) for a message",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_MAIL_ENABLED"
+        },
+        {
+          "name": "get_attachment",
+          "summary": "download an attachment; returns metadata and base64 content up to the size limit",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_MAIL_ENABLED"
+        },
+        {
+          "name": "create_draft",
+          "summary": "create a new email draft in the Drafts folder (not sent automatically)",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "create_reply_draft",
+          "summary": "create a reply draft to an existing message preserving threading headers",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "create_forward_draft",
+          "summary": "create a forward draft of an existing message with new recipients",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "update_draft",
+          "summary": "update draft fields (PATCH semantics; non-draft messages rejected)",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "delete_draft",
+          "summary": "permanently delete a draft message (irreversible; non-draft messages rejected)",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        }
+      ],
+      "fullCount": 13,
+      "defaultCount": 5
+    },
+    {
+      "name": "account",
+      "verbs": [
+        {
+          "name": "help",
+          "summary": "show detailed documentation for all verbs or a single named verb",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "add",
+          "summary": "add and authenticate a new Microsoft account (browser/device_code/auth_code)",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "remove",
+          "summary": "remove an account from the registry and clear its tokens (irreversible)",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "list",
+          "summary": "list all registered accounts with label, UPN, state, and auth_method",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "login",
+          "summary": "re-authenticate a disconnected account without removing it",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "logout",
+          "summary": "disconnect an account without removing it; preserves config for login",
+          "readOnly": false,
+          "gate": null
+        },
+        {
+          "name": "refresh",
+          "summary": "force a token refresh for an authenticated account; returns new expiry",
+          "readOnly": false,
+          "gate": null
+        }
+      ],
+      "fullCount": 7,
+      "defaultCount": 7
+    },
+    {
+      "name": "system",
+      "verbs": [
+        {
+          "name": "help",
+          "summary": "show detailed documentation for all verbs or a single named verb",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "about",
+          "summary": "return build identity and host environment metadata for troubleshooting",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "status",
+          "summary": "return server health: version, accounts, uptime, config (no Graph call)",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "list_docs",
+          "summary": "list embedded documentation: slug, title, summary, tags, size, and doc:// URI",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "search_docs",
+          "summary": "search embedded docs by keyword; returns ranked snippets with line numbers",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "get_docs",
+          "summary": "fetch a document or section by slug; use search_docs first to identify the slug",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "complete_auth",
+          "summary": "exchange browser redirect URL for tokens to finish auth_code flow",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_AUTH_METHOD"
+        }
+      ],
+      "fullCount": 7,
+      "defaultCount": 6
+    }
+  ],
+  "totals": {
+    "fullCount": 42,
+    "defaultCount": 33
+  },
+  "config": [
+    {
+      "name": "OUTLOOK_MCP_CLIENT_ID",
+      "default": "outlook-desktop",
+      "description": "OAuth client (application) ID, or a well-known client name, used for authentication."
+    },
+    {
+      "name": "OUTLOOK_MCP_TENANT_ID",
+      "default": "common",
+      "description": "Entra ID tenant: common, organizations, consumers, or a specific tenant GUID."
+    },
+    {
+      "name": "OUTLOOK_MCP_AUTH_RECORD_PATH",
+      "default": "~/.outlook-local-mcp/auth_record.json",
+      "description": "Filesystem path where the non-secret authentication record is persisted."
+    },
+    {
+      "name": "OUTLOOK_MCP_CACHE_NAME",
+      "default": "outlook-local-mcp",
+      "description": "Partition name for the OS-native persistent token cache."
+    },
+    {
+      "name": "OUTLOOK_MCP_DEFAULT_TIMEZONE",
+      "default": "auto",
+      "description": "IANA timezone for calendar operations when the caller omits one; 'auto' detects the host timezone."
+    },
+    {
+      "name": "OUTLOOK_MCP_LOG_LEVEL",
+      "default": "warn",
+      "description": "Minimum log severity: debug, info, warn, or error."
+    },
+    {
+      "name": "OUTLOOK_MCP_LOG_FORMAT",
+      "default": "json",
+      "description": "Structured log output format: json or text."
+    },
+    {
+      "name": "OUTLOOK_MCP_MAX_RETRIES",
+      "default": "3",
+      "description": "Maximum retry attempts for transient Graph API failures (range 0-10)."
+    },
+    {
+      "name": "OUTLOOK_MCP_RETRY_BACKOFF_MS",
+      "default": "1000",
+      "description": "Initial exponential-backoff duration in milliseconds for retryable Graph errors (range 100-30000)."
+    },
+    {
+      "name": "OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS",
+      "default": "30",
+      "description": "Maximum duration in seconds for a single Graph API request (range 1-300)."
+    },
+    {
+      "name": "OUTLOOK_MCP_SHUTDOWN_TIMEOUT_SECONDS",
+      "default": "15",
+      "description": "Maximum duration in seconds to wait for in-flight requests after a shutdown signal (range 1-300)."
+    },
+    {
+      "name": "OUTLOOK_MCP_LOG_SANITIZE",
+      "default": "true",
+      "description": "Mask PII such as email addresses and body content in log output."
+    },
+    {
+      "name": "OUTLOOK_MCP_AUDIT_LOG_ENABLED",
+      "default": "true",
+      "description": "Emit a structured audit entry for every tool invocation."
+    },
+    {
+      "name": "OUTLOOK_MCP_AUDIT_LOG_PATH",
+      "default": "",
+      "description": "Filesystem path for the audit log file; empty writes audit entries to stderr."
+    },
+    {
+      "name": "OUTLOOK_MCP_READ_ONLY",
+      "default": "false",
+      "description": "Disable all write operations, registering only read verbs."
+    },
+    {
+      "name": "OUTLOOK_MCP_OTEL_ENABLED",
+      "default": "false",
+      "description": "Enable OpenTelemetry metrics and tracing."
+    },
+    {
+      "name": "OUTLOOK_MCP_OTEL_ENDPOINT",
+      "default": "",
+      "description": "OTLP gRPC endpoint for exporting telemetry; empty resolves to localhost:4317 at startup."
+    },
+    {
+      "name": "OUTLOOK_MCP_OTEL_SERVICE_NAME",
+      "default": "outlook-local-mcp",
+      "description": "service.name resource attribute for OpenTelemetry telemetry."
+    },
+    {
+      "name": "OUTLOOK_MCP_LOG_FILE",
+      "default": "",
+      "description": "Optional filesystem path for log file output in addition to stderr."
+    },
+    {
+      "name": "OUTLOOK_MCP_AUTH_METHOD",
+      "default": "",
+      "description": "Authentication method: device_code, browser, or auth_code; empty infers from the client ID."
+    },
+    {
+      "name": "OUTLOOK_MCP_ACCOUNTS_PATH",
+      "default": "",
+      "description": "Filesystem path for the accounts.json registry; empty derives it from the auth record directory."
+    },
+    {
+      "name": "OUTLOOK_MCP_TOKEN_STORAGE",
+      "default": "auto",
+      "description": "Token storage backend: auto, keychain, or file."
+    },
+    {
+      "name": "OUTLOOK_MCP_PROVENANCE_TAG",
+      "default": "com.github.desek.outlook-local-mcp.created",
+      "description": "Extended-property tag name for MCP-created events; empty disables provenance tagging."
+    },
+    {
+      "name": "OUTLOOK_MCP_MAIL_ENABLED",
+      "default": "false",
+      "description": "Enable read-only mail access and request the Mail.Read scope."
+    },
+    {
+      "name": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED",
+      "default": "false",
+      "description": "Enable draft management and request the Mail.ReadWrite scope; implies MAIL_ENABLED."
+    },
+    {
+      "name": "OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES",
+      "default": "10485760",
+      "description": "Maximum attachment size in bytes returned by get_attachment (default 10 MB)."
+    }
+  ]
+}

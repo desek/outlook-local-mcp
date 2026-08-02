@@ -6,10 +6,13 @@ import { useScrollbarHeight } from '../use-scrollbar-height'
 
 const INSTALL_CMD = 'go install github.com/desek/outlook-local-mcp/cmd/outlook-local-mcp@latest'
 
+// The stats lead with what the server reaches, not with the size of its interface. The
+// counts still exist, derived from the surface manifest, where a reader has chosen the
+// tools reference; a visitor meeting the page first is told what they can do with it.
 const STATS = [
   { id: 'local', label: '100% LOCAL', desc: 'No intermediate servers' },
   { id: 'azure', label: 'ZERO ENTRA ID', desc: 'Pre-authorized client ID' },
-  { id: 'tools', label: '23 MCP TOOLS', desc: 'Calendar, mail, multi-account' },
+  { id: 'tools', label: 'CALENDAR + MAIL', desc: 'Book, reschedule, search, send' },
 ] as const
 
 export default function HeroSection() {

@@ -12,13 +12,15 @@
  *
  * Every entity carries a dateModified equal to the shared editorial date, so the
  * structured-data date matches the visible last-updated line (FR-45). The blocks are
- * authored here rather than derived from page copy; the deferred copy corrections
- * (tool counts, the Diagnostics category) are not restated in this file.
+ * authored here rather than derived from page copy, with one exception: the landing
+ * page's SoftwareApplication `featureList` composes its tool-surface figures from the
+ * generated surface manifest (CR-0073 FR-15), so the count it publishes tracks the code.
  *
  * @agents-index Builds the schema.org JSON-LD script blocks per page: SoftwareApplication, FAQPage, Organization, HowTo, and TechArticle.
  */
 import { SITE_ORIGIN, LAST_UPDATED_ISO } from '../src/site.meta'
 import { canonicalUrl, type PageKey, type PageSeo } from './seo.pages'
+import { domainNames } from '../src/surface'
 
 /** The public source repository, reused across several entity properties. */
 const REPO = 'https://github.com/desek/outlook-local-mcp'
@@ -53,6 +55,11 @@ function organization(): Record<string, unknown> {
 /**
  * softwareApplication is the landing page's SoftwareApplication entity, carrying all
  * nine properties FR-40 names.
+ *
+ * `featureList` is composed from the surface manifest (CR-0073 FR-15): it names the four
+ * aggregate tools and the full and default verb counts, all read from the generated
+ * record rather than transcribed, so the structured data a generative engine quotes can
+ * never state a tool surface the server does not expose.
  */
 function softwareApplication(): Record<string, unknown> {
   return {
@@ -67,6 +74,7 @@ function softwareApplication(): Record<string, unknown> {
     programmingLanguage: 'Go',
     downloadUrl: `${REPO}/releases`,
     softwareVersion: '0.8.0',
+    featureList: `Read and write Microsoft Calendar and Mail from a chat: check availability, book and reschedule meetings, search and send messages, and manage several accounts. Grouped as the ${domainNames.join(', ')} tools.`,
     dateModified: LAST_UPDATED_ISO,
   }
 }

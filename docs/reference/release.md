@@ -16,6 +16,8 @@ All three are produced by CI from a Git tag. One step is **not** automated: the 
 
 One gate is **not** automated either: [`make crud-test`](#required-manual-gate-make-crud-test) exercises the live tool surface against a real mailbox and MUST be run by hand before a release is cut.
 
+One surface is easy to forget: the [published website](#the-published-site-is-a-release-surface) states the tool surface to every reader and every generative engine that retrieves it, so a release that changes a verb or a domain is not complete until the site is rebuilt from the regenerated manifest.
+
 ---
 
 ## Required manual gate: `make crud-test`
@@ -29,6 +31,18 @@ The harness needs live Microsoft 365 credentials and performs real create, updat
 ### Honest limitation
 
 A documented manual gate is weaker than an automated one, and this document says so rather than implying otherwise. Its value is that its absence becomes a visible omission a maintainer can be held to, not a silent one. It does not run unless a human remembers to run it, so a release checklist MUST treat a missing `make crud-test` run as a blocking omission. The durable fix is a dedicated test tenant that lets the gate run in CI; until that exists, the run is manual and its evidence (the `docs/bench/crud-runs.csv` row for the run) is the record that it happened.
+
+---
+
+## The published site is a release surface
+
+The website at `outlook-local-mcp.com` is not marketing separate from the release. It is the artifact a generative engine retrieves and quotes verbatim, so whatever it says about the tool surface is a claim the project is held to. A release that adds, renames, or removes a verb or a domain therefore **MUST NOT** be considered complete until the site has been rebuilt from the regenerated surface manifest (`site/src/generated/surface.json`), because until then the live site describes the interface the previous release exposed.
+
+Since CR-0073 the site states no figure of its own: every tool count, verb name, domain name, and configuration variable it displays is derived from that manifest, which `cmd/gen-surface` generates from the live verb registry. The drift check in `make ci` and in both workflows fails a stale manifest before merge, and `deploy-site.yml` republishes the site on push to `main`, so in the ordinary flow the regeneration and the redeploy happen without a manual step.
+
+### Honest limitation
+
+That automation covers the ordinary flow, not every flow, and this document names the gap rather than implying the machine closes it. The redeploy is triggered by a push to `main`, so a tool-surface change that reaches a release tag by any path that did not run `deploy-site.yml` against the release commit leaves the live site describing the prior surface, silently and for as long as nobody looks. The value of naming it here is the same as for `make crud-test`: a release checklist MUST treat "the live site's tool count matches the release" as a verifiable line a maintainer can be held to, confirmed by reading the live page rather than assumed. The durable coupling is the drift check that already prevents a stale manifest from merging; the residual manual step is confirming the deploy that publishes it actually ran for the release being cut.
 
 ---
 

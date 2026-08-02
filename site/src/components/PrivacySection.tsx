@@ -16,7 +16,7 @@ const TRUST_BULLETS = [
   },
   {
     title: 'Outbound Only',
-    detail: 'Only two outbound connections: Microsoft Graph API and Microsoft Identity Platform. No inbound servers, no listening ports, no attack surface.',
+    detail: 'Outbound requests reach only Microsoft\'s own endpoints — the Graph API and the Identity Platform — plus any telemetry endpoint you configure. No third party relays your data. The one inbound socket is a temporary loopback port opened only for interactive browser sign-in.',
     icon: 'network',
   },
   {
@@ -96,7 +96,7 @@ export default function PrivacySection() {
               ref={eyebrowRef}
               className="font-mono text-label font-semibold tracking-[0.18em] text-lime-dark uppercase block mb-3"
             >
-              Local Privacy &amp; Security
+              Is your data private?
             </span>
             <h2
               ref={headingRef}
@@ -105,8 +105,9 @@ export default function PrivacySection() {
               Every credential stays on your machine.
             </h2>
             <p className="text-base text-gray-400 font-sans leading-relaxed mb-8 max-w-md">
-              No data routing through third parties. Verifiable, auditable, explainable
-              to your security team. The architecture proves the claims.
+              No credential and no message body is relayed through a third party. The only
+              outbound destinations are Microsoft&rsquo;s own endpoints, plus any telemetry
+              endpoint you configure. Verifiable, auditable, explainable to your security team.
             </p>
 
             {/* Bullet list */}

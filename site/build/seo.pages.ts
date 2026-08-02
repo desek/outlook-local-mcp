@@ -41,9 +41,9 @@ export interface PageSeo {
  * PAGES is the ordered registry of every published page. The landing page is first so
  * the sitemap lists the site root before its subpages.
  *
- * The landing description deliberately preserves the inherited "23 MCP tools" figure:
- * copy correction is a separate CR (CR-0070 "Deferred to a follow-up CR"), so this
- * phase must not silently change the number.
+ * The landing description composes its tool-surface figures from the generated surface
+ * manifest (CR-0073), so the meta description can never state a count the server does not
+ * expose. No figure is transcribed here.
  */
 export const PAGES: readonly PageSeo[] = [
   {
@@ -52,7 +52,7 @@ export const PAGES: readonly PageSeo[] = [
     path: '/',
     title: "Outlook Local MCP — Your AI's Native Interface to Outlook",
     description:
-      'A Model Context Protocol server that connects Claude directly to Microsoft Calendar and Mail. No Entra ID setup. No cloud middleman. 100% local, zero-config auth, 23 MCP tools.',
+      'A Model Context Protocol server that connects Claude directly to Microsoft Calendar and Mail. Ask it to check your week, book a meeting, find a thread, or send a reply. No Entra ID setup. No cloud middleman. 100% local, zero-config auth.',
   },
   {
     key: 'concepts',

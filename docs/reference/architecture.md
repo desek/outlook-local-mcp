@@ -73,7 +73,8 @@ internal/
   validate/       Input validation helpers
   observability/  OpenTelemetry metrics and tracing, WithObservability middleware
   buildinfo/      Build identity and host environment snapshot (consumed by system.about; see CR-0067)
-  server/         RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
+  server/         RegisterTools, ReadOnlyGuard, AwaitShutdownSignal, BuildVerbsForInspection
+  surface/        Code-derived surface record and its deterministic serialization (consumed by cmd/gen-surface; see CR-0073)
   tools/          4 aggregate domain tools dispatching verb sets
   docs/           Catalog, search, llms.txt; consumes docs.Bundle from docs/embed.go
 ```
@@ -247,6 +248,8 @@ When `$top` is set in query parameters, the Graph API returns at most that many 
 ## Configuration
 
 The server reads configuration from environment variables with sensible defaults. No configuration file is required for basic operation.
+
+Every `OUTLOOK_MCP_` variable name is spelled exactly once, as an `Env*` constant in `internal/config/inventory.go`, and both `LoadConfig` and `ValidateConfig` read their names from those constants rather than inline string literals (CR-0073, FR-9). The `Inventory()` slice pairs each name with its default and a one-line description, and is the enumerable source the surface manifest consumes. A variable therefore cannot be read without being enumerated, which `TestEveryEnvLiteralIsEnumerated` asserts. The table below is an illustrative subset; the authoritative, complete list is the inventory, and the published site derives its configuration reference from the generated manifest rather than from any hand-maintained table. See [Surface manifest and drift gate](#surface-manifest-and-drift-gate-cr-0073).
 
 | Environment variable | Default | Description |
 |---|---|---|
@@ -503,6 +506,42 @@ The embedded bundle is enforced by build-time tests:
 * Secret patterns (`eyJ`, `sk-`, `client_secret`, `refresh_token`) cause a build failure.
 
 The bundle is verified by `make docs-bundle`, which is wired into `make ci`.
+
+---
+
+## Surface manifest and drift gate (CR-0073)
+
+The published website states no figure of its own. Every tool count, verb name, domain name, and configuration variable it displays is derived from a generated **surface manifest** committed at `site/src/generated/surface.json`, so the site cannot drift from the code the way a hand-typed literal does. This mirrors the `cmd/gen-llms` / `make docs-bundle` pattern already used for `llms.txt`: the code owns the fact, a generator emits it, and a check fails a stale copy.
+
+### How it is built
+
+`internal/surface` builds a **surface record** from the live surface, performing no network call and reading no credential:
+
+* It calls `server.BuildVerbsForInspection` to construct the four domain verb slices twice, once with every gate open and once under the default configuration, using zero-value dependencies and no-op middleware. `TestBuildVerbsRequiresNoCredentials` asserts this needs no credentials.
+* It pairs the verbs with the declarative configuration inventory from `internal/config` (see [Configuration](#configuration)).
+* Per domain it records the domain name, the ordered verb list, and for each verb its name, one-line summary, read-only flag, and the configuration key that gates it or an explicit null. It records both the full verb count and the count exposed under the default configuration, per domain and in total, each **derived by counting the built verbs** rather than stated as a literal.
+
+The record serializes to byte-identical output on repeated runs against an unchanged tree: stable ordering throughout, and no timestamp, commit identifier, or environment value. `TestSerializationIsDeterministic` and `TestSerializationCarriesNoEnvironmentValue` guard those properties.
+
+### The generator and the make targets
+
+`cmd/gen-surface` writes the serialized record to `site/src/generated/surface.json`. Two make targets drive it:
+
+| Target | Purpose |
+|--------|---------|
+| `make surface-manifest` | Regenerates the manifest. This is the command a contributor runs after adding, renaming, or removing a verb, a domain, or a configuration variable. |
+| `make surface-check` | The drift gate: regenerates the manifest and fails if the working tree changed as a result, so a stale manifest cannot merge. Wired into `make ci`. |
+
+The manifest is committed so the site build never requires a Go toolchain (NFR-5). A non-mutating counterpart, `TestCommittedManifestMatchesRecord` in `internal/surface`, runs under `make test` and fails with a message naming `make surface-manifest`; `make surface-check` adds the git-diff semantics the CI workflows use so the check reads identically everywhere.
+
+### Where the gate runs
+
+The drift check must catch both a Go-side change and a site-side edit:
+
+* **Go workflow** (`.github/workflows/ci.yml`): runs `make ci`, which includes `surface-check`.
+* **Site workflow** (`.github/workflows/site.yml`): installs Go and runs the drift check for pull requests touching only `site/`, which `ci.yml` ignores by path. Installing Go for this step does not make the site build depend on it; the build reads the committed manifest.
+
+Separately, `.agents/scripts/site.content.check.mjs` rejects any bare numeric claim about tools, verbs, domains, or configuration variables reintroduced under `site/src` outside the generated manifest, naming the offending file and line. See [`site/AGENTS.md`](../../site/AGENTS.md) for the site-side rule and [`release.md`](release.md#the-published-site-is-a-release-surface) for why the site is treated as a release surface.
 
 ---
 

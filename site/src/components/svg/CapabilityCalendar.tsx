@@ -54,7 +54,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
   const callouts = [
     {
       eventIdx: 0,
-      tool: 'calendar_create_event',
+      tool: 'calendar · create_event',
       // tip lands near middle of event bar top edge
       tipColFrac: 0.5,
       tipRow: 0,
@@ -63,7 +63,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
     },
     {
       eventIdx: 1,
-      tool: 'calendar_search_events',
+      tool: 'calendar · search_events',
       tipColFrac: 0.5,
       tipRow: 1,
       labelX: 330,
@@ -71,7 +71,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
     },
     {
       eventIdx: 3,
-      tool: 'calendar_get_free_busy',
+      tool: 'calendar · get_free_busy',
       tipColFrac: 0.5,
       tipRow: 2,
       labelX: 330,
@@ -79,7 +79,7 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
     },
     {
       eventIdx: 4,
-      tool: 'calendar_reschedule_event',
+      tool: 'calendar · reschedule_event',
       tipColFrac: 0.5,
       tipRow: 3,
       labelX: 330,
@@ -431,14 +431,14 @@ export default function CapabilityCalendar({ className }: CapabilityCalendarProp
         <animate attributeName="opacity" values="0.9;0;0.9" dur="1.1s" repeatCount="indefinite" />
       </rect>
 
-      {/* ── 15. "calendar_create_event" echo response ── */}
+      {/* ── 15. "calendar · create_event" echo response ── */}
       <text
         x="24" y="279"
         fontFamily="'Geist Mono', monospace"
         fontSize="7.5"
         fill={C.gray400}
       >
-        → calendar_create_event · "Team Standup" · 2026-04-07 · 09:00–09:30
+        → calendar · create_event · "Team Standup" · 2026-04-07 · 09:00–09:30
       </text>
 
       {/* ── 16. Top-right badge: tool count ── */}

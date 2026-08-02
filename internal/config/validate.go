@@ -160,7 +160,7 @@ func ValidateConfig(cfg Config) error {
 	// Only "", "true", and "false" (case-insensitive) are recognized.
 	// Any other value is silently treated as false by LoadConfig, so
 	// a warning helps operators catch unintentional misconfiguration.
-	if rawReadOnly := os.Getenv("OUTLOOK_MCP_READ_ONLY"); rawReadOnly != "" {
+	if rawReadOnly := os.Getenv(EnvReadOnly); rawReadOnly != "" {
 		lower := strings.ToLower(rawReadOnly)
 		if lower != "true" && lower != "false" {
 			slog.Warn("non-standard OUTLOOK_MCP_READ_ONLY value, treating as false",

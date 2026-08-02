@@ -42,6 +42,24 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Surface-manifest drift check (CR-0073 FR-22, FR-23). The site consumes the
+      # code-derived manifest at site/src/generated/surface.json, and this workflow
+      # is the only one a site-only pull request triggers: ci.yml ignores site/**,
+      # so a hand-edited manifest or a Go-side change merged without regenerating
+      # would otherwise reach neither check. The Go workflow runs the same check via
+      # `make ci`; here it must run explicitly, which needs Go installed. Installing
+      # Go for this step does not make the site build depend on it: the build reads
+      # the committed manifest, and this step only regenerates it to confirm the
+      # commit is current.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Surface manifest drift check
+        run: |
+          CGO_ENABLED=0 go run cmd/gen-surface/main.go
+          git diff --exit-code -- site/src/generated/surface.json \
+            || (echo "ERROR: surface manifest is stale; run 'make surface-manifest' and commit site/src/generated/surface.json" && exit 1)
+
       # Node plus corepack, which resolves pnpm from the "packageManager" field in
       # site/package.json, so no pnpm version is pinned here. Kept identical to
       # deploy-site.yml on purpose: a gate that passes on the pull request and fails on

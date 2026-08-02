@@ -1,79 +1,39 @@
 import { useState, useRef, useMemo, useCallback } from 'react'
 import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
+import { domains, domainCount, fullVerbCount, defaultVerbCount } from '../surface'
 
-interface Tool {
+/**
+ * A rendered verb: one `operation` value of an aggregate domain tool. Derived from the
+ * generated surface manifest, never transcribed.
+ */
+interface VerbRow {
   name: string
   description: string
+  gate: string | null
 }
 
-interface ToolCategory {
+/** A rendered category: one aggregate domain tool and the verbs it dispatches. */
+interface DomainCategory {
   id: string
   label: string
-  tools: Tool[]
+  verbs: VerbRow[]
 }
 
-const TOOL_CATEGORIES: ToolCategory[] = [
-  {
-    id: 'account',
-    label: 'Account Management',
-    tools: [
-      { name: 'account_add', description: 'Add a Microsoft account; triggers lazy auth on first use' },
-      { name: 'account_list', description: 'List all configured accounts and their auth status' },
-      { name: 'account_remove', description: 'Remove an account and delete its cached token' },
-    ],
-  },
-  {
-    id: 'diagnostics',
-    label: 'Diagnostics',
-    tools: [
-      { name: 'status', description: 'Server health, configured accounts, enabled features' },
-      { name: 'complete_auth', description: 'Complete authorization code flow for headless/remote setups' },
-    ],
-  },
-  {
-    id: 'calendar-read',
-    label: 'Calendar — Read',
-    tools: [
-      { name: 'calendar_list', description: 'List available calendars' },
-      { name: 'calendar_list_events', description: 'List events in a date range' },
-      { name: 'calendar_get_event', description: 'Get a single event by ID' },
-    ],
-  },
-  {
-    id: 'calendar-search',
-    label: 'Calendar — Search',
-    tools: [
-      { name: 'calendar_search_events', description: 'Full-text and OData-filtered event search' },
-      { name: 'calendar_get_free_busy', description: 'Check free/busy slots for one or more users' },
-    ],
-  },
-  {
-    id: 'calendar-write',
-    label: 'Calendar — Write',
-    tools: [
-      { name: 'calendar_create_event', description: 'Create a calendar event' },
-      { name: 'calendar_create_meeting', description: 'Create a meeting with attendees (includes confirmation guidance)' },
-      { name: 'calendar_update_event', description: 'Update an existing event' },
-      { name: 'calendar_update_meeting', description: 'Update an existing meeting (includes confirmation guidance)' },
-      { name: 'calendar_delete_event', description: 'Delete an event' },
-      { name: 'calendar_cancel_meeting', description: 'Cancel a meeting and notify attendees' },
-      { name: 'calendar_respond_event', description: 'Accept, decline, or tentatively accept a meeting' },
-      { name: 'calendar_reschedule_event', description: 'Reschedule an event to a new time' },
-      { name: 'calendar_reschedule_meeting', description: 'Reschedule a meeting and notify attendees' },
-    ],
-  },
-  {
-    id: 'mail-read',
-    label: 'Mail — Read (opt-in)',
-    tools: [
-      { name: 'mail_list_folders', description: 'List mailbox folders' },
-      { name: 'mail_list_messages', description: 'List messages in a folder with OData filtering' },
-      { name: 'mail_search_messages', description: 'Full-text KQL search across mailbox' },
-      { name: 'mail_get_message', description: 'Get a single message by ID' },
-    ],
-  },
-]
+/**
+ * TOOL_CATEGORIES is the tools reference, derived from the surface manifest so the site
+ * states no verb name or count of its own. Each category is one aggregate domain tool; its
+ * rows are the `operation` values that tool dispatches, not flat top-level tool names.
+ */
+const TOOL_CATEGORIES: DomainCategory[] = domains.map((domain) => ({
+  id: domain.name,
+  label: domain.name,
+  verbs: domain.verbs.map((verb) => ({
+    name: verb.name,
+    description: verb.summary,
+    gate: verb.gate,
+  })),
+}))
 
 export default function ToolsReferenceSection() {
   const sectionRef = useRef<HTMLElement>(null)
@@ -96,22 +56,22 @@ export default function ToolsReferenceSection() {
     })
   }, { scope: sectionRef })
 
-  /* ── Filter tools by search query ── */
+  /* ── Filter verbs by search query ── */
   const filteredCategories = useMemo(() => {
     if (!searchQuery.trim()) return TOOL_CATEGORIES
     const q = searchQuery.toLowerCase()
     return TOOL_CATEGORIES
       .map((cat) => ({
         ...cat,
-        tools: cat.tools.filter(
+        verbs: cat.verbs.filter(
           (t) => t.name.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
         ),
       }))
-      .filter((cat) => cat.tools.length > 0)
+      .filter((cat) => cat.verbs.length > 0)
   }, [searchQuery])
 
-  const totalTools = useMemo(
-    () => filteredCategories.reduce((sum, cat) => sum + cat.tools.length, 0),
+  const totalVerbs = useMemo(
+    () => filteredCategories.reduce((sum, cat) => sum + cat.verbs.length, 0),
     [filteredCategories],
   )
 
@@ -153,7 +113,7 @@ export default function ToolsReferenceSection() {
               <span className="w-0.5 h-6 bg-brand-lime rounded-full" />
             )}
             <span className="font-mono text-label font-semibold tracking-[0.18em] text-brand-dark uppercase">
-              23 MCP Tools — View Full Reference
+              Everything It Can Do — View Full Reference
             </span>
           </span>
           <span className={`text-brand-dark/40 transition-transform duration-200 ${isOpen ? 'rotate-45' : ''}`}>
@@ -167,6 +127,18 @@ export default function ToolsReferenceSection() {
         {/* ── Expanded content ── */}
         {isOpen && (
           <div ref={contentRef} id="tools-reference-content" className="pt-6 pb-2">
+            {/* Surface note: each domain is one aggregate MCP tool; the rows below are its
+                operation values. The verb counts are stated as the full surface and the
+                default configuration so neither number is ambiguous. */}
+            <p className="text-sm text-gray-400 font-sans mb-4">
+              Each domain is one aggregate MCP tool. The rows are its{' '}
+              <code className="font-mono text-xs bg-brand-off-white px-1.5 py-0.5 rounded text-brand-dark">
+                operation
+              </code>{' '}
+              values. {fullVerbCount} verbs across {domainCount} tools with every gate open,{' '}
+              {defaultVerbCount} in the default configuration.
+            </p>
+
             {/* Search bar */}
             <div className="mb-6 max-w-md">
               <div className="relative">
@@ -182,13 +154,13 @@ export default function ToolsReferenceSection() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search tools..."
+                  placeholder="Search verbs..."
                   className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-gray-100 bg-brand-off-white text-sm font-sans text-brand-dark placeholder:text-gray-200 focus:outline-none focus:border-brand-lime/50 focus:ring-1 focus:ring-brand-lime/20 transition-colors"
-                  aria-label="Search tools by name or description"
+                  aria-label="Search verbs by name or description"
                 />
               </div>
               <span className="mt-1.5 block text-xs text-gray-200 font-mono">
-                {totalTools} tool{totalTools !== 1 ? 's' : ''} found
+                {totalVerbs} verb{totalVerbs !== 1 ? 's' : ''} found
               </span>
             </div>
 
@@ -206,7 +178,7 @@ export default function ToolsReferenceSection() {
                         {category.label}
                       </span>
                       <span className="text-xs text-gray-200 font-mono">
-                        {category.tools.length}
+                        {category.verbs.length}
                       </span>
                     </div>
                     <svg
@@ -226,7 +198,7 @@ export default function ToolsReferenceSection() {
                         <thead>
                           <tr>
                             <th className="pb-2 pr-4 font-mono text-[9px] tracking-wider text-lime-dark uppercase font-semibold w-48">
-                              Tool
+                              Operation
                             </th>
                             <th className="pb-2 font-mono text-[9px] tracking-wider text-lime-dark uppercase font-semibold">
                               Description
@@ -234,18 +206,23 @@ export default function ToolsReferenceSection() {
                           </tr>
                         </thead>
                         <tbody>
-                          {category.tools.map((tool, i) => (
+                          {category.verbs.map((verb, i) => (
                             <tr
-                              key={tool.name}
+                              key={verb.name}
                               className={i % 2 === 0 ? 'bg-brand-dark/[0.02]' : ''}
                             >
                               <td className="py-2 pr-4 font-mono text-sm text-brand-dark">
                                 <span className="bg-brand-off-white px-1.5 py-0.5 rounded text-xs">
-                                  {tool.name}
+                                  {category.label} · {verb.name}
                                 </span>
                               </td>
                               <td className="py-2 text-sm text-gray-400 font-sans">
-                                {tool.description}
+                                {verb.description}
+                                {verb.gate && (
+                                  <span className="ml-2 inline-block font-mono text-[9px] tracking-wider text-lime-dark uppercase">
+                                    gated by {verb.gate}
+                                  </span>
+                                )}
                               </td>
                             </tr>
                           ))}
@@ -258,7 +235,7 @@ export default function ToolsReferenceSection() {
 
               {filteredCategories.length === 0 && (
                 <p className="py-8 text-center text-sm text-gray-400 font-sans">
-                  No tools match &ldquo;{searchQuery}&rdquo;
+                  No verbs match &ldquo;{searchQuery}&rdquo;
                 </p>
               )}
             </div>
