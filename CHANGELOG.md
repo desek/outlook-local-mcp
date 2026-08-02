@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0](https://github.com/desek/outlook-local-mcp/compare/v0.5.1...v0.6.0) (2026-08-02)
+
+
+### Features
+
+* **site:** correct site content from a generated surface manifest (CR-0073) ([#43](https://github.com/desek/outlook-local-mcp/issues/43)) ([7b2f0ad](https://github.com/desek/outlook-local-mcp/commit/7b2f0ad735ecdeeb4639030b1ed1b5854e143819))
+
+
+### Bug Fixes
+
+* **tools:** correct the KQL quoting of mail.search_messages ([#44](https://github.com/desek/outlook-local-mcp/issues/44)) ([5c2037b](https://github.com/desek/outlook-local-mcp/commit/5c2037b47ca66a0feb19086149748540e224b913))
+* **tools:** reach explicit doc anchors and localise free/busy text ([#40](https://github.com/desek/outlook-local-mcp/issues/40)) ([8371f74](https://github.com/desek/outlook-local-mcp/commit/8371f74cdc3f59868637fc943222609473fadca3))
+
 ## [0.5.1](https://github.com/desek/outlook-local-mcp/compare/v0.5.0...v0.5.1) (2026-08-01)
 
 
