@@ -1,14 +1,15 @@
 ---
 id: "CR-0073"
-status: "proposed"
+status: "completed"
 date: 2026-08-02
+completed-date: 2026-08-02
 requestor: desek
 stakeholders:
   - desek
 priority: "high"
 target-version: "0.6.0"
 source-branch: feat/cr-0073-surface-manifest
-source-commit: 8371f74
+source-commit: cd77815
 ---
 
 # Site Content Correction Driven by a Generated Surface Manifest
@@ -666,32 +667,32 @@ Then the new figure is measured on the corrected build by the method the harness
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
-- [ ] Any linter exceptions are documented with justification
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
+- [x] Any linter exceptions are documented with justification
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] Every new file carries a package or module docstring and an index annotation
-- [ ] `AGENTS.md` (via its `CLAUDE.md` symlink), `site/AGENTS.md`, and `docs/reference/release.md` updated
+- [x] Every new file carries a package or module docstring and an index annotation
+- [x] `AGENTS.md` (via its `CLAUDE.md` symlink), `site/AGENTS.md`, and `docs/reference/release.md` updated
 
 ### Code Review
 
-- [ ] Changes submitted via pull request
-- [ ] PR title follows Conventional Commits format
-- [ ] Code review completed and approved
-- [ ] Changes squash-merged to maintain linear history
+- [x] Changes submitted via pull request
+- [x] PR title follows Conventional Commits format
+- [x] Code review completed and approved
+- [x] Changes squash-merged to maintain linear history
 
 ### Verification Commands
 
