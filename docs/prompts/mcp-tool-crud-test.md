@@ -567,6 +567,17 @@ Call `{tool: "mail", args: {operation: "list_messages", ...}}` four times with t
 - **Fail:** If any call returns an error or ignores the filter.
 - **Expected scale artifact (not a finding):** On a large mailbox a list is capped at `max_results` (default 25, max 100), so a folder unread total far larger than the returned list is expected. A prior run recorded 27,214 unread against a default cap of 25; this is the cap working as designed, not a defect. Read the folder's own unread total from the count line, not from the number of rows returned, and do not raise it as a finding.
 
+**30f -- Property-restricted search.** Call `{tool: "mail", args: {operation: "search_messages", query: "from:<own UPN>", max_results: 5}}`, substituting your own UPN for `<own UPN>`.
+
+- **Verify:** The call returns plain text (ranked results, not chronological) and does not raise a parse error naming a character position. Any returned message is from the named sender.
+- **Fail:** If the call returns a Graph parse error such as `character ':' is not valid at position N`. The server must supply the enclosing quotes a `$search` value requires, so a `property:value` query must not reach Graph unquoted.
+
+**30g -- Parenthesised phrase search, with a silent-discard control.** Call `{tool: "mail", args: {operation: "search_messages", query: "subject:(CRUD test)", max_results: 5}}`, then call `{tool: "mail", args: {operation: "search_messages", query: "Zzzqqxx Wwwyyzz", max_results: 5}}`.
+
+- **Verify:** The parenthesised call returns plain text and does not raise a parse error. The parenthesised form matches all of its tokens in any order, not as an adjacent phrase, so a subject holding both words in either order is a match.
+- **Verify (silent-discard control):** The two-nonsense-word call returns **zero** results, not the newest messages in the mailbox. A multi-word query that matches nothing must filter to an empty result, not fall through to recent unrelated mail.
+- **Fail:** If the parenthesised call errors, or if the nonsense multi-word query returns recent messages instead of zero results.
+
 ### Step 31 -- Create draft (skip if mail management disabled)
 
 If `config.features.mail_manage_enabled` from Step 0c is `false`, **skip** Steps 31 through 35 and record them as SKIP.
@@ -688,6 +699,8 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 30c  | Mail list flag_status filter      | PASS/FAIL/SKIP | e.g., "flagged filter honored"                           |
 | 30d  | Mail list provenance filter       | PASS/FAIL/SKIP | e.g., "provenance filter returned 0 MCP messages"        |
 | 30e  | Mail list baseline                | PASS/FAIL/SKIP | e.g., "baseline count recorded"                          |
+| 30f  | Mail search (property-restricted) | PASS/FAIL/SKIP | e.g., "from: query scoped, no parse error"               |
+| 30g  | Mail search (phrase + control)    | PASS/FAIL/SKIP | e.g., "parenthesised matched; nonsense query returned 0" |
 | 31   | Create mail draft                 | PASS/FAIL/SKIP | e.g., "draft id returned"                                |
 | 32   | Update mail draft                 | PASS/FAIL/SKIP | e.g., "subject updated"                                  |
 | 33   | Create reply draft                | PASS/FAIL/SKIP | e.g., "reply draft created"                              |
