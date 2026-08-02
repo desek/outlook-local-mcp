@@ -265,7 +265,7 @@ export default function CapabilitiesSection() {
           style={{ width: '45%' }}
         >
           <span className="font-mono text-label font-semibold tracking-[0.18em] text-lime-dark uppercase block mb-3">
-            Core Capabilities
+            What can it do?
           </span>
           <h2 className="text-section-heading font-sans font-normal text-brand-dark tracking-tight leading-tight">
             {fullVerbCount} verbs across {domainCount} tools, {defaultVerbCount} in the default configuration. Every calendar operation covered.
@@ -390,7 +390,7 @@ export default function CapabilitiesSection() {
             ref={eyebrowRef}
             className="font-mono text-label font-semibold tracking-[0.18em] text-lime-dark uppercase block mb-1"
           >
-            Core Capabilities
+            What can it do?
           </span>
           <h2
             ref={headingRef}

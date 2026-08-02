@@ -118,7 +118,7 @@ export default function GettingStartedSection() {
           ref={eyebrowRef}
           className="font-mono text-label font-semibold tracking-[0.18em] text-lime-dark uppercase block mb-3"
         >
-          Getting Started
+          How do you get started?
         </span>
         <h2
           ref={headingRef}

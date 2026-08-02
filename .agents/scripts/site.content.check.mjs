@@ -65,7 +65,7 @@ const distDir = process.argv[2] ?? 'site/dist'
  * measured the same way on both sides of the comparison.
  */
 const TEXT_FLOOR = {
-  'index.html': 11714,
+  'index.html': 11942,
   'quickstart.html': 7390,
   'concepts.html': 15582,
   'troubleshooting.html': 17468,
@@ -84,6 +84,16 @@ const TEXT_FLOOR = {
  * capability content are a net loss of characters even though a few more verbs are now
  * listed; no prose section was shortened or deleted. The other three page floors did not
  * move, because CR-0073 changed no content outside the landing page's tool-surface figures.
+ *
+ * The landing-page floor was then raised again by CR-0073 phase 4, from 11,714 to 11,942,
+ * an increase of 228 characters measured on the corrected build with this script's own
+ * method. Phase 4 corrected the prose rather than a figure: the privacy section's outbound
+ * claim was restated accurately (naming Microsoft's endpoints plus the optional telemetry
+ * endpoint, and acknowledging the loopback port that interactive sign-in binds, per FR-18
+ * and FR-19), and three landing section kickers were rephrased as questions their sections
+ * answer (FR-20, FR-21). The net is more prose, not less, so the floor rises to lock the
+ * added content in as the new minimum. The other three page floors did not move, because
+ * phase 4 touched no content outside the landing page.
  */
 
 /** Crawler-facing files the CR requires the build to emit. */
