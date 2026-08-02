@@ -11,9 +11,9 @@
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-400-normal-DTRLJnHl.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-600-normal-V-KvD_pi.woff2" />
     <meta name="description" content="Troubleshooting Guide documentation for Outlook Local MCP, the local Model Context Protocol server for Microsoft Outlook Calendar and Mail." />
-      <meta name="build:commit" content="7b2f0ad735ecdeeb4639030b1ed1b5854e143819" />
-    <meta name="build:time" content="2026-08-02T13:29:29.836Z" />
-    <meta name="build:run" content="30750023800" />
+      <meta name="build:commit" content="5c2037b47ca66a0feb19086149748540e224b913" />
+    <meta name="build:time" content="2026-08-02T15:52:58.492Z" />
+    <meta name="build:run" content="30755342734" />
     <meta name="build:environment" content="ci" />
       <link rel="canonical" href="https://outlook-local-mcp.com/troubleshooting.html" />
     <meta property="og:title" content="Troubleshooting — Outlook Local MCP" />
@@ -166,6 +166,18 @@
 <li>For mail queries, use the <code>search</code> parameter (KQL syntax) instead of <code>$filter</code> for full-text search. <code>$filter</code> on mail supports <code>isRead</code>, <code>isDraft</code>, <code>hasAttachments</code>, <code>importance</code>, <code>flag/flagStatus</code>, and <code>receivedDateTime</code>.</li>
 <li>If the error persists, use <code>output=raw</code> on the offending tool to see the full OData error detail, then adjust the filter expression.</li>
 </ol>
+<hr>
+<h2 id="search-query-rejected">Search query rejected</h2>
+<p><strong>Symptom:</strong> A <code>mail</code> <code>search_messages</code> call returns an error such as <code>search query &quot;subject:Design&quot; Review&quot; contains a double quote that does not delimit a property value or enclose the whole query; write a multi-word property value in parentheses, for example subject:(Design Review), and remove any other double quote, then retry</code>.</p>
+<p><strong>Cause:</strong> The query carries a stray double quote that neither encloses the whole query nor delimits a property value. The server refuses it before calling Microsoft Graph, because Graph would otherwise return a parse error that names only a character position and neither the cause nor the fix.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Write a multi-word property value in parentheses, not in quotes: <code>subject:(Design Review)</code>, not <code>subject:&quot;Design Review&quot;</code>. The parenthesised form matches all of its tokens in any order.</li>
+<li>Remove any other double quote from the query and retry.</li>
+<li>A single bare term (<code>Contoso</code>) and a compound expression (<code>subject:(Design Review) from:alice@contoso.com</code>) both work as written; the server supplies the enclosing quotes Graph requires.</li>
+</ol>
+<p><strong>Related symptom (older logs, or calling Graph directly):</strong> A Microsoft Graph parse error naming a character position, such as <code>character &#39;:&#39; is not valid at position 7</code> for a query like <code>subject:Contoso</code>. The cause is the missing enclosing double quotes that Graph requires around a <code>$search</code> value. The server now supplies those quotes for you, so a query sent through <code>search_messages</code> no longer produces this error. You will still see it if you call Graph directly without quoting the value.</p>
+<p><strong>Related symptom (silent wrong results, before this fix):</strong> An unquoted multi-word search such as <code>report summary</code> returned the newest messages in the mailbox rather than matches, with no error at all. If you saw a search return recent, unrelated mail and concluded the mailbox or the index was broken, this was the cause: the unquoted multi-word term was discarded by Graph. The server now encloses the query, so a multi-word search filters instead of being discarded, and a search that matches nothing correctly returns zero results.</p>
 <hr>
 <h2 id="mail-disabled">Mail disabled</h2>
 <p><strong>Symptom:</strong> The <code>mail</code> tool returns <code>mail access is not enabled</code> or <code>unknown operation</code>.</p>
