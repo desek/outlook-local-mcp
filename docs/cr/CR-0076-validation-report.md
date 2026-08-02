@@ -113,14 +113,36 @@ per-domain buckets are unaffected. This is a justified non-change, not a gap.
 
 ## Gaps
 
-**GAP-1 (outstanding acceptance step, not a defect).** The CR's Verification Commands section
-requires the twelve measured rows to be re-run through the built server against a live
-mailbox as part of acceptance, confirming rows 1, 4, 6, 7, and 11 now produce the corrected
-outcome. No evidence of this live re-run after the implementation landed was found in this
-session's history. The CR itself acknowledges the test suite issues no Graph call, so this is
-the only path to confirming AC-1, AC-2, AC-3, and AC-8 end states. Suggested minimal action:
-rebuild the binary to the `.mcp.json` path, then re-issue the twelve rows and record the five
-corrected outcomes. Ref: FR-12, AC-1, AC-2, AC-3, AC-8.
+**GAP-1: CLOSED after this report was written.** The live re-run has now been executed.
+
+At the time this report was authored the running server predated the fix, which was itself
+confirmed by observation rather than assumed: `subject:Contoso` still returned the
+position-7 parse error while the on-disk binary already carried the change. The server was
+restarted and the rows re-issued. Results:
+
+| Query issued | Before | After |
+|---|---|---|
+| `subject:Contoso` | Error, `':'` invalid at position 7 | Two correct matches |
+| `Zzzqqxx Wwwyyzz` | Newest unrelated messages, silently wrong | Zero results |
+| `subject:"Contoso Quarterly"` | Error | Three correct matches, translated |
+| `subject:"Contoso Teams"` | Not previously issued | Zero results |
+| `subject:Design" Review` | Would reach Graph and fail there | Refused before the call |
+| `"subject:(Contoso Quarterly)"` | Three matches | Three matches, unchanged |
+| `from:alice@contoso.com hasAttachments:true` | Error | Two correct matches |
+
+The decisive pair is the third and fourth rows. `subject:"Contoso Quarterly"` returns three
+and `subject:"Contoso Teams"` returns none, which establishes that the translation scopes
+the value to the named property rather than merely producing an expression Graph accepts.
+A leaking translation would have returned the same three for both, because "Teams" appears
+in those messages' bodies. That is AC-3 graded on its end state, which no network-free test
+can reach.
+
+The refusal text was observed in full and carries the failure, the fix, a worked example,
+and the retry instruction, satisfying NFR-4 at the caller's surface rather than only in the
+unit test.
+
+AC-1, AC-2, AC-3, and AC-8 are therefore confirmed against a live mailbox and move from
+PARTIAL to PASS. Ref: FR-12, AC-1, AC-2, AC-3, AC-8.
 
 **GAP-2 (outstanding acceptance step, not a defect).** `make crud-test` (the lifecycle
 harness, now carrying steps 30f/30g) has not been executed post-implementation in this
@@ -128,7 +150,15 @@ session. It requires a rebuilt binary at the configured path and a live account.
 minimal action: rebuild per the AGENTS.md ldflags recipe, then `make crud-test`, and confirm
 30f/30g PASS. Ref: Test Strategy harness step.
 
-Both gaps are the explicitly documented live-verification limitation, recorded here as
-outstanding acceptance steps per the CR's own Verification Commands note, not as
-implementation failures. Every requirement and every test-strategy entry that a
-network-free suite *can* verify is verified and passing.
+GAP-1 is closed by live observation. GAP-2 remains open and is a paid harness run awaiting
+a decision. Neither was ever an implementation failure; both were the explicitly documented
+live-verification limitation the CR's own Verification Commands note anticipated.
+
+Revised counts after the live re-run: FAIL 0, PARTIAL 0, GAP 1.
+
+One methodological note worth keeping, because it nearly produced a false pass. The first
+attempt to close GAP-1 was made against a server process started before the implementation
+landed. It would have reported the defect unfixed. The binary on disk was current; the
+running process was not, and nothing in the tool output distinguishes the two. The check
+that caught it was issuing a query whose answer was known to differ between the two
+versions, before trusting any other result from that instrument.
