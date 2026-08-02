@@ -113,7 +113,7 @@ export default function ToolsReferenceSection() {
               <span className="w-0.5 h-6 bg-brand-lime rounded-full" />
             )}
             <span className="font-mono text-label font-semibold tracking-[0.18em] text-brand-dark uppercase">
-              {fullVerbCount} Verbs Across {domainCount} Tools — View Full Reference
+              Everything It Can Do — View Full Reference
             </span>
           </span>
           <span className={`text-brand-dark/40 transition-transform duration-200 ${isOpen ? 'rotate-45' : ''}`}>

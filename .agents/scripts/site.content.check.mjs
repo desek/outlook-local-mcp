@@ -67,7 +67,7 @@ const distDir = process.argv[2] ?? 'site/dist'
  * measured the same way on both sides of the comparison.
  */
 const TEXT_FLOOR = {
-  'index.html': 11942,
+  'index.html': 12002,
   'quickstart.html': 7390,
   'concepts.html': 15582,
   'troubleshooting.html': 17468,
@@ -96,6 +96,16 @@ const TEXT_FLOOR = {
  * answer (FR-20, FR-21). The net is more prose, not less, so the floor rises to lock the
  * added content in as the new minimum. The other three page floors did not move, because
  * phase 4 touched no content outside the landing page.
+ *
+ * The landing-page floor was raised a third time by the CR-0073 iteration session, from
+ * 11,942 to 12,002, an increase of 60 characters. The session replaced the count-led
+ * wording a visitor meets first with outcome-led wording: the hero stat now names what the
+ * server reaches rather than how many verbs it registers, the capability section answers
+ * its question with what the reader can ask for, and the tools-reference entry point
+ * promises the reference rather than counting it. The counts survive inside the expanded
+ * reference, still read from the manifest. The replacement prose is marginally longer than
+ * the figures it replaced, so the floor rises to lock it in. The other three page floors
+ * did not move, because the session touched no content outside the landing page.
  */
 
 /** Crawler-facing files the CR requires the build to emit. */

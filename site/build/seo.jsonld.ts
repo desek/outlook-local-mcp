@@ -20,7 +20,7 @@
  */
 import { SITE_ORIGIN, LAST_UPDATED_ISO } from '../src/site.meta'
 import { canonicalUrl, type PageKey, type PageSeo } from './seo.pages'
-import { domainCount, fullVerbCount, defaultVerbCount, domainNames } from '../src/surface'
+import { domainNames } from '../src/surface'
 
 /** The public source repository, reused across several entity properties. */
 const REPO = 'https://github.com/desek/outlook-local-mcp'
@@ -74,7 +74,7 @@ function softwareApplication(): Record<string, unknown> {
     programmingLanguage: 'Go',
     downloadUrl: `${REPO}/releases`,
     softwareVersion: '0.8.0',
-    featureList: `${domainCount} aggregate MCP tools (${domainNames.join(', ')}) exposing ${fullVerbCount} verbs, ${defaultVerbCount} in the default configuration.`,
+    featureList: `Read and write Microsoft Calendar and Mail from a chat: check availability, book and reschedule meetings, search and send messages, and manage several accounts. Grouped as the ${domainNames.join(', ')} tools.`,
     dateModified: LAST_UPDATED_ISO,
   }
 }

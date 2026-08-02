@@ -7,7 +7,7 @@ import CapabilityMultiAccount from './svg/CapabilityMultiAccount'
 import CapabilityMailSearch from './svg/CapabilityMailSearch'
 import CapabilityPrivacyDiagram from './svg/CapabilityPrivacyDiagram'
 import CapabilityAuthFlow from './svg/CapabilityAuthFlow'
-import { domainByName, fullVerbCount, defaultVerbCount, domainCount } from '../surface'
+import { domainByName } from '../surface'
 
 /**
  * capabilityVerbNames returns the default-exposed verbs of a domain, as `operation`
@@ -268,7 +268,7 @@ export default function CapabilitiesSection() {
             What can it do?
           </span>
           <h2 className="text-section-heading font-sans font-normal text-brand-dark tracking-tight leading-tight">
-            {fullVerbCount} verbs across {domainCount} tools, {defaultVerbCount} in the default configuration. Every calendar operation covered.
+            Ask for your week, book the meeting, find the thread, send the reply. Claude does it in Outlook, not in a copy of it.
           </h2>
         </div>
 
@@ -396,7 +396,7 @@ export default function CapabilitiesSection() {
             ref={headingRef}
             className="text-[1.1rem] font-sans font-normal text-brand-dark tracking-tight leading-tight"
           >
-            {fullVerbCount} verbs across {domainCount} tools, {defaultVerbCount} in the default configuration. Every calendar operation covered.
+            Ask for your week, book the meeting, find the thread, send the reply. Claude does it in Outlook, not in a copy of it.
           </h2>
         </div>
 

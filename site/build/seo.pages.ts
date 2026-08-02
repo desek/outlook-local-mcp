@@ -13,7 +13,6 @@
  * @agents-index Registry of published pages with canonical path, title, and description; the single source for SEO, sitemap, and JSON-LD.
  */
 import { SITE_ORIGIN } from '../src/site.meta'
-import { domainCount, fullVerbCount } from '../src/surface'
 
 /**
  * PageKey identifies a page by the JSON-LD entity family it carries, not merely its
@@ -53,7 +52,7 @@ export const PAGES: readonly PageSeo[] = [
     path: '/',
     title: "Outlook Local MCP — Your AI's Native Interface to Outlook",
     description:
-      `A Model Context Protocol server that connects Claude directly to Microsoft Calendar and Mail. No Entra ID setup. No cloud middleman. 100% local, zero-config auth, ${domainCount} aggregate MCP tools exposing ${fullVerbCount} verbs.`,
+      'A Model Context Protocol server that connects Claude directly to Microsoft Calendar and Mail. Ask it to check your week, book a meeting, find a thread, or send a reply. No Entra ID setup. No cloud middleman. 100% local, zero-config auth.',
   },
   {
     key: 'concepts',

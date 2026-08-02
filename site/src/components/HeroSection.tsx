@@ -3,16 +3,16 @@ import gsap from 'gsap'
 import { useGSAP } from '@gsap/react'
 import HeroBackground from './canvas/HeroBackground'
 import { useScrollbarHeight } from '../use-scrollbar-height'
-import { domainCount, fullVerbCount, defaultVerbCount } from '../surface'
 
 const INSTALL_CMD = 'go install github.com/desek/outlook-local-mcp/cmd/outlook-local-mcp@latest'
 
-// The tools stat derives its figures from the surface manifest: the number of aggregate
-// domain tools and the full and default verb counts (CR-0073). No count is transcribed.
+// The stats lead with what the server reaches, not with the size of its interface. The
+// counts still exist, derived from the surface manifest, where a reader has chosen the
+// tools reference; a visitor meeting the page first is told what they can do with it.
 const STATS = [
   { id: 'local', label: '100% LOCAL', desc: 'No intermediate servers' },
   { id: 'azure', label: 'ZERO ENTRA ID', desc: 'Pre-authorized client ID' },
-  { id: 'tools', label: `${domainCount} MCP TOOLS`, desc: `${fullVerbCount} verbs, ${defaultVerbCount} by default` },
+  { id: 'tools', label: 'CALENDAR + MAIL', desc: 'Book, reschedule, search, send' },
 ] as const
 
 export default function HeroSection() {
