@@ -1,4 +1,4 @@
-.PHONY: build test lint fmt fmt-check vet tidy ci verify govulncheck security vuln-scan license-check clean snapshot goreleaser-check build-mcpb-binaries build-mcpb-local mcpb-validate mcpb-pack mcpb-local mcpb-clean docs-bundle crud-test
+.PHONY: build test lint fmt fmt-check vet tidy ci verify govulncheck security vuln-scan license-check clean snapshot goreleaser-check build-mcpb-binaries build-mcpb-local mcpb-validate mcpb-pack mcpb-local mcpb-clean docs-bundle crud-test surface-manifest surface-check
 
 BINARY_NAME := outlook-local-mcp
 BUILD_DIR := .
@@ -27,7 +27,26 @@ tidy:
 	go mod tidy
 	@git diff --exit-code go.mod go.sum || (echo "go.mod or go.sum not tidy" && exit 1)
 
-ci: docs-bundle build vet fmt-check tidy lint test goreleaser-check mcpb-validate
+ci: docs-bundle surface-check build vet fmt-check tidy lint test goreleaser-check mcpb-validate
+
+# Regenerate the code-derived surface manifest that the website consumes. The
+# generator reads the live verb builders and the configuration inventory and
+# writes site/src/generated/surface.json; it needs no credentials or network
+# (CR-0073 FR-7). This is the command a contributor runs after adding, renaming,
+# or removing a verb, a domain, or a configuration variable.
+surface-manifest:
+	@echo "==> Regenerating surface manifest"
+	@CGO_ENABLED=0 go run cmd/gen-surface/main.go
+	@echo "==> surface manifest written to site/src/generated/surface.json"
+
+# The drift check wired into `make ci`: regenerate the manifest and fail if the
+# working tree changed as a result, so a stale manifest cannot merge (CR-0073
+# FR-22, FR-25). A separate non-mutating guard, TestCommittedManifestMatchesRecord
+# in internal/surface, runs in `make test`; this target adds the git-diff
+# semantics the workflows use so the same check reads identically everywhere.
+surface-check: surface-manifest
+	@git diff --exit-code -- site/src/generated/surface.json \
+		|| (echo "ERROR: surface manifest is stale; run 'make surface-manifest' and commit site/src/generated/surface.json" && exit 1)
 
 verify:
 	go mod verify
