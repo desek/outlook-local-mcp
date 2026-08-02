@@ -4,21 +4,21 @@
 
 A Model Context Protocol server that connects Claude — or any MCP client — directly to Microsoft Calendar and Mail via the Graph API. All data stays on your machine. OAuth tokens live in your OS keychain. The server process never leaves localhost.
 
-## 23 tools. 5 domains. Every calendar operation covered.
+## Ask for your week, book the meeting, find the thread, send the reply. Claude does it in Outlook, not in a copy of it.
 
-### Calendar Management14 tools
+### Calendar Management15 verbs
 
 Read, search, create, update, and delete calendar events and meetings. Check free/busy availability across accounts.
 
 Meeting tools include attendee confirmation guidance and extra warnings for external attendees — the LLM won't accidentally spam a meeting invite without a check.
 
-### Multi-Account3 tools
+### Multi-Account7 verbs
 
 Add, list, and remove Microsoft accounts at runtime. Each account gets isolated token storage. Accounts persist across restarts.
 
 Lazy auth — no credentials required at startup. Authentication triggers on first tool call per account.
 
-### Mail Access (opt-in)4 tools
+### Mail Access (opt-in)5 verbs
 
 Read-only access to mailbox folders, messages, and full-text search via KQL. Disabled by default; enabled with one env var.
 
@@ -125,7 +125,7 @@ No credential setup before first use. On first tool call, a device code URL disp
 
 ## Every credential stays on your machine.
 
-No data routing through third parties. Verifiable, auditable, explainable to your security team. The architecture proves the claims.
+No credential and no message body is relayed through a third party. The only outbound destinations are Microsoft’s own endpoints, plus any telemetry endpoint you configure. Verifiable, auditable, explainable to your security team.
 
 ### OS-Native Token Storage
 
@@ -137,7 +137,7 @@ When the OS keychain is unavailable, tokens are encrypted with AES-256-GCM in a 
 
 ### Outbound Only
 
-Only two outbound connections: Microsoft Graph API and Microsoft Identity Platform. No inbound servers, no listening ports, no attack surface.
+Outbound requests reach only Microsoft's own endpoints — the Graph API and the Identity Platform — plus any telemetry endpoint you configure. No third party relays your data. The one inbound socket is a temporary loopback port opened only for interactive browser sign-in.
 
 ### PII Sanitization
 
