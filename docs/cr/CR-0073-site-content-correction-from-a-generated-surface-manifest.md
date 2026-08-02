@@ -7,8 +7,8 @@ stakeholders:
   - desek
 priority: "high"
 target-version: "0.6.0"
-source-branch: fix/cr-0074-doc-anchors
-source-commit: 1b184cc
+source-branch: feat/cr-0073-surface-manifest
+source-commit: 8371f74
 ---
 
 # Site Content Correction Driven by a Generated Surface Manifest
@@ -346,7 +346,8 @@ flowchart TD
   text floors.
 * `site/index.html`: the static meta description fallback.
 * `Makefile`, `.github/workflows/ci.yml`, `.github/workflows/site.yml`.
-* `CLAUDE.md`, `site/AGENTS.md`, `docs/reference/release.md`.
+* `AGENTS.md` (the repository instructions file; `CLAUDE.md` is a symlink to it),
+  `site/AGENTS.md`, `docs/reference/release.md`.
 
 ## Scope Boundaries
 
@@ -495,6 +496,7 @@ because that state looks correct and is exactly as stale as the one it replaces.
 | `internal/server/surface_export_test.go` | `TestBuildVerbsRequiresNoCredentials` | The inspection entry point builds with zero-value dependencies | Zero-value config, nil metrics and tracer | Four non-empty verb slices, no panic, no network call |
 | `.agents/scripts/site.content.check.mjs` | claims assertion | No bare numeric claim about tools, verbs, domains, or variables under `site/src` | The site sources | Exit 0, and a named file and line on failure |
 | `.agents/scripts/site.content.check.mjs` | text floor assertion | The corrected build meets the re-baselined floors | The built site | Exit 0 against floors measured on the corrected content |
+| `.agents/scripts/site.content.check.mjs` | tool-surface shape assertion | No flat tool name (for example `calendar_list_events`) appears in the served HTML, and the rendered tools reference names exactly the four domains calendar, mail, account, and system with no Diagnostics category | The built site | Exit 0 when no flat name and no invented domain is present, a named failure otherwise |
 
 ### Tests to Modify
 
@@ -545,6 +547,7 @@ Given the site is built from the current manifest
 When a reader opens the landing page
 Then the page states four aggregate domain tools
   And the verb count it displays equals the count in the manifest
+  And the JSON-LD feature count or feature list equals the count or list in the manifest
   And no occurrence of "23 MCP tools" remains
 ```
 
@@ -601,12 +604,16 @@ Then no claim asserts that no port is opened
   And the outbound description names Microsoft endpoints and the optional telemetry endpoint
 ```
 
-### AC-11: Sections answer before they elaborate
+### AC-11: Sections answer before they elaborate, under question-form headings
 
 ```gherkin
 Given a content section on the landing or documentation pages
 When its first sentence is read in isolation
 Then it answers the section heading without requiring the sentences that follow
+
+Given a landing page section that answers a question a user asks
+When its heading is read
+Then the heading is phrased in question form
 ```
 
 ### AC-12: A site-only edit cannot evade the gate
@@ -677,7 +684,7 @@ Then the new figure is measured on the corrected build by the method the harness
 ### Documentation
 
 - [ ] Every new file carries a package or module docstring and an index annotation
-- [ ] `CLAUDE.md`, `site/AGENTS.md`, and `docs/reference/release.md` updated
+- [ ] `AGENTS.md` (via its `CLAUDE.md` symlink), `site/AGENTS.md`, and `docs/reference/release.md` updated
 
 ### Code Review
 
@@ -816,3 +823,80 @@ Those figures are recorded to size the work and to let a reviewer confirm the ga
 real. They are deliberately not carried into any requirement, because a requirement
 that states a count would itself go stale, and this change request would then be one
 more document repeating a number the code already knows.
+
+<!-- review-summary -->
+## Review Summary
+
+Reviewed against the working branch `feat/cr-0073-surface-manifest` at
+`origin/main` commit `8371f74` (the CR draft is `3391a91`). The CR was authored
+against `fix/cr-0074-doc-anchors` at `1b184cc`, which is not in this branch's
+history, so every code claim was re-verified against the current tree.
+
+### Findings by category
+
+* **Drift: 1.** The frontmatter recorded the authoring branch and commit
+  (`fix/cr-0074-doc-anchors` / `1b184cc`) rather than this change's branch and
+  base. No *code* drift was found: every file path, symbol, line anchor, verb
+  count, and configuration count the CR cites is accurate against `8371f74`
+  (verified below), so no CR body content required re-basing.
+* **Requirement to AC coverage: 2.** FR-21 (question-form headings) had no AC;
+  FR-15 (JSON-LD feature count or list from the manifest) had no AC.
+* **AC to Test coverage: 1.** AC-5 (no flat tool name) and AC-6 (no invented
+  domain) are concrete served-HTML assertions with no Test Strategy entry.
+* **Convention or scope consistency: 1.** FR-27 names `AGENTS.md` while Affected
+  Components and the Quality checklist named `CLAUDE.md`; in this repository
+  `CLAUDE.md` is a symlink to `AGENTS.md`, so both name the same file but were
+  inconsistent.
+* **Contradiction: 0.** Every AC is consistent with its Functional Requirements
+  and the Implementation Approach. AC-13 ("site builds without Go") does not
+  contradict FR-23 ("site workflow installs Go") because the Go install is for
+  the drift-check job, not the build, which the CR states explicitly.
+* **Ambiguity: 0.** Every requirement uses MUST or MUST NOT. The single "may"
+  (line 128) is descriptive prose about existing infrastructure, not a
+  requirement.
+
+### Code claims verified accurate (no drift)
+
+* Verb counts: calendar 15, mail 13, account 7, system 7 = 42 across 4 domains
+  (`internal/server/*_verbs.go`, help added per domain).
+* Default-exposed 33 = 42 − 3 (`MailEnabled`-gated) − 5 (`MailManageEnabled`-gated)
+  − 1 (`complete_auth`, only under `AuthMethod == "auth_code"`; default is
+  `device_code`). Mail's four always-on read verbs plus help stay exposed.
+* 26 `OUTLOOK_MCP_` variables in `internal/config`.
+* Every Current State line anchor resolves on the current tree: `site/index.html:9`,
+  `site/build/seo.pages.ts:55`, `CapabilitiesSection.tsx:267` and `:392`,
+  `GettingStartedSection.tsx:310`, `ToolsReferenceSection.tsx:16` (array start)
+  and its Diagnostics label, `ConfigReferenceSection.tsx:11` (array start) and its
+  "15 Configuration Variables" and "Enables 4 opt-in mail tools" literals.
+* `.agents/scripts/site.content.check.mjs` exists and holds `index.html` at the
+  11,853-character floor, asserts one `<h1>`, SeeDocs anchor resolution, six
+  crawler files, and the mermaid fences. `site.yml` runs it (the CR-0074 CI step
+  is present on this branch); `ci.yml` ignores `site/**`.
+* FR-18 premise: `browser` auth builds an `InteractiveBrowserCredential` with a
+  `http://localhost` redirect, binding a loopback port (`internal/auth/auth.go`).
+* FR-19 premise: enabling OTel adds an outbound OTLP connection
+  (`internal/observability/trace.go`).
+
+### Fixes applied
+
+1. Frontmatter `source-branch` and `source-commit` corrected to
+   `feat/cr-0073-surface-manifest` / `8371f74`.
+2. Affected Components and the Quality checklist reconciled to name `AGENTS.md`
+   (noting `CLAUDE.md` is a symlink to it), matching FR-27.
+3. AC-11 extended with a scenario asserting question-form headings (covers FR-21).
+4. AC-4 extended with a JSON-LD feature-count or feature-list assertion (covers FR-15).
+5. Added a Test Strategy row: a content-check-harness tool-surface shape assertion
+   that rejects any flat tool name and any domain outside the four (covers AC-5, AC-6).
+
+### Items requiring human decision (unresolved: 1)
+
+* `site/src/components/IntroSection.tsx:91` reads "No servers. No registration."
+  This section is not in the CR's Affected Components and no requirement names it.
+  "No registration" is accurate (no Entra app registration), but "No servers"
+  borders on the same absolute-infrastructure claim FR-18 corrects in
+  `PrivacySection` ("no listening ports"). A maintainer should decide whether
+  `IntroSection` also needs qualification and, if so, add it to Affected
+  Components and to the prose-correction scope. Left unresolved rather than
+  silently expanding scope, because the phrase is defensible as marketing.
+
+<!-- /review-summary -->
