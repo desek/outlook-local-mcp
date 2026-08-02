@@ -44,79 +44,6 @@ var searchMessagesFullSelectFields = []string{
 	"replyTo", "internetMessageHeaders",
 }
 
-// NewSearchMessagesTool creates the MCP tool definition for search_messages.
-// The tool performs full-text search across email messages using Microsoft
-// Graph's KQL $search syntax. It is annotated as read-only since it only
-// retrieves data from the Graph API without making any modifications.
-//
-// Important: $search cannot be combined with $filter or $orderby. Results are
-// ranked by relevance, not chronologically. For chronological listing with
-// filters, use list_messages instead.
-//
-// Parameters:
-//   - query: required KQL search string (e.g., subject:"Design Review").
-//   - folder_id: optional mail folder ID to restrict search scope.
-//   - max_results: optional maximum number of messages (default 25, max 100).
-//   - account: optional account label for multi-account selection.
-//   - output: optional output mode (summary/raw).
-//
-// Returns the configured mcp.Tool ready for registration with server.AddTool.
-func NewSearchMessagesTool() mcp.Tool {
-	return mcp.NewTool("mail_search_messages",
-		mcp.WithDescription(`Full-text search across email messages using Microsoft Graph KQL (Keyword Query Language) syntax. Returns messages ranked by relevance, not chronologically.
-
-Property keywords:
-- from:alice@contoso.com            -- match sender address
-- to:bob@contoso.com                -- match direct recipient
-- cc:carol@contoso.com              -- match CC recipient
-- subject:"Design Review"           -- match subject (quote multi-word phrases)
-- body:"release notes"              -- match message body content
-- participants:alice@contoso.com    -- match any sender, to, or cc recipient
-- hasAttachments:true               -- filter by attachment presence
-- received>=2026-03-01              -- date comparisons (>=, <=, =, >, <)
-
-Boolean operators (case-sensitive, uppercase):
-- AND combines terms: subject:"Sprint" AND from:alice@contoso.com
-- OR alternates terms: from:alice@contoso.com OR from:bob@contoso.com
-- Group with parentheses: (from:alice OR from:bob) AND hasAttachments:true
-
-Phrase matching:
-- Wrap exact phrases in double quotes: subject:"Q1 planning"
-- Unquoted terms are matched as individual words.
-
-Bare terms without a property keyword perform a full-text search across subject, body, and recipients (e.g., "quarterly report" matches anywhere).
-
-Limitations:
-- $search cannot be combined with $filter or $orderby; results are ranked by relevance.
-- KQL does NOT support filtering by isRead, isDraft, flag status, or importance. For those filters, use mail_list_messages instead.
-- For chronological ordering or structured OData filtering, use mail_list_messages.`),
-		mcp.WithTitleAnnotation("Search Email Messages"),
-		mcp.WithReadOnlyHintAnnotation(true),
-		mcp.WithDestructiveHintAnnotation(false),
-		mcp.WithIdempotentHintAnnotation(true),
-		mcp.WithOpenWorldHintAnnotation(true),
-		mcp.WithString("query",
-			mcp.Required(),
-			mcp.Description("KQL search string (e.g., subject:\"Design Review\" from:alice@contoso.com). See tool description for syntax reference."),
-		),
-		mcp.WithString("folder_id",
-			mcp.Description("Mail folder ID to restrict search to. If omitted, searches across all folders. Use mail_list_folders to discover folder IDs."),
-		),
-		mcp.WithNumber("max_results",
-			mcp.Description("Maximum number of messages to return (default 25, max 100)."),
-			mcp.Min(1),
-			mcp.Max(100),
-		),
-		mcp.WithString("account",
-			mcp.Description(AccountParamDescription),
-		),
-		mcp.WithString("output",
-			mcp.Description("Output mode: 'text' (default) returns plain-text listing, 'summary' returns compact JSON, 'raw' returns full Graph API fields including body and headers."),
-			mcp.Enum("text", "summary", "raw"),
-		),
-	)
-}
-
 // NewHandleSearchMessages creates a tool handler that searches email messages
 // by calling the Graph API's messages endpoint with the $search parameter. The
 // Graph client is retrieved from the request context at invocation time.
@@ -130,8 +57,12 @@ Limitations:
 // The handler:
 //   - Retrieves the Graph client from context via GraphClient.
 //   - Validates the required query parameter (returns error when empty).
+//   - Normalises the query via NormaliseSearchQuery once, before the folder
+//     branch and before any Graph call, so both request paths send an identical
+//     $search value and an unconvertible query is refused (with the error in
+//     both the tool result and the log) rather than reaching Graph.
 //   - Routes to /me/messages or /me/mailFolders/{id}/messages based on folder_id.
-//   - Sets $search with the provided KQL query string.
+//   - Sets $search with the normalised KQL query string.
 //   - Does NOT use $filter or $orderby (incompatible with $search).
 //   - Uses PageIterator for pagination with a max_results cap.
 //   - Serializes messages using SerializeSummaryMessage or SerializeMessage from
@@ -169,6 +100,19 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			}
 		}
 
+		// Normalise the query into a value Microsoft Graph accepts as a $search
+		// value. This runs once, before the folder branch below, so both request
+		// paths send the same value and cannot diverge. It also runs before the
+		// timeout context and the retry wrapper, so an unconvertible query is
+		// refused here and no request is ever issued for it. The error reaches
+		// both the tool result and the log record, so a headless caller that
+		// cannot see an interactive surface still receives the correction.
+		normalised, err := NormaliseSearchQuery(query)
+		if err != nil {
+			logger.Error("search query rejected", "error", err.Error())
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
 		maxResultsFloat := request.GetFloat("max_results", 25)
 		maxResults := int(maxResultsFloat)
 		if maxResults < 1 {
@@ -201,7 +145,7 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			// Route to specific folder's messages with $search.
 			qp := &users.ItemMailFoldersItemMessagesRequestBuilderGetQueryParameters{
 				Select: selectFields,
-				Search: &query,
+				Search: &normalised,
 				Top:    &top,
 			}
 			cfg := &users.ItemMailFoldersItemMessagesRequestBuilderGetRequestConfiguration{
@@ -210,7 +154,7 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			logger.Debug("graph API request",
 				"endpoint", "GET /me/mailFolders/{id}/messages",
 				"folder_id", folderID,
-				"search", query,
+				"search", normalised,
 				"top", top)
 			graphErr = graph.RetryGraphCall(ctx, retryCfg, func() error {
 				var err error
@@ -221,7 +165,7 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			// Route to all messages with $search.
 			qp := &users.ItemMessagesRequestBuilderGetQueryParameters{
 				Select: selectFields,
-				Search: &query,
+				Search: &normalised,
 				Top:    &top,
 			}
 			cfg := &users.ItemMessagesRequestBuilderGetRequestConfiguration{
@@ -229,7 +173,7 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			}
 			logger.Debug("graph API request",
 				"endpoint", "GET /me/messages",
-				"search", query,
+				"search", normalised,
 				"top", top)
 			graphErr = graph.RetryGraphCall(ctx, retryCfg, func() error {
 				var err error

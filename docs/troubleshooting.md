@@ -169,6 +169,24 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 
 ---
 
+## Search query rejected {#search-query-rejected}
+
+**Symptom:** A `mail` `search_messages` call returns an error such as `search query "subject:Design" Review" contains a double quote that does not delimit a property value or enclose the whole query; write a multi-word property value in parentheses, for example subject:(Design Review), and remove any other double quote, then retry`.
+
+**Cause:** The query carries a stray double quote that neither encloses the whole query nor delimits a property value. The server refuses it before calling Microsoft Graph, because Graph would otherwise return a parse error that names only a character position and neither the cause nor the fix.
+
+**Remediation:**
+
+1. Write a multi-word property value in parentheses, not in quotes: `subject:(Design Review)`, not `subject:"Design Review"`. The parenthesised form matches all of its tokens in any order.
+2. Remove any other double quote from the query and retry.
+3. A single bare term (`Contoso`) and a compound expression (`subject:(Design Review) from:alice@contoso.com`) both work as written; the server supplies the enclosing quotes Graph requires.
+
+**Related symptom (older logs, or calling Graph directly):** A Microsoft Graph parse error naming a character position, such as `character ':' is not valid at position 7` for a query like `subject:Contoso`. The cause is the missing enclosing double quotes that Graph requires around a `$search` value. The server now supplies those quotes for you, so a query sent through `search_messages` no longer produces this error. You will still see it if you call Graph directly without quoting the value.
+
+**Related symptom (silent wrong results, before this fix):** An unquoted multi-word search such as `report summary` returned the newest messages in the mailbox rather than matches, with no error at all. If you saw a search return recent, unrelated mail and concluded the mailbox or the index was broken, this was the cause: the unquoted multi-word term was discarded by Graph. The server now encloses the query, so a multi-word search filters instead of being discarded, and a search that matches nothing correctly returns zero results.
+
+---
+
 ## Mail disabled
 
 **Symptom:** The `mail` tool returns `mail access is not enabled` or `unknown operation`.

@@ -278,10 +278,10 @@ func buildSearchMessagesVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(
 	return tools.Verb{
 		Name:        "search_messages",
 		Summary:     "full-text KQL search across messages; ranked by relevance, not chronologically",
-		Description: "Searches mail messages using Keyword Query Language (KQL). Results are ranked by relevance, not chronological order. KQL supports field-scoped queries such as 'subject:\"meeting\"', 'from:alice@contoso.com', and 'hasAttachments:true'. Use list_messages with date filters for chronological browsing.",
+		Description: "Searches mail messages using Keyword Query Language (KQL). Results are ranked by relevance, not chronological order. Restrict a search to a property with property:value, for example from:alice@contoso.com or hasAttachments:true. Write a multi-word property value in parentheses, for example subject:(Design Review); the parenthesised form matches all of its tokens in any order rather than as an adjacent phrase. Do not write a multi-word property value without parentheses: an unparenthesised value such as subject:Design Review binds only its first token to the property and turns the remaining words into free-text terms searched across the whole message. Use list_messages with date filters for chronological browsing.",
 		Examples: []tools.Example{
-			{Args: map[string]any{"query": "subject:\"quarterly review\""}, Comment: "find messages with a specific subject"},
-			{Args: map[string]any{"query": "from:alice@contoso.com hasAttachments:true"}, Comment: "find messages with attachments from a sender"},
+			{Args: map[string]any{"query": "\"subject:(Design Review)\""}, Comment: "find messages whose subject holds both words, in any order"},
+			{Args: map[string]any{"query": "\"from:alice@contoso.com hasAttachments:true\""}, Comment: "find messages with attachments from a sender"},
 		},
 		SeeDocs: []string{"concepts#output-tiers"},
 		Handler: wrap("mail.search_messages", "read", tools.NewHandleSearchMessages(rc, c.timeout)),
@@ -294,7 +294,7 @@ func buildSearchMessagesVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(
 		Schema: []mcp.ToolOption{
 			mcp.WithString("query",
 				mcp.Required(),
-				mcp.Description("KQL search string (e.g. subject:\"Design Review\" from:alice@contoso.com)."),
+				mcp.Description("KQL search string. Write a multi-word property value in parentheses, e.g. subject:(Design Review) from:alice@contoso.com; an unparenthesised multi-word value binds only its first token."),
 			),
 			mcp.WithString("folder_id",
 				mcp.Description("Mail folder ID to restrict search to. Omit to search all folders."),
