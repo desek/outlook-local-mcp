@@ -132,8 +132,11 @@ The `make crud-test` harness (`scripts/crud-test.sh`) **MUST** be lifecycled alo
 * `docs/prompts/mcp-tool-crud-test.md`: the prompt the headless agent executes; new verbs need new test steps, removed verbs need their steps deleted.
 * `scripts/crud-test.sh`: a new or removed top-level domain changes the per-domain tool-call accounting. The script's own comments state how; keep it self-consistent.
 * `docs/bench/crud-runs.csv`: the header **MUST** match the script's output schema. Reset historical rows when columns change rather than leaving short rows.
+* `site/src/generated/surface.json`: the published website derives every figure it states about the tool surface, the verb names, the domain names, the full and default-configuration counts, and which verb each gate exposes, from this generated manifest and states no number of its own. A verb or domain added, renamed, or removed **MUST** be followed by `make surface-manifest` in the same change, so the site describes the interface that now exists rather than the one that did (CR-0073).
 
 The harness's value depends on this coupling: drift means the bench either silently skips new functionality or emits malformed CSV rows.
+
+The manifest is coupled by a check, not by a checklist entry, and that is the point. The prompt-drift section below records that correcting named instances by hand produces a clean run without closing the class, and that what closes a class of this shape is a check deriving its cases from the authoritative source. The surface manifest is that remedy applied to the one surface the verb registry did not yet own: a drift check in `make ci` and in both the Go and site workflows regenerates the manifest from the live registry and fails when the working tree moves, so a stale count fails the build here rather than reaching the live site for a reader to disprove in one command. There is no list of known-bad figures to maintain, only the generated record to regenerate, which is why the rule above names a command to run rather than a number to update.
 
 ### Rebuild the binary before running the harness
 

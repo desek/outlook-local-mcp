@@ -41,6 +41,29 @@ These are the ones with a history of being broken. Each fails the build or the g
 * **`gh-pages` is a CI-managed artifact.** Never hand-edit it. `CNAME` and the crawler
   files are build outputs inside `dist/`, so a rebuild cannot revert them.
 
+## The site states no figure of its own
+
+Every factual claim the site makes about the server, the number of tools, the verb names,
+the domain names, the counts, the configuration variables, comes from
+`site/src/generated/surface.json`, which `cmd/gen-surface` generates from the live verb
+registry and the `internal/config` inventory. The site holds no independent copy of any of
+these facts, because a number typed into a component is accurate only against the version
+it was typed against and decays silently the moment the server changes. That is exactly the
+defect CR-0073 existed to remove: the site once advertised "23 MCP tools" and listed flat
+tool names that the aggregate-tool migration had already deleted, and every one of those
+was a literal a person had typed.
+
+So a new factual claim is added by extending the manifest, not by writing the number into a
+component. If the manifest does not yet carry what a component needs, the fix is upstream in
+`internal/surface`, then `make surface-manifest`, never a literal in `site/src`.
+
+`.agents/scripts/site.content.check.mjs` enforces this: it rejects a bare numeric claim about
+tools, verbs, domains, or configuration variables anywhere under `site/src` outside the
+generated manifest, naming the file and the line, and its per-page text floors catch the
+inverse failure of prose silently deleted. A floor that no longer holds after a legitimate
+content change is re-measured on the corrected build and the reduction accounted for in the
+script, never lowered until the check passes.
+
 ## The design is adopted as authored
 
 [`ARCHITECTURE.md`](ARCHITECTURE.md) is the design language and per-section intent of the
