@@ -31,7 +31,7 @@ falsified two designs on the way, including this change request's own first draf
 
 ## Motivation and Background
 
-The verb description carries a 25-line syntax reference: nine property keywords, three
+The verb description carries a 25-line syntax reference: eight property keywords, three
 boolean operators, phrase matching, and date comparison. The property keywords all fail.
 The phrase syntax fails. The description is the caller's only authority, and it teaches a
 syntax the API rejects.
@@ -193,8 +193,11 @@ flowchart TD
    quotes, so that a multi-word query filters rather than being discarded.
 5. The function **MUST** pass through unchanged a query already enclosed in one matched pair
    of double quotes and carrying no interior double quote.
-6. The function **MUST** reject a double quote that does not delimit a property value, and
-   the error **MUST** name the parenthesised form as the correction.
+6. The function **MUST** reject a double quote that neither delimits a property value nor
+   forms the single enclosing pair permitted by requirement 5, and the error **MUST** name
+   the parenthesised form as the correction. (The enclosing-pair check of requirement 5 is
+   applied first, as the Proposed State Diagram shows, so an already-enclosed query such as
+   `"subject:Contoso"` passes through rather than being rejected here.)
 7. The system **MUST** apply the normalisation on both request paths of the verb, the
    folder-scoped path and the mailbox-wide path, so the two cannot diverge.
 8. The system **MUST** reject an unconvertible query before the Graph call is made, so a
@@ -223,11 +226,27 @@ flowchart TD
 
 ## Affected Components
 
-* `internal/tools/search_messages.go`: both query parameter constructions, and the verb
-  description.
+* `internal/tools/search_messages.go`: both query parameter constructions in the live
+  handler `NewHandleSearchMessages` (the `Search: &query` sites on lines 204 and 224).
+  Reviewer note (drift): the 25-line syntax reference this CR quotes lives in this file's
+  `NewSearchMessagesTool`, which is an unregistered, superseded top-level-tool constructor
+  referenced only by its own test. It is NOT the caller-facing description. See
+  UNRESOLVED-1.
+* `internal/server/mail_verbs.go` (`buildSearchMessagesVerb`): the caller-facing verb
+  `Description`, its structured `Examples`, and the `query` parameter description that an
+  LLM actually reads via `system.help`. Per Documentation Governance rule 1 the verb
+  registry owns per-tool reference, so the description work of requirements 9 through 11 and
+  Phase 3 applies here, not to `NewSearchMessagesTool`. See UNRESOLVED-1.
 * `internal/tools/search_messages_query.go` (new): the normalisation function.
 * `internal/tools/search_messages_query_test.go` (new): its cases, including the twelve
-  measured rows and the cases derived from the description.
+  measured rows.
+* The description-derived test (`TestEveryDocumentedExampleNormalises`) must live in the
+  `internal/server` package (for example `internal/server/mail_verbs_test.go`), not in
+  `internal/tools/`, because the description it derives from is owned by
+  `internal/server/mail_verbs.go` and `internal/server` imports `internal/tools` (not the
+  reverse), so a tools-package test cannot read the verb registry. It calls the
+  tools-package normalisation function, which that import direction permits. See
+  UNRESOLVED-1.
 * `internal/tools/search_messages_test.go`: the existing tests, which assert pass-through.
 * `docs/troubleshooting.md`: an entry for a rejected search query.
 * `docs/prompts/mcp-tool-crud-test.md` and `scripts/crud-test.sh`: a lifecycle step that
@@ -600,3 +619,84 @@ here. The first hypothesis, missing enclosing quotes, was right but incomplete. 
 fix was falsified by substitution at the extreme. The second fix was falsified by a control
 using a nonsense token, which separated "accepted and matched nothing" from "accepted and
 silently matched everything recent". Reasoning alone would have shipped either one.
+
+<!-- review-summary -->
+## Review Summary (cr-reviewer, 2026-08-02)
+
+Reviewed against the current codebase at branch `feat/cr-0073-surface-manifest`. The twelve
+measured rows were treated as authoritative and left untouched, per instruction.
+
+### Findings by category
+
+- **Drift: 2**
+- **Contradiction: 1**
+- **Coverage (orphan requirements): 6**
+- **Factual inaccuracy: 1**
+
+Verified with no drift: the handler `NewHandleSearchMessages` and its two `Search: &query`
+sites are live at lines 204 (folder-scoped) and 224 (mailbox-wide), exactly as cited; the
+verb identity `mail.search_messages` (dot form) is correct (`internal/server/mail_verbs.go:287`);
+`calendar.search_events` is confirmed unaffected (`internal/tools/search_events.go` builds an
+OData `$filter` via `strings.Join(filters, " and ")` with client-side subject matching and no
+`$search`); the length-validation asymmetry is real (`search_events` calls
+`validate.ValidateStringLength(..., validate.MaxQueryLen)`, `search_messages` does not); the
+"ten tests" claim is exact (`search_messages_test.go` has exactly ten); both tests named in
+"Tests to Modify" exist and currently do not assert the wire value; no commit since the CR's
+authoring date touches either handler; all three Mermaid diagrams parse under the project's
+rules (every node label with a colon, comma, or `&` is double-quoted); CR-0075 is correctly
+left skipped.
+
+### Fixes applied
+
+1. **Contradiction (Requirement 5 vs 6).** Requirement 6, as worded, rejected "a double
+   quote that does not delimit a property value", which literally captured the single
+   enclosing pair that Requirement 5 says to pass through (row 2, `"subject:Contoso"`).
+   Rewrote Requirement 6 to exclude the enclosing pair and to state that the Requirement 5
+   check runs first, matching the Proposed State Diagram (which was already correct).
+2. **Drift (description location).** Reconciled Affected Components to name
+   `internal/server/mail_verbs.go` (`buildSearchMessagesVerb`) as the caller-facing
+   description, examples, and `query` parameter description, and annotated that
+   `NewSearchMessagesTool` in `search_messages.go` is a superseded, unregistered constructor.
+   Added the consequence that `TestEveryDocumentedExampleNormalises` must live in the
+   `internal/server` package, not `internal/tools/`, given the import direction.
+3. **Factual inaccuracy.** Motivation said "nine property keywords"; the syntax reference
+   lists eight (`from`, `to`, `cc`, `subject`, `body`, `participants`, `hasAttachments`,
+   `received`). Corrected to eight.
+
+### Orphan requirements (reported, not auto-fixed)
+
+Every acceptance criterion traces to a requirement. The following requirements are not graded
+by any AC:
+
+- **Req 9** (description states the parenthesised form and MUST NOT document the
+  double-quoted form) — no grading AC; see UNRESOLVED-2.
+- **Req 10** (description states the first-token binding rule) — no grading AC.
+- **NFR-1** (deterministic), **NFR-2** (idempotent), **NFR-3** (no new dependency),
+  **NFR-5** (no shape, tier, or annotation change) — no grading AC. NFR-2 has a test
+  (`TestNormalisationIsIdempotent`); the others are structural. NFR-4 is graded by AC-10.
+
+### Unresolvable items requiring human decision
+
+- **UNRESOLVED-1 (Affected Components, Motivation, Change Drivers, requirements 9 through 11,
+  Phase 3, Test Strategy).** The CR's description work targets the 25-line syntax reference
+  in `NewSearchMessagesTool` (`internal/tools/search_messages.go`), which is dead code: it is
+  referenced only by its own test and is not wired into any registration path. The live
+  caller-facing surface is `buildSearchMessagesVerb` in `internal/server/mail_verbs.go`,
+  whose `Description` is three sentences (not 25 lines), documents fewer keywords, and already
+  ships the double-quoted phrase form (`subject:"meeting"`) plus two structured `Examples`
+  (`subject:"quarterly review"`, `from:alice@contoso.com hasAttachments:true`). File paths
+  were reconciled, but the prose rewrite is non-trivial and changes the strength of the
+  change drivers. A human must decide: (a) whether to enrich the live registry description
+  into the full corrected syntax reference or merely correct the shorter live description in
+  place; (b) whether to additionally correct or remove the dead `NewSearchMessagesTool`
+  description; and (c) confirm the derived test moves to the `internal/server` package.
+- **UNRESOLVED-2 (Requirement 9 vs AC-9 / the "close the class" mechanism).** Requirement 9
+  says the description MUST NOT document the double-quoted phrase form, but the class-closing
+  test described by AC-9 (`TestEveryDocumentedExampleNormalises`) only asserts that each
+  example is *accepted* by the normalisation. Because Requirement 2 makes the normalisation
+  *accept and rewrite* the double-quoted form, a re-introduced `subject:"..."` example would
+  pass that test and NOT fail the build. The derived-example check therefore cannot enforce
+  Requirement 9. A human must decide whether to strengthen the check to reject the
+  double-quoted form in documented examples (and reconcile that with Requirement 2, which
+  deliberately accepts it) or to accept that Requirement 9 is enforced only by review.
+<!-- /review-summary -->
