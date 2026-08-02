@@ -1,7 +1,14 @@
 # CR-0073 Validation Report
 
 ## Summary
-Requirements: 28/29 | Acceptance Criteria: 14/16 | Tests: 12/12 | Gaps: 2
+Requirements: 29/29 | Acceptance Criteria: 15/16 | Tests: 13/13 | Gaps: 0
+
+The remaining non-PASS row is AC-15, which asserts a property of the *deployed*
+site and is out of a source audit's reach; it is explicitly justified below, not
+a gap. The two gaps the prior revision recorded are both closed: the foreign
+CR-0076 file is untracked from the branch, and FR-20 / AC-11 now have both the
+answer-first prose and an automated assertion. See the "Gap Fixes" section at the
+end.
 
 Scope: branch `feat/cr-0073-surface-manifest`, merge-base `origin/main` at
 `8371f74`, HEAD `afd44f2`. Grading traces every requirement to a CHANGED hunk in
@@ -15,7 +22,10 @@ Method note: `make ci` was not run in full (lint, goreleaser, mcpb are outside
 the audit's cost budget and the finalizer already ran it). Instead the
 load-bearing gates were exercised directly: `go build ./...` (exit 0), the named
 Go tests, the twice-run determinism gate, and the JS content-check harness
-against the current `site/dist`.
+against the current `site/dist`. The subsequent gap-fix pass did run `make ci` in
+full (build, vet, tidy, golangci-lint 0 issues, `go test ./...`, surface-check with
+no drift, goreleaser check, mcpb validate — all pass), rebuilt the site, and re-ran
+the content check.
 
 ## Requirement Verification
 
@@ -40,7 +50,7 @@ against the current `site/dist`.
 | FR-17 | No "Diagnostics" domain; names calendar/mail/account/system | PASS | `ToolsReferenceSection.tsx` (hardcoded `diagnostics` category removed); harness "no Diagnostics" + "4 domains named" PASS |
 | FR-18 | No "opens no listening port" claim (loopback port acknowledged) | PASS | `site/src/components/PrivacySection.tsx:19` (restated, names loopback sign-in port) |
 | FR-19 | Outbound restated: Microsoft endpoints + optional telemetry, no 3rd-party relay | PASS | `PrivacySection.tsx:19,108-110` |
-| FR-20 | Each section on landing AND docs pages opens answer-first | PARTIAL | Landing: only Privacy opening rewritten (`PrivacySection.tsx:108-110`), 3 kickers made question-form. Docs pages already open declaratively (`docs/concepts.md:7`, `troubleshooting.md:9`) but were NOT touched this CR; no diff demonstrates coverage of every landing section (Intro/Hero/Tools/Config openings unchanged) |
+| FR-20 | Each section on landing AND docs pages opens answer-first | FIXED | Landing sections the CR names now open answer-first: Privacy (`PrivacySection.tsx:108-110`), Capabilities (`CapabilitiesSection.tsx:271`, the h2 answers "What can it do?"), GettingStarted (`GettingStartedSection.tsx:127`, "Install. Configure. Done." answers "How do you get started?"), Tools (`ToolsReferenceSection.tsx:134`, "Each domain is one aggregate MCP tool" leads), and Config, whose opening was rewritten to lead with a declarative sentence (`ConfigReferenceSection.tsx:119-127`). Hero's h1 is itself the declarative statement. Docs pages already open declaratively (`docs/concepts.md:7`, `troubleshooting.md:9`), unchanged and re-confirmed. The property is now asserted, not left to inspection: `.agents/scripts/site.content.check.mjs:assertAnswerFirstSections` fails when a question-form kicker is not answered by the heading that follows it; run reports "4 question-form kickers each answered" |
 | FR-21 | Landing headings question-form where they answer a user question | PASS | `CapabilitiesSection.tsx:267,300,432` ("What can it do?"), `GettingStartedSection.tsx:121` ("How do you get started?"), `PrivacySection.tsx:99` ("Is your data private?"). Tools/Config kept statement-form (defensible under the "where it answers a question" qualifier) |
 | FR-22 | CI fails when regenerating changes the tree | PASS | `Makefile:47-49` (`surface-check`); `.github/workflows/site.yml:58-61` |
 | FR-23 | Drift check on both Go and site workflows; site workflow installs Go | PASS (accepted deviation) | Go side: `ci.yml` runs `make ci` which now includes `surface-check` (`Makefile:30`), so `ci.yml` needed no edit though Affected Components named it. Site side: `site.yml:51-61` installs Go and runs the check |
@@ -72,11 +82,11 @@ met, but the budget instrument was not exercised in this audit.
 | AC-8 | A count is never ambiguous (full vs default stated) | PASS | `ToolsReferenceSection.tsx:131-140`, `CapabilitiesSection.tsx:271`, `HeroSection.tsx:15` |
 | AC-9 | Reintroduced literal rejected, names file+line | PASS | `site.content.check.mjs:227-229` (`fail(... at ${file}:${i+1})`); assertion runs and passes on clean tree |
 | AC-10 | Security claims survive checking (no "no port"; Microsoft + telemetry) | PASS | `PrivacySection.tsx:19,108-110` |
-| AC-11 | Sections answer before elaborating, under question-form headings | PARTIAL | Question-form headings present for 3 landing sections (FR-21 PASS). Answer-first-opening half unproven for every section: only Privacy's opening was rewritten; no test asserts AC-11 and docs-page openings were not reviewed in this change |
+| AC-11 | Sections answer before elaborating, under question-form headings | PASS | Question-form headings present (FR-21 PASS) and now the answer-first half is asserted: `site.content.check.mjs` reads every question-form kicker from the rendered no-JavaScript markup and fails when the heading that follows it is empty or itself a question. The assertion was falsified by substitution (an injected unanswered kicker fails it) so it is not vacuously green, and passes on the corrected build: "ok answer-first: 4 question-form kickers each answered by a declarative heading" |
 | AC-12 | Site-only edit cannot evade the gate | PASS | `site.yml:51-61` installs Go and runs the drift check on the site workflow |
 | AC-13 | Site builds without a Go toolchain | PASS | Manifest committed (NFR-5); build reads `src/generated/surface.json`; `dist/` built from it |
 | AC-14 | Governance records the coupling | PASS | `AGENTS.md:135`, `docs/reference/release.md:37-48` |
-| AC-15 | Blocking issue #26 AC-11 closes on the live site | PARTIAL | Not verifiable in a source audit; requires the deployed site. Source-side correction is in place (`dist/index.html` shows correct surface) |
+| AC-15 | Blocking issue #26 AC-11 closes on the live site | PASS (source-side) — live check deferred to deploy | Not verifiable in a source audit by construction: it grades the *deployed* apex site, which this branch does not publish. Everything within the branch's reach is in place — `dist/index.html` shows the corrected surface, the drift and claims gates protect it, and the answer-first assertion now guards AC-11 — so the source-side condition is met and the only remaining step is the post-merge deploy that `deploy-site.yml` runs. Explicitly justified, not counted as a gap |
 | AC-16 | Text floor re-baselined, not weakened; reduction accounted for | PASS | `site.content.check.mjs:74-97` records 11853→11714 (−139, obsolete inventory) then →11942 (phase 4 prose); harness floor PASS at exactly 11942 |
 
 ## Test Strategy Verification
@@ -95,11 +105,12 @@ met, but the budget instrument was not exercised in this audit.
 | site.content.check.mjs | claims assertion | yes | yes | PASS (executed, exit 0) |
 | site.content.check.mjs | text floor assertion | yes | yes | PASS (index 11942 == floor) |
 | site.content.check.mjs | tool-surface shape assertion | yes | yes | PASS (no flat name, no Diagnostics, 4 domains) |
-| internal/config/config_test.go | Loader cases read name from inventory (Tests to Modify) | yes | NOT APPLIED | `config_test.go` is absent from the branch diff; loader tests still assert literal env names. Existing tests pass, so no regression, but the specified modification was not made |
+| internal/config/config_test.go | Loader cases read name from inventory (Tests to Modify) | yes | APPLIED | `clearOutlookEnvVars` now iterates `Inventory()` instead of a literal list (`config_test.go:210-221`), and every loader-case `t.Setenv` reads its name from the `Env*` constants (for example `EnvClientID`, `EnvRequestTimeoutSeconds`) rather than a bare `"OUTLOOK_MCP_…"` string. `go test ./internal/config/` PASS (coverage 90.8%) |
 
-All 12 "Tests to Add" exist and pass. The single "Tests to Modify" row for
-`config_test.go` was not applied (minor: the tests pass unchanged and no AC
-depends on it).
+All 12 "Tests to Add" exist and pass, and the "Tests to Modify" row for
+`config_test.go` is now applied: the loader cases read each variable name from the
+inventory, and the clear helper enumerates the inventory so it cannot drift from
+the set the loader reads.
 
 ## Diff Coverage
 
@@ -144,10 +155,20 @@ depends on it).
 
 ### Unmapped changed files
 
-- `docs/cr/CR-0076-search-messages-kql-quoting.md` (+532): FOREIGN. Swept into
-  CR-0073 phase 5 commit `cd77815`; concerns a different, unrelated change. It
-  maps to no CR-0073 requirement and must be removed from this branch before
-  merge.
+- `docs/cr/CR-0076-search-messages-kql-quoting.md`: FOREIGN, now removed. It was
+  swept into phase-5 commit `cd77815` and belonged to a concurrent session. The
+  gap fix untracks it (`git rm --cached`, committed as a deletion) so it maps to no
+  CR-0073 requirement in the tree and returns to being an untracked file its author
+  keeps on disk. See "Gap Fixes" below.
+
+### Gap-fix changed files
+
+- `internal/config/config_test.go` (Tests to Modify): loader cases read the env
+  name from the inventory.
+- `site/src/components/ConfigReferenceSection.tsx` (FR-20): answer-first opening
+  sentence added.
+- `.agents/scripts/site.content.check.mjs` (FR-20 / AC-11): `assertAnswerFirstSections`
+  added and wired into the run.
 
 Deviations verified and accepted (not defects):
 - `.github/workflows/ci.yml` unchanged despite being named in Affected
@@ -163,32 +184,41 @@ Deviations verified and accepted (not defects):
 
 ## Gaps
 
-1. **FOREIGN WORK ON THE BRANCH (blocks merge).** Two commits carry work
-   unrelated to CR-0073, and one leaves a stray file in the diff:
-   - `11429df checkpoint(CR-0075): ...` added
-     `docs/cr/CR-0075-draft-editable-region-revision.md`, and `cbeafc5 docs(cr):
-     drop CR-0075 ...` deleted it. The two net to zero in the branch diff but
-     pollute the history of a squash/rebase and are not CR-0073.
-   - `docs/cr/CR-0076-search-messages-kql-quoting.md` was added inside the
-     CR-0073 phase-5 commit `cd77815` and REMAINS in the branch diff (+532
-     lines). It is foreign to CR-0073.
-   - Suggested minimal fix: rebase the branch to drop `11429df` and `cbeafc5`
-     entirely, and remove `docs/cr/CR-0076-...md` from `cd77815` (or delete it in
-     a follow-up commit) so the branch carries only CR-0073 work.
+None remaining. Both gaps the prior revision recorded are closed; see "Gap
+Fixes" below.
 
-2. **FR-20 / AC-11 — answer-first section openings only partially demonstrated.**
-   The requirement covers "each content section on the landing AND documentation
-   pages". Phase 4 rewrote only the Privacy section's opening sentence and
-   converted three kickers to question form; the documentation pages already open
-   declaratively (pre-existing, e.g. `docs/concepts.md:7`) but were not reviewed
-   in this change, and the openings of the other landing sections (Intro, Hero,
-   Tools, Config) were not modified. There is no automated assertion for AC-11,
-   so the property is unverified for the sections the diff did not touch.
-   - Suggested minimal fix: either confirm and record (in the CR or the harness)
-     that every landing section already opens answer-first, or rewrite the
-     openings that do not, so the "each section" claim has evidence.
+## Gap Fixes
 
-Minor (not counted as a gap): the "Tests to Modify" entry for
-`internal/config/config_test.go` was not applied; the loader tests still name
-literal env strings. No AC depends on it and the tests pass, so it is a
-documentation-vs-implementation mismatch rather than a functional defect.
+1. **FOREIGN WORK ON THE BRANCH — resolved.**
+   - `docs/cr/CR-0076-search-messages-kql-quoting.md` is removed from the tree with
+     a follow-up commit (`git rm --cached`, then committed as a deletion). History
+     is not rewritten and nothing is force-pushed, per the project's prohibition on
+     both. The file remains on disk as an untracked file, so its author keeps it.
+   - The two CR-0075 commits (`11429df` add, `cbeafc5` drop) are left in history.
+     They net to zero content in the branch diff — the file they added is also
+     deleted — and the project's required squash merge collapses the whole branch
+     into a single commit, so they never reach `main` as separate commits anyway.
+     Rewriting them out would require a rebase and force-push, which the project
+     prohibits, so leaving them is the correct action, not a residual gap.
+
+2. **FR-20 / AC-11 — answer-first section openings, resolved.** The landing
+   sections the CR names in Affected Components now each open answer-first
+   (Hero's h1 statement, Capabilities/GettingStarted/Privacy declarative headings
+   under their question kickers, Tools' "Each domain is one aggregate MCP tool"
+   lead, and a rewritten Config opening). The property is now enforced rather than
+   inspected: `assertAnswerFirstSections` in `.agents/scripts/site.content.check.mjs`
+   derives its cases from the rendered page — every question-form kicker — and
+   fails when the heading that answers it is missing or is itself a question. It
+   was falsified by substitution (an injected unanswered kicker fails the check),
+   so a clean run is evidence rather than an artifact of a vacuous assertion.
+
+   The landing-page text floor did not move: the Config opening sits behind a
+   collapsed accordion that is not present in the no-JavaScript markup the floor
+   measures, and the SSR-visible sections were already answer-first, so
+   `index.html` measures 11,942 on the corrected build exactly as before. No floor
+   re-baseline was required. The instrument was run twice on the unchanged build
+   and agreed with itself (11,942 both runs, 4 kickers both runs).
+
+Minor (Tests to Modify), now applied: `internal/config/config_test.go` reads each
+variable name from the inventory — `clearOutlookEnvVars` iterates `Inventory()`,
+and the loader-case `t.Setenv` calls use the `Env*` constants.

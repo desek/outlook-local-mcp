@@ -115,12 +115,15 @@ export default function ConfigReferenceSection() {
         {/* ── Expanded content ── */}
         {isOpen && (
           <div id="config-reference-content" className="pt-6 pb-2">
-            {/* Prefix note */}
+            {/* Answer-first opening (CR-0073 FR-20): the section states what it is before
+                the prefix detail, so the first sentence answers the reference on its own. */}
             <p className="text-sm text-gray-400 font-sans mb-4">
-              All variables are prefixed with{' '}
+              Every setting is an environment variable read once at startup, and the server
+              runs on its defaults when none are set. All variables are prefixed with{' '}
               <code className="font-mono text-xs bg-brand-off-white px-1.5 py-0.5 rounded text-brand-dark">
                 OUTLOOK_MCP_
               </code>
+              .
             </p>
 
             {/* Search bar */}

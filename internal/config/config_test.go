@@ -139,14 +139,14 @@ func TestLoadConfigDefaults(t *testing.T) {
 func TestLoadConfigCustomValues(t *testing.T) {
 	clearOutlookEnvVars(t)
 
-	t.Setenv("OUTLOOK_MCP_CLIENT_ID", "my-app-id")
-	t.Setenv("OUTLOOK_MCP_TENANT_ID", "my-tenant-guid")
-	t.Setenv("OUTLOOK_MCP_AUTH_RECORD_PATH", "/custom/path/auth.json")
-	t.Setenv("OUTLOOK_MCP_CACHE_NAME", "my-cache")
-	t.Setenv("OUTLOOK_MCP_DEFAULT_TIMEZONE", "America/New_York")
-	t.Setenv("OUTLOOK_MCP_LOG_LEVEL", "debug")
-	t.Setenv("OUTLOOK_MCP_LOG_FORMAT", "text")
-	t.Setenv("OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS", "45")
+	t.Setenv(EnvClientID, "my-app-id")
+	t.Setenv(EnvTenantID, "my-tenant-guid")
+	t.Setenv(EnvAuthRecordPath, "/custom/path/auth.json")
+	t.Setenv(EnvCacheName, "my-cache")
+	t.Setenv(EnvDefaultTimezone, "America/New_York")
+	t.Setenv(EnvLogLevel, "debug")
+	t.Setenv(EnvLogFormat, "text")
+	t.Setenv(EnvRequestTimeoutSeconds, "45")
 
 	cfg := LoadConfig()
 
@@ -198,7 +198,7 @@ func TestLoadConfigAuthRecordPathExpansion(t *testing.T) {
 // via OUTLOOK_MCP_AUTH_RECORD_PATH is not modified by home directory expansion.
 func TestLoadConfigCustomAuthRecordPath(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_AUTH_RECORD_PATH", "/tmp/auth.json")
+	t.Setenv(EnvAuthRecordPath, "/tmp/auth.json")
 
 	cfg := LoadConfig()
 
@@ -207,39 +207,16 @@ func TestLoadConfigCustomAuthRecordPath(t *testing.T) {
 	}
 }
 
-// clearOutlookEnvVars unsets all OUTLOOK_MCP_* environment variables for the
-// duration of the test, ensuring a clean state for LoadConfig tests.
+// clearOutlookEnvVars unsets every OUTLOOK_MCP_* environment variable for the
+// duration of the test, ensuring a clean state for LoadConfig tests. The names
+// are read from the declarative Inventory rather than a literal list here, so a
+// variable added to the loader cannot be left uncleared by a stale copy (CR-0073
+// Tests to Modify: the inventory is the source for the name).
 func clearOutlookEnvVars(t *testing.T) {
 	t.Helper()
-	vars := []string{
-		"OUTLOOK_MCP_CLIENT_ID",
-		"OUTLOOK_MCP_TENANT_ID",
-		"OUTLOOK_MCP_AUTH_RECORD_PATH",
-		"OUTLOOK_MCP_CACHE_NAME",
-		"OUTLOOK_MCP_DEFAULT_TIMEZONE",
-		"OUTLOOK_MCP_LOG_LEVEL",
-		"OUTLOOK_MCP_LOG_FORMAT",
-		"OUTLOOK_MCP_MAX_RETRIES",
-		"OUTLOOK_MCP_RETRY_BACKOFF_MS",
-		"OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS",
-		"OUTLOOK_MCP_SHUTDOWN_TIMEOUT_SECONDS",
-		"OUTLOOK_MCP_LOG_SANITIZE",
-		"OUTLOOK_MCP_AUDIT_LOG_ENABLED",
-		"OUTLOOK_MCP_AUDIT_LOG_PATH",
-		"OUTLOOK_MCP_READ_ONLY",
-		"OUTLOOK_MCP_OTEL_ENABLED",
-		"OUTLOOK_MCP_OTEL_ENDPOINT",
-		"OUTLOOK_MCP_OTEL_SERVICE_NAME",
-		"OUTLOOK_MCP_LOG_FILE",
-		"OUTLOOK_MCP_AUTH_METHOD",
-		"OUTLOOK_MCP_ACCOUNTS_PATH",
-		"OUTLOOK_MCP_TOKEN_STORAGE",
-		"OUTLOOK_MCP_PROVENANCE_TAG",
-		"OUTLOOK_MCP_MAIL_ENABLED",
-	}
-	for _, v := range vars {
-		t.Setenv(v, "")
-		_ = os.Unsetenv(v)
+	for _, v := range Inventory() {
+		t.Setenv(v.Name, "")
+		_ = os.Unsetenv(v.Name)
 	}
 }
 
@@ -264,7 +241,7 @@ func TestLoadConfig_ShutdownTimeoutDefault(t *testing.T) {
 // is read from the OUTLOOK_MCP_SHUTDOWN_TIMEOUT_SECONDS environment variable.
 func TestLoadConfig_ShutdownTimeoutCustom(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_SHUTDOWN_TIMEOUT_SECONDS", "30")
+	t.Setenv(EnvShutdownTimeoutSeconds, "30")
 
 	cfg := LoadConfig()
 
@@ -277,7 +254,7 @@ func TestLoadConfig_ShutdownTimeoutCustom(t *testing.T) {
 // falls back to the 15-second default.
 func TestLoadConfig_ShutdownTimeoutInvalid(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_SHUTDOWN_TIMEOUT_SECONDS", "abc")
+	t.Setenv(EnvShutdownTimeoutSeconds, "abc")
 
 	cfg := LoadConfig()
 
@@ -290,7 +267,7 @@ func TestLoadConfig_ShutdownTimeoutInvalid(t *testing.T) {
 // clamped to 1 second.
 func TestLoadConfig_ShutdownTimeoutClampMin(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_SHUTDOWN_TIMEOUT_SECONDS", "0")
+	t.Setenv(EnvShutdownTimeoutSeconds, "0")
 
 	cfg := LoadConfig()
 
@@ -303,7 +280,7 @@ func TestLoadConfig_ShutdownTimeoutClampMin(t *testing.T) {
 // clamped to 300 seconds.
 func TestLoadConfig_ShutdownTimeoutClampMax(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_SHUTDOWN_TIMEOUT_SECONDS", "999")
+	t.Setenv(EnvShutdownTimeoutSeconds, "999")
 
 	cfg := LoadConfig()
 
@@ -328,7 +305,7 @@ func TestLoadConfigDefaults_RequestTimeout(t *testing.T) {
 // the OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS environment variable.
 func TestLoadConfigCustomTimeout(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS", "60")
+	t.Setenv(EnvRequestTimeoutSeconds, "60")
 
 	cfg := LoadConfig()
 
@@ -341,7 +318,7 @@ func TestLoadConfigCustomTimeout(t *testing.T) {
 // to the 30-second default.
 func TestLoadConfigInvalidTimeout(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS", "abc")
+	t.Setenv(EnvRequestTimeoutSeconds, "abc")
 
 	cfg := LoadConfig()
 
@@ -354,7 +331,7 @@ func TestLoadConfigInvalidTimeout(t *testing.T) {
 // 30-second default.
 func TestLoadConfigZeroTimeout(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS", "0")
+	t.Setenv(EnvRequestTimeoutSeconds, "0")
 
 	cfg := LoadConfig()
 
@@ -367,7 +344,7 @@ func TestLoadConfigZeroTimeout(t *testing.T) {
 // the 30-second default.
 func TestLoadConfigNegativeTimeout(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS", "-5")
+	t.Setenv(EnvRequestTimeoutSeconds, "-5")
 
 	cfg := LoadConfig()
 
@@ -392,7 +369,7 @@ func TestLoadConfig_MaxRetries_Default(t *testing.T) {
 // OUTLOOK_MCP_MAX_RETRIES environment variable.
 func TestLoadConfig_MaxRetries_Custom(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_MAX_RETRIES", "5")
+	t.Setenv(EnvMaxRetries, "5")
 
 	cfg := LoadConfig()
 
@@ -405,7 +382,7 @@ func TestLoadConfig_MaxRetries_Custom(t *testing.T) {
 // value falls back to the default of 3.
 func TestLoadConfig_MaxRetries_Invalid(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_MAX_RETRIES", "abc")
+	t.Setenv(EnvMaxRetries, "abc")
 
 	cfg := LoadConfig()
 
@@ -430,7 +407,7 @@ func TestLoadConfig_RetryBackoffMS_Default(t *testing.T) {
 // OUTLOOK_MCP_RETRY_BACKOFF_MS environment variable.
 func TestLoadConfig_RetryBackoffMS_Custom(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_RETRY_BACKOFF_MS", "2000")
+	t.Setenv(EnvRetryBackoffMS, "2000")
 
 	cfg := LoadConfig()
 
@@ -443,7 +420,7 @@ func TestLoadConfig_RetryBackoffMS_Custom(t *testing.T) {
 // OUTLOOK_MCP_RETRY_BACKOFF_MS value falls back to the default of 1000.
 func TestLoadConfig_RetryBackoffMS_Invalid(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_RETRY_BACKOFF_MS", "fast")
+	t.Setenv(EnvRetryBackoffMS, "fast")
 
 	cfg := LoadConfig()
 
@@ -456,7 +433,7 @@ func TestLoadConfig_RetryBackoffMS_Invalid(t *testing.T) {
 // sets ReadOnly to true.
 func TestLoadConfig_ReadOnly_TrueLowercase(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_READ_ONLY", "true")
+	t.Setenv(EnvReadOnly, "true")
 
 	cfg := LoadConfig()
 
@@ -469,7 +446,7 @@ func TestLoadConfig_ReadOnly_TrueLowercase(t *testing.T) {
 // sets ReadOnly to true (case-insensitive).
 func TestLoadConfig_ReadOnly_TrueUppercase(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_READ_ONLY", "TRUE")
+	t.Setenv(EnvReadOnly, "TRUE")
 
 	cfg := LoadConfig()
 
@@ -482,7 +459,7 @@ func TestLoadConfig_ReadOnly_TrueUppercase(t *testing.T) {
 // sets ReadOnly to false.
 func TestLoadConfig_ReadOnly_False(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_READ_ONLY", "false")
+	t.Setenv(EnvReadOnly, "false")
 
 	cfg := LoadConfig()
 
@@ -519,7 +496,7 @@ func TestLoadConfig_AuditLogEnabledDefault(t *testing.T) {
 // when OUTLOOK_MCP_AUDIT_LOG_ENABLED is set to "false".
 func TestLoadConfig_AuditLogEnabledFalse(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_AUDIT_LOG_ENABLED", "false")
+	t.Setenv(EnvAuditLogEnabled, "false")
 
 	cfg := LoadConfig()
 
@@ -532,7 +509,7 @@ func TestLoadConfig_AuditLogEnabledFalse(t *testing.T) {
 // is false when OUTLOOK_MCP_AUDIT_LOG_ENABLED is set to "FALSE" (case-insensitive).
 func TestLoadConfig_AuditLogEnabledFalseUppercase(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_AUDIT_LOG_ENABLED", "FALSE")
+	t.Setenv(EnvAuditLogEnabled, "FALSE")
 
 	cfg := LoadConfig()
 
@@ -545,7 +522,7 @@ func TestLoadConfig_AuditLogEnabledFalseUppercase(t *testing.T) {
 // OUTLOOK_MCP_AUDIT_LOG_PATH environment variable.
 func TestLoadConfig_AuditLogPathCustom(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_AUDIT_LOG_PATH", "/var/log/audit.jsonl")
+	t.Setenv(EnvAuditLogPath, "/var/log/audit.jsonl")
 
 	cfg := LoadConfig()
 
@@ -581,7 +558,7 @@ func TestLoadConfig_LogSanitizeDefault(t *testing.T) {
 // OUTLOOK_MCP_LOG_SANITIZE is set to "false".
 func TestLoadConfig_LogSanitizeFalse(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_LOG_SANITIZE", "false")
+	t.Setenv(EnvLogSanitize, "false")
 
 	cfg := LoadConfig()
 	if cfg.LogSanitize {
@@ -593,7 +570,7 @@ func TestLoadConfig_LogSanitizeFalse(t *testing.T) {
 // OUTLOOK_MCP_LOG_SANITIZE is set to "true".
 func TestLoadConfig_LogSanitizeTrue(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_LOG_SANITIZE", "true")
+	t.Setenv(EnvLogSanitize, "true")
 
 	cfg := LoadConfig()
 	if !cfg.LogSanitize {
@@ -617,7 +594,7 @@ func TestLoadConfig_LogFileDefault(t *testing.T) {
 // OUTLOOK_MCP_LOG_FILE environment variable.
 func TestLoadConfig_LogFileCustom(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_LOG_FILE", "/tmp/test.log")
+	t.Setenv(EnvLogFile, "/tmp/test.log")
 
 	cfg := LoadConfig()
 
@@ -643,7 +620,7 @@ func TestLoadConfig_AuthMethodDefault(t *testing.T) {
 // "device_code" from the OUTLOOK_MCP_AUTH_METHOD environment variable.
 func TestLoadConfig_AuthMethodDeviceCode(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_AUTH_METHOD", "device_code")
+	t.Setenv(EnvAuthMethod, "device_code")
 
 	cfg := LoadConfig()
 
@@ -674,7 +651,7 @@ func TestLoadConfig_AccountsPathDefault(t *testing.T) {
 // environment variable overrides the default accounts file path.
 func TestLoadConfig_AccountsPathEnvVar(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_ACCOUNTS_PATH", "/tmp/custom-accounts.json")
+	t.Setenv(EnvAccountsPath, "/tmp/custom-accounts.json")
 
 	cfg := LoadConfig()
 
@@ -764,7 +741,7 @@ func TestLoadConfig_DefaultAuthMethodDeviceCode(t *testing.T) {
 // is "auto", the resolved timezone is a valid IANA timezone name.
 func TestLoadConfig_TimezoneAuto(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_DEFAULT_TIMEZONE", "auto")
+	t.Setenv(EnvDefaultTimezone, "auto")
 
 	cfg := LoadConfig()
 
@@ -780,7 +757,7 @@ func TestLoadConfig_TimezoneAuto(t *testing.T) {
 // passes through unchanged.
 func TestLoadConfig_TimezoneExplicit(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_DEFAULT_TIMEZONE", "Europe/London")
+	t.Setenv(EnvDefaultTimezone, "Europe/London")
 
 	cfg := LoadConfig()
 
@@ -795,7 +772,7 @@ func TestLoadConfig_TimezoneExplicit(t *testing.T) {
 // depends on the OS; we accept any valid IANA timezone or "UTC".
 func TestLoadConfig_TimezoneAutoFallback(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_DEFAULT_TIMEZONE", "auto")
+	t.Setenv(EnvDefaultTimezone, "auto")
 
 	cfg := LoadConfig()
 
@@ -824,7 +801,7 @@ func TestTokenStorage_DefaultAuto(t *testing.T) {
 // the OUTLOOK_MCP_TOKEN_STORAGE environment variable.
 func TestTokenStorage_EnvVar(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_TOKEN_STORAGE", "file")
+	t.Setenv(EnvTokenStorage, "file")
 
 	cfg := LoadConfig()
 
@@ -837,7 +814,7 @@ func TestTokenStorage_EnvVar(t *testing.T) {
 // from the OUTLOOK_MCP_TOKEN_STORAGE environment variable.
 func TestTokenStorage_EnvVar_Keychain(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_TOKEN_STORAGE", "keychain")
+	t.Setenv(EnvTokenStorage, "keychain")
 
 	cfg := LoadConfig()
 
@@ -864,7 +841,7 @@ func TestLoadConfig_ProvenanceTagDefault(t *testing.T) {
 // value from the OUTLOOK_MCP_PROVENANCE_TAG environment variable.
 func TestLoadConfig_ProvenanceTagCustom(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_PROVENANCE_TAG", "com.contoso.my-agent.created")
+	t.Setenv(EnvProvenanceTag, "com.contoso.my-agent.created")
 
 	cfg := LoadConfig()
 
@@ -879,7 +856,7 @@ func TestLoadConfig_ProvenanceTagCustom(t *testing.T) {
 // (ProvenanceTag is "").
 func TestLoadConfig_ProvenanceTagEmpty(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_PROVENANCE_TAG", "")
+	t.Setenv(EnvProvenanceTag, "")
 
 	cfg := LoadConfig()
 
@@ -904,7 +881,7 @@ func TestLoadConfig_MailEnabledDefault(t *testing.T) {
 // OUTLOOK_MCP_MAIL_ENABLED is set to "true".
 func TestLoadConfig_MailEnabledTrue(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_MAIL_ENABLED", "true")
+	t.Setenv(EnvMailEnabled, "true")
 
 	cfg := LoadConfig()
 
@@ -917,7 +894,7 @@ func TestLoadConfig_MailEnabledTrue(t *testing.T) {
 // when OUTLOOK_MCP_MAIL_ENABLED is set to "TRUE" (case-insensitive).
 func TestLoadConfig_MailEnabledTrueUppercase(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_MAIL_ENABLED", "TRUE")
+	t.Setenv(EnvMailEnabled, "TRUE")
 
 	cfg := LoadConfig()
 
@@ -930,7 +907,7 @@ func TestLoadConfig_MailEnabledTrueUppercase(t *testing.T) {
 // OUTLOOK_MCP_MAIL_ENABLED is set to "false".
 func TestLoadConfig_MailEnabledFalse(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_MAIL_ENABLED", "false")
+	t.Setenv(EnvMailEnabled, "false")
 
 	cfg := LoadConfig()
 
@@ -945,8 +922,8 @@ func TestLoadConfig_MailEnabledFalse(t *testing.T) {
 // is a superset of read-only mail access and must not leave MailEnabled off.
 func TestMailManageImpliesMailEnabled(t *testing.T) {
 	clearOutlookEnvVars(t)
-	t.Setenv("OUTLOOK_MCP_MAIL_ENABLED", "false")
-	t.Setenv("OUTLOOK_MCP_MAIL_MANAGE_ENABLED", "true")
+	t.Setenv(EnvMailEnabled, "false")
+	t.Setenv(EnvMailManageEnabled, "true")
 
 	cfg := LoadConfig()
 

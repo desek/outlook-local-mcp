@@ -17,6 +17,8 @@
  *     - no bare tool-surface figure is transcribed into a source file (CR-0073)
  *     - the served landing page presents verbs as operation values, not flat tool
  *       names, and names no domain the manifest does not have (CR-0073)
+ *     - every question-form section kicker is answered by the declarative heading that
+ *       follows it, so each section answers before it elaborates (CR-0073 AC-11)
  *
  * Usage:
  *   node .agents/scripts/site.content.check.mjs [dist-dir]
@@ -137,6 +139,13 @@ try {
 
     if (headings !== 1) fail(`${page}: ${headings} <h1> elements, expected exactly 1`)
   }
+
+  // Answer-first sections assertion (CR-0073 AC-11): every question-form section kicker on
+  // the landing page must be answered by the declarative heading that follows it, so a
+  // reader who reads only the heading gets the answer before any elaboration. The cases are
+  // derived from the rendered page (every kicker whose text is a question), not a hand-kept
+  // list, so a new question-form section is covered without editing this script.
+  await assertAnswerFirstSections(site.origin, browser)
 } finally {
   await browser.close()
   await site.close()
@@ -181,6 +190,54 @@ await assertNoBareClaims('site/src')
 // derived from the manifest itself (every `domain_verb` concatenation), so a verb added or
 // renamed in the code is covered without editing this script.
 await assertToolSurfaceShape(join(distDir, 'index.html'))
+
+/**
+ * Fail when a question-form section kicker on the landing page is not answered by the
+ * declarative heading that immediately follows it (CR-0073 FR-20, AC-11).
+ *
+ * The landing page introduces each section with a short uppercase kicker (a `text-label`
+ * span). Where that kicker is phrased as a question a user asks (FR-21), the section must
+ * answer it first: the very next heading must be a non-empty declarative sentence that does
+ * not itself end in a question mark. The kickers are read from the rendered, JavaScript-free
+ * markup, so every question-form section is checked and none has to be named here; a section
+ * added with a question kicker but no answering heading fails this assertion.
+ *
+ * @param {string} origin Origin of the served site (for example http://127.0.0.1:PORT).
+ * @param {import('puppeteer-core').Browser} browser Already-launched headless browser.
+ */
+async function assertAnswerFirstSections(origin, browser) {
+  const tab = await browser.newPage()
+  await tab.setJavaScriptEnabled(false)
+  await tab.goto(`${origin}/index.html`, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+  const questions = await tab.evaluate(() => {
+    const out = []
+    for (const kicker of document.querySelectorAll('[class*="text-label"]')) {
+      const q = (kicker.textContent ?? '').trim()
+      if (!q.endsWith('?')) continue
+      let sib = kicker.nextElementSibling
+      while (sib && !/^H[1-6]$/.test(sib.tagName)) sib = sib.nextElementSibling
+      const answer = sib ? (sib.textContent ?? '').trim() : ''
+      out.push({ q, answer, answered: answer.length > 0 && !answer.endsWith('?') })
+    }
+    return out
+  })
+  await tab.close()
+
+  if (questions.length === 0) {
+    fail('answer-first: no question-form section kicker found on the landing page (AC-11)')
+    return
+  }
+  let bad = 0
+  for (const { q, answer, answered } of questions) {
+    if (!answered) {
+      bad++
+      fail(`answer-first: question kicker "${q}" is not answered by a declarative heading (found "${answer}")`)
+    }
+  }
+  if (bad === 0) {
+    console.log(`ok answer-first: ${questions.length} question-form kickers each answered by a declarative heading`)
+  }
+}
 
 /**
  * Read the distinct `slug#anchor` documentation references declared by the Go verb registry.
