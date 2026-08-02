@@ -2,9 +2,9 @@
 name: iterate-ledger
 description: Session ledger for a last-mile iteration session against an implemented Change Request. Records every attempt, its verification evidence, and its disposition, then distils the session into recommended patterns and anti-patterns at close.
 cr: "CR-0073"
-status: "open"
+status: "closed"
 opened: "2026-08-02"
-closed: ""
+closed: "2026-08-02"
 source-branch: "feat/cr-0073-surface-manifest"
 source-commit: "64ef7e1"
 worktree: "/Users/desek/Repo/desek/outlook-local-mcp"
@@ -60,4 +60,37 @@ worktree: "/Users/desek/Repo/desek/outlook-local-mcp"
 
 ### Recommended Patterns
 
+* **A correction that makes every figure true has not made the page useful.** The
+  governing change removed a class of defect: the site could no longer state a count
+  the code had moved past. It left the page speaking in the vocabulary of the
+  implementation, which is a different failure that the first one hides, because
+  every sentence is now defensible. When a change replaces wrong facts with right
+  ones, ask separately whether the right ones are the facts a reader came for.
+
+* **Put the figure where the reader has asked for it.** Counts were not deleted, they
+  moved behind the expanded reference. A visitor meeting the page is told what they
+  can ask for; a reader who opened the reference is told how large it is. Both
+  audiences are served by the same generated source, and neither is served by leading
+  with the other's answer.
+
+* **An unused import is a design signal, not a build error to clear.** Both build
+  failures in this session named the imports the entry surfaces had stopped using.
+  That is the type system reporting that consumption moved exactly where the change
+  intended it to move. Read the list before deleting it: had a file still needed a
+  count that the copy no longer showed, the compiler would have stayed silent and the
+  inconsistency would have shipped.
+
+* **Know which directories the typecheck actually covers.** `site/build/` sits outside
+  `tsconfig.app.json`'s `include`, so its unused import was found by reading rather
+  than by `tsc`. A green build is evidence about the directories the configuration
+  names, and about no others. Confirm the coverage before treating a passing build as
+  a statement about a file.
+
 ### Anti-Patterns
+
+* **No attempt in this session was discarded**, so this list carries no rejected
+  approach. Recording that plainly is more honest than promoting a hazard the session
+  merely noticed into a failure it never had. The one near-miss is written above as a
+  pattern rather than invented as an anti-pattern: trusting the site build to police
+  `site/build/` would have shipped an unused import, but that trust was never acted
+  on, so it did not fail here.
