@@ -130,8 +130,12 @@ Limitations:
 // The handler:
 //   - Retrieves the Graph client from context via GraphClient.
 //   - Validates the required query parameter (returns error when empty).
+//   - Normalises the query via NormaliseSearchQuery once, before the folder
+//     branch and before any Graph call, so both request paths send an identical
+//     $search value and an unconvertible query is refused (with the error in
+//     both the tool result and the log) rather than reaching Graph.
 //   - Routes to /me/messages or /me/mailFolders/{id}/messages based on folder_id.
-//   - Sets $search with the provided KQL query string.
+//   - Sets $search with the normalised KQL query string.
 //   - Does NOT use $filter or $orderby (incompatible with $search).
 //   - Uses PageIterator for pagination with a max_results cap.
 //   - Serializes messages using SerializeSummaryMessage or SerializeMessage from
@@ -169,6 +173,19 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			}
 		}
 
+		// Normalise the query into a value Microsoft Graph accepts as a $search
+		// value. This runs once, before the folder branch below, so both request
+		// paths send the same value and cannot diverge. It also runs before the
+		// timeout context and the retry wrapper, so an unconvertible query is
+		// refused here and no request is ever issued for it. The error reaches
+		// both the tool result and the log record, so a headless caller that
+		// cannot see an interactive surface still receives the correction.
+		normalised, err := NormaliseSearchQuery(query)
+		if err != nil {
+			logger.Error("search query rejected", "error", err.Error())
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
 		maxResultsFloat := request.GetFloat("max_results", 25)
 		maxResults := int(maxResultsFloat)
 		if maxResults < 1 {
@@ -201,7 +218,7 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			// Route to specific folder's messages with $search.
 			qp := &users.ItemMailFoldersItemMessagesRequestBuilderGetQueryParameters{
 				Select: selectFields,
-				Search: &query,
+				Search: &normalised,
 				Top:    &top,
 			}
 			cfg := &users.ItemMailFoldersItemMessagesRequestBuilderGetRequestConfiguration{
@@ -210,7 +227,7 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			logger.Debug("graph API request",
 				"endpoint", "GET /me/mailFolders/{id}/messages",
 				"folder_id", folderID,
-				"search", query,
+				"search", normalised,
 				"top", top)
 			graphErr = graph.RetryGraphCall(ctx, retryCfg, func() error {
 				var err error
@@ -221,7 +238,7 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			// Route to all messages with $search.
 			qp := &users.ItemMessagesRequestBuilderGetQueryParameters{
 				Select: selectFields,
-				Search: &query,
+				Search: &normalised,
 				Top:    &top,
 			}
 			cfg := &users.ItemMessagesRequestBuilderGetRequestConfiguration{
@@ -229,7 +246,7 @@ func NewHandleSearchMessages(retryCfg graph.RetryConfig, timeout time.Duration) 
 			}
 			logger.Debug("graph API request",
 				"endpoint", "GET /me/messages",
-				"search", query,
+				"search", normalised,
 				"top", top)
 			graphErr = graph.RetryGraphCall(ctx, retryCfg, func() error {
 				var err error

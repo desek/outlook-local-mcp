@@ -8,6 +8,7 @@ package tools
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
@@ -15,6 +16,30 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+// searchRecorder is a test HTTP handler that records the $search query
+// parameter of each Graph request it receives and replies with an empty
+// message collection. It lets a handler test assert both the exact value that
+// reached Graph and whether any request was issued at all, which is the
+// observation the ten pre-existing tests never made and the reason the quoting
+// defect survived.
+type searchRecorder struct {
+	// called reports whether the handler received any request, so a test can
+	// prove a rejected query never reached Graph.
+	called bool
+	// search holds the decoded $search query parameter of the last request.
+	search string
+}
+
+// ServeHTTP records the request and returns an empty, well-formed message
+// collection so the handler's page iteration completes without error.
+func (r *searchRecorder) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	r.called = true
+	r.search = req.URL.Query().Get("$search")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(`{"value":[]}`))
+}
 
 // TestSearchMessagesTool_Registration validates that NewSearchMessagesTool is
 // properly defined with the expected name and read-only annotation.
@@ -69,10 +94,12 @@ func TestSearchMessagesToolCanBeAddedToServer(t *testing.T) {
 	s.AddTool(NewSearchMessagesTool(), NewHandleSearchMessages(graph.RetryConfig{}, 0))
 }
 
-// TestSearchMessages_BasicQuery validates that the handler proceeds past the
-// client lookup and query validation when a Graph client is in the context and
-// a query is provided. The handler will fail at the Graph API call (no mock
-// response), but should not return "no account selected" or the empty query error.
+// TestSearchMessages_BasicQuery validates that the mailbox-wide path sends the
+// normalised value to Graph. The documented double-quoted property phrase
+// subject:"Design Review" must reach Graph as the parenthesised form
+// "subject:(Design Review)", the form Graph accepts. Asserting the wire value
+// is the check the pre-existing test omitted, which is why the quoting defect
+// shipped.
 func TestSearchMessages_BasicQuery(t *testing.T) {
 	handler := NewHandleSearchMessages(graph.RetryConfig{}, 0)
 	request := mcp.CallToolRequest{}
@@ -80,7 +107,8 @@ func TestSearchMessages_BasicQuery(t *testing.T) {
 		"query": "subject:\"Design Review\"",
 	}
 
-	client, srv := newTestGraphClient(t, nil)
+	rec := &searchRecorder{}
+	client, srv := newTestGraphClient(t, rec)
 	defer srv.Close()
 	ctx := auth.WithGraphClient(context.Background(), client)
 
@@ -89,19 +117,20 @@ func TestSearchMessages_BasicQuery(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result.IsError {
-		text := result.Content[0].(mcp.TextContent).Text
-		if text == "no account selected" {
-			t.Error("expected error other than 'no account selected' when client is in context")
-		}
-		if text == "query is required: provide a KQL search string (e.g., subject:\"Design Review\")" {
-			t.Error("expected error other than empty query when query is provided")
-		}
+		t.Fatalf("unexpected tool error: %s", result.Content[0].(mcp.TextContent).Text)
+	}
+	if !rec.called {
+		t.Fatal("expected a Graph request to be issued")
+	}
+	if want := `"subject:(Design Review)"`; rec.search != want {
+		t.Errorf("search value reaching Graph = %q, want %q", rec.search, want)
 	}
 }
 
-// TestSearchMessages_WithFolderId validates that the handler uses the
-// folder-scoped endpoint when folder_id is specified. The handler will fail at
-// the Graph API call (no mock response), but should proceed past validation.
+// TestSearchMessages_WithFolderId validates that the folder-scoped path sends
+// the normalised value to Graph. A bare property term carrying no double quote
+// gains exactly one enclosing pair, so from:alice@contoso.com reaches Graph as
+// "from:alice@contoso.com". Both request paths must be pinned to the wire value.
 func TestSearchMessages_WithFolderId(t *testing.T) {
 	handler := NewHandleSearchMessages(graph.RetryConfig{}, 0)
 	request := mcp.CallToolRequest{}
@@ -110,7 +139,8 @@ func TestSearchMessages_WithFolderId(t *testing.T) {
 		"folder_id": "AAMkAGI2TGULAAA=",
 	}
 
-	client, srv := newTestGraphClient(t, nil)
+	rec := &searchRecorder{}
+	client, srv := newTestGraphClient(t, rec)
 	defer srv.Close()
 	ctx := auth.WithGraphClient(context.Background(), client)
 
@@ -119,10 +149,13 @@ func TestSearchMessages_WithFolderId(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if result.IsError {
-		text := result.Content[0].(mcp.TextContent).Text
-		if text == "no account selected" {
-			t.Error("expected error other than 'no account selected' when client is in context")
-		}
+		t.Fatalf("unexpected tool error: %s", result.Content[0].(mcp.TextContent).Text)
+	}
+	if !rec.called {
+		t.Fatal("expected a Graph request to be issued")
+	}
+	if want := `"from:alice@contoso.com"`; rec.search != want {
+		t.Errorf("search value reaching Graph = %q, want %q", rec.search, want)
 	}
 }
 
@@ -238,5 +271,72 @@ func TestSearchMessages_MaxResultsClamped(t *testing.T) {
 		if text == "no account selected" {
 			t.Error("expected error other than 'no account selected'")
 		}
+	}
+}
+
+// TestBothRequestPathsNormalise validates that the folder-scoped path and the
+// mailbox-wide path send an identical $search value to Graph for the same
+// query, so the two cannot diverge. This is the invariant that a fix applied to
+// one path but not the other would break.
+func TestBothRequestPathsNormalise(t *testing.T) {
+	handler := NewHandleSearchMessages(graph.RetryConfig{}, 0)
+	const query = "subject:\"Design Review\""
+
+	run := func(t *testing.T, args map[string]any) string {
+		t.Helper()
+		rec := &searchRecorder{}
+		client, srv := newTestGraphClient(t, rec)
+		defer srv.Close()
+		ctx := auth.WithGraphClient(context.Background(), client)
+
+		request := mcp.CallToolRequest{}
+		request.Params.Arguments = args
+		result, err := handler(ctx, request)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if result.IsError {
+			t.Fatalf("unexpected tool error: %s", result.Content[0].(mcp.TextContent).Text)
+		}
+		if !rec.called {
+			t.Fatal("expected a Graph request to be issued")
+		}
+		return rec.search
+	}
+
+	mailboxWide := run(t, map[string]any{"query": query})
+	folderScoped := run(t, map[string]any{"query": query, "folder_id": "AAMkAGI2TGULAAA="})
+
+	if mailboxWide != folderScoped {
+		t.Errorf("paths diverged: mailbox-wide sent %q, folder-scoped sent %q", mailboxWide, folderScoped)
+	}
+}
+
+// TestUnconvertibleQueryIsRejectedBeforeTheCall validates that a query carrying
+// a stray double quote is refused before any Graph request is issued, so the
+// caller receives the actionable correction rather than a character-position
+// parse error from Graph. The assertion that no request was issued, not merely
+// that an error was returned, is the load-bearing one.
+func TestUnconvertibleQueryIsRejectedBeforeTheCall(t *testing.T) {
+	handler := NewHandleSearchMessages(graph.RetryConfig{}, 0)
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{
+		"query": "subject:Design\" Review",
+	}
+
+	rec := &searchRecorder{}
+	client, srv := newTestGraphClient(t, rec)
+	defer srv.Close()
+	ctx := auth.WithGraphClient(context.Background(), client)
+
+	result, err := handler(ctx, request)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected a tool error for an unconvertible query")
+	}
+	if rec.called {
+		t.Fatal("expected no Graph request to be issued for a rejected query")
 	}
 }
