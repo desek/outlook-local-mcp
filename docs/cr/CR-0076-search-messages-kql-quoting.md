@@ -31,31 +31,49 @@ falsified two designs on the way, including this change request's own first draf
 
 ## Motivation and Background
 
-The verb description carries a 25-line syntax reference: eight property keywords, three
-boolean operators, phrase matching, and date comparison. The property keywords all fail.
-The phrase syntax fails. The description is the caller's only authority, and it teaches a
-syntax the API rejects.
+The caller-facing description of the registered verb `mail.search_messages` lives in
+`buildSearchMessagesVerb` (`internal/server/mail_verbs.go`): three sentences plus two
+structured `Examples`, per the project's Documentation Governance rule that the verb
+registry owns per-tool reference. Every one of its three shipping example forms is the
+double-quoted phrase form that measured row 6 shows Graph rejects: `subject:"meeting"` in
+the `Description`, `subject:"quarterly review"` in the `Examples`, and `subject:"Design
+Review"` in the `query` parameter description. The live surface is therefore not merely
+thin, it is wrong: it teaches a syntax the API rejects.
 
 An LLM reads the description, builds `subject:"Design Review"`, and receives a Graph parse
 error naming a character position, which names neither the cause nor the fix.
+
+A second, superseded copy of the syntax reference still ships in the source tree. The
+unregistered top-level constructor `NewSearchMessagesTool` in
+`internal/tools/search_messages.go` carries a 25-line reference documenting eight property
+keywords, but it is wired into no registration path and is referenced only by its own
+tests. A dead description that lies is the exact drift trap this change request exists to
+close, and it already cost this change request one wrongly-targeted draft. It is deleted
+here, along with the three tests that exist only to exercise it.
 
 The silent case is the more serious one. A caller searching two bare words receives the
 newest messages in the mailbox, presented as results. Nothing signals that the search term
 was discarded.
 
 The defect was found while sampling a live mailbox for unrelated work. It has been present
-since the verb was written. Ten tests cover this verb and none catches it, because none
-asserts the value that reaches Graph.
+since the verb was written. Ten tests cover this verb and none catches the defect, because
+none asserts the value that reaches Graph, and three of the ten in fact exercise the dead
+constructor rather than the registered verb at all.
 
 ## Change Drivers
 
-* Every documented property keyword of a registered verb is non-functional.
+* Every example form the registered verb documents is the double-quoted phrase form Graph
+  rejects, so the caller-facing surface is not merely incomplete, it is wrong.
 * An unquoted multi-word query returns wrong results silently, which is the failure mode a
   caller cannot detect.
-* The documented phrase syntax is rejected by Graph, so correcting the quoting alone would
-  replace one error with another.
+* Correcting the quoting alone would replace one error with another, because the documented
+  phrase form is itself rejected by Graph.
 * The verb description teaches the broken syntax, so the class stays open until the
-  description is bound to the behaviour by a check.
+  description is bound to the behaviour by a check that holds documented examples to their
+  canonical form.
+* A dead, unregistered copy of the syntax reference still ships in the source tree and must
+  be removed, because a lying description that no check governs is the drift this change
+  exists to close.
 
 ## Current State
 
@@ -202,13 +220,20 @@ flowchart TD
    folder-scoped path and the mailbox-wide path, so the two cannot diverge.
 8. The system **MUST** reject an unconvertible query before the Graph call is made, so a
    caller receives the actionable error rather than a character-position parse error.
-9. The verb description **MUST** state that a multi-word property value is written in
-   parentheses, and **MUST NOT** document the double-quoted form that Graph rejects.
-10. The verb description **MUST** state that an unparenthesised multi-word property value
-    binds only its first token, because a caller cannot infer that and the result looks
-    plausible.
-11. Every syntax example in the verb description **MUST** be a query the normalisation
-    accepts.
+9. The verb registry description **MUST** state that a multi-word property value is written
+   in parentheses, and **MUST NOT** document the double-quoted form that Graph rejects.
+   Documentation is deliberately held to a stricter standard than caller input: requirement
+   2 still accepts and translates the double-quoted form at runtime, but a documented
+   example **MUST** already be in the canonical parenthesised form. The two are not in
+   conflict, and a later reader **MUST** read the asymmetry as intentional.
+10. The verb registry description **MUST** state that an unparenthesised multi-word property
+    value binds only its first token, because a caller cannot infer that and the result
+    looks plausible.
+11. Every syntax example in the verb registry description **MUST** normalise without error,
+    and normalising it **MUST** return it unchanged (`normalise(example)` equals
+    `example`), so a documented example is required to already be in its canonical form. A
+    re-introduced double-quoted example rewrites to the parenthesised form and therefore
+    fails that equality, failing the build.
 12. The system **MUST** keep a single bare term working exactly as it works today.
 
 ### Non-Functional Requirements
@@ -226,28 +251,26 @@ flowchart TD
 
 ## Affected Components
 
-* `internal/tools/search_messages.go`: both query parameter constructions in the live
-  handler `NewHandleSearchMessages` (the `Search: &query` sites on lines 204 and 224).
-  Reviewer note (drift): the 25-line syntax reference this CR quotes lives in this file's
-  `NewSearchMessagesTool`, which is an unregistered, superseded top-level-tool constructor
-  referenced only by its own test. It is NOT the caller-facing description. See
-  UNRESOLVED-1.
+* `internal/tools/search_messages.go`: the two query parameter constructions in the live
+  handler `NewHandleSearchMessages` (the `Search: &query` sites on lines 204 and 224) are
+  routed through the normalisation function, and the dead, unregistered
+  `NewSearchMessagesTool` constructor is deleted from this file.
 * `internal/server/mail_verbs.go` (`buildSearchMessagesVerb`): the caller-facing verb
-  `Description`, its structured `Examples`, and the `query` parameter description that an
-  LLM actually reads via `system.help`. Per Documentation Governance rule 1 the verb
-  registry owns per-tool reference, so the description work of requirements 9 through 11 and
-  Phase 3 applies here, not to `NewSearchMessagesTool`. See UNRESOLVED-1.
+  `Description`, its structured `Examples`, and the `query` parameter description an LLM
+  reads via `system.help` are rewritten to the parenthesised phrase form and the first-token
+  rule. Per Documentation Governance rule 1 the verb registry owns per-tool reference, so
+  the description work of requirements 9 through 11 lands here, not on `NewSearchMessagesTool`.
 * `internal/tools/search_messages_query.go` (new): the normalisation function.
 * `internal/tools/search_messages_query_test.go` (new): its cases, including the twelve
   measured rows.
-* The description-derived test (`TestEveryDocumentedExampleNormalises`) must live in the
-  `internal/server` package (for example `internal/server/mail_verbs_test.go`), not in
-  `internal/tools/`, because the description it derives from is owned by
-  `internal/server/mail_verbs.go` and `internal/server` imports `internal/tools` (not the
-  reverse), so a tools-package test cannot read the verb registry. It calls the
-  tools-package normalisation function, which that import direction permits. See
-  UNRESOLVED-1.
-* `internal/tools/search_messages_test.go`: the existing tests, which assert pass-through.
+* `internal/server/mail_verbs_test.go` (new): the description-derived test. It lives in the
+  `internal/server` package because the examples it reads are owned by `mail_verbs.go`, and
+  `internal/server` imports `internal/tools` (not the reverse), so it can call the
+  tools-package normalisation function while a tools-package test could not read the verb
+  registry.
+* `internal/tools/search_messages_test.go`: the two handler tests are extended to assert the
+  normalised value on each path, and the three tests that exercise only the deleted
+  `NewSearchMessagesTool` are removed.
 * `docs/troubleshooting.md`: an entry for a rejected search query.
 * `docs/prompts/mcp-tool-crud-test.md` and `scripts/crud-test.sh`: a lifecycle step that
   exercises a property-restricted search, per the standing harness-maintenance rule.
@@ -259,8 +282,12 @@ flowchart TD
 * The quoting defect on `mail.search_messages`, on both request paths.
 * The translation of the documented phrase form into the form Graph accepts.
 * The silent-discard case for an unquoted multi-word query.
-* The syntax reference in the verb description, corrected to the measured behaviour.
-* A test deriving its cases from the description rather than from a hand-written list.
+* The syntax reference in the verb registry description (`buildSearchMessagesVerb`),
+  corrected to the measured behaviour.
+* Deletion of the dead, unregistered `NewSearchMessagesTool` constructor and the three tests
+  that exercise only it.
+* A test deriving its cases from the registry description and asserting each documented
+  example is already canonical, rather than checking a hand-written list.
 * The troubleshooting entry and the lifecycle harness step.
 
 ### Out of Scope ("Here, But Not Further")
@@ -333,7 +360,8 @@ flowchart LR
         B1["Both request paths call it"] --> B2["Reject before the Graph call"]
     end
     subgraph P3["Phase 3: Close the class"]
-        C1["Correct the description"] --> C2["Test derived from the description"]
+        C1["Correct the live registry description and examples"] --> C2["Delete the dead constructor and its three tests"]
+        C2 --> C3["Derived test asserts every example is canonical"]
     end
     subgraph P4["Phase 4: Surface"]
         D1["Troubleshooting entry"] --> D2["Lifecycle harness step"]
@@ -347,9 +375,14 @@ translation and reject paths exist before anything depends on them.
 **Phase 2** wires both request paths through it. Both in one change, because a fix applied
 to one path is a defect waiting on the other.
 
-**Phase 3** corrects the description and adds the test that derives its cases from it. This
-closes the class rather than the instance: a future edit documenting a rejected form fails
-the build.
+**Phase 3** corrects the live caller-facing surface. It rewrites the `Description` and
+`Examples` of `buildSearchMessagesVerb` in `internal/server/mail_verbs.go` to the
+parenthesised phrase form and the first-token rule, deletes the dead `NewSearchMessagesTool`
+from `internal/tools/search_messages.go` along with the three tests that exist only to
+exercise it, and adds the description-derived test in the `internal/server` package where
+the examples now live. This closes the class rather than the instance: the derived test
+asserts every documented example is already canonical (`normalise(example)` equals
+`example`), so a future edit documenting a rejected double-quoted form fails the build.
 
 **Phase 4** adds the troubleshooting entry and the lifecycle harness step.
 
@@ -367,7 +400,7 @@ the build.
 | `internal/tools/search_messages_query_test.go` | `TestStrayQuoteIsRejected` | A quote that delimits nothing is refused | `subject:Design" Review` | Error naming the parenthesised form |
 | `internal/tools/search_messages_query_test.go` | `TestBooleanExpressionIsWrappedOnce` | A compound expression gains one pair, not one per clause | `subject:Sprint AND from:alice@contoso.com` | One enclosing pair |
 | `internal/tools/search_messages_query_test.go` | `TestNormalisationIsIdempotent` | Normalising twice equals normalising once | Every case above | Identical output |
-| `internal/tools/search_messages_query_test.go` | `TestEveryDocumentedExampleNormalises` | Each example parsed out of the verb description is accepted | The description text | No example rejected |
+| `internal/server/mail_verbs_test.go` | `TestDocumentedExamplesAreCanonical` | Each example in the verb registry `Description` and `Examples` normalises without error and is unchanged by normalisation | The `buildSearchMessagesVerb` description and examples | Every example accepted, and `normalise(example)` equals `example` for each |
 | `internal/tools/search_messages_test.go` | `TestBothRequestPathsNormalise` | The folder path and the mailbox path agree | One query, both paths | Identical search value |
 | `internal/tools/search_messages_test.go` | `TestUnconvertibleQueryIsRejectedBeforeTheCall` | No Graph call is made for a refused query | A query with a stray quote | Error returned, no request issued |
 
@@ -383,7 +416,9 @@ the build.
 
 | Test File | Test Name | Reason for Removal |
 |-----------|-----------|-------------------|
-| None | Nothing is superseded. The existing tests are extended rather than replaced |
+| `internal/tools/search_messages_test.go` | `TestSearchMessagesTool_Registration` | Exercises only the dead `NewSearchMessagesTool`, deleted in Phase 3 |
+| `internal/tools/search_messages_test.go` | `TestSearchMessagesTool_HasParameters` | Exercises only the dead `NewSearchMessagesTool`, deleted in Phase 3 |
+| `internal/tools/search_messages_test.go` | `TestSearchMessagesToolCanBeAddedToServer` | Registers only the dead `NewSearchMessagesTool` on a server; deleted with it |
 
 ## Acceptance Criteria
 
@@ -456,13 +491,14 @@ When the verb is called with it
 Then results are returned as they were before the change
 ```
 
-### AC-9: The documentation cannot drift from the behaviour
+### AC-9: A documented example must already be canonical
 
 ```gherkin
-Given the syntax examples written in the verb description
+Given the syntax examples in the verb registry description and its Examples
 When the test suite runs
-Then every example is extracted from the description and normalised
-  And an example that the normalisation rejects fails the build
+Then every example is extracted and normalised without error
+  And normalise(example) equals example for every one
+  And a re-introduced double-quoted example, which normalisation rewrites to the parenthesised form, fails that equality and fails the build
 ```
 
 ### AC-10: The failure is legible without an interactive surface
@@ -471,6 +507,34 @@ Then every example is extracted from the description and normalised
 Given a rejected query
 When the tool result and the log record are examined
 Then both carry the correction, not only a character position
+```
+
+### AC-11: The description teaches the corrected rules
+
+```gherkin
+Given the verb registry description after this change
+When it is read
+Then it states that a multi-word property value is written in parentheses
+  And it states that an unparenthesised multi-word property value binds only its first token
+  And it documents no double-quoted property phrase
+```
+
+### AC-12: Normalisation is deterministic and idempotent
+
+```gherkin
+Given any query
+When it is normalised twice
+Then both runs produce identical output
+  And normalising an already-normalised query returns it unchanged
+```
+
+### AC-13: The change adds no dependency and preserves the response contract
+
+```gherkin
+Given the implemented change
+When go.mod and the verb definition are inspected
+Then no third-party dependency has been added
+  And the result shape, the output tiers, and the annotations of the verb are unchanged
 ```
 
 ## Quality Standards Compliance
@@ -511,8 +575,8 @@ Then both carry the correction, not only a character position
 # Full pipeline
 make ci
 
-# The normalisation cases, under the race detector
-go test -race ./internal/tools/ -run 'SearchMessages|Normalis'
+# The normalisation cases and the derived-example test, under the race detector
+go test -race ./internal/tools/ ./internal/server/ -run 'SearchMessages|Normalis|DocumentedExamples'
 
 # Lifecycle harness, after rebuilding the binary the harness drives
 make crud-test
@@ -575,7 +639,7 @@ results, so no correct behaviour can regress.
 |---|---|
 | Phase 1, the normalisation function and its cases | 2 to 3 hours |
 | Phase 2, both request paths and the pre-call rejection | 1 hour |
-| Phase 3, the description and the derived test | 2 hours |
+| Phase 3, the live description, the dead-code deletion, and the derived test | 2 hours |
 | Phase 4, troubleshooting entry and harness step | 1 hour |
 | Total | 6 to 7 hours |
 
@@ -612,7 +676,9 @@ taught every caller to narrow their own searches without knowing it.
 Ten tests cover this verb. They assert its registration, its parameters, its handler
 construction, its clamping, and its empty-query error. None asserts the value that reaches
 Graph, so all ten pass against a verb whose entire documented syntax is non-functional and
-which returns wrong answers for one common input.
+which returns wrong answers for one common input. Three of the ten, moreover, exercise the
+dead `NewSearchMessagesTool` rather than the registered verb, and are removed here rather
+than repaired.
 
 The measurement discipline the project already writes down is what produced every correction
 here. The first hypothesis, missing enclosing quotes, was right but incomplete. The obvious
@@ -663,40 +729,39 @@ left skipped.
    lists eight (`from`, `to`, `cc`, `subject`, `body`, `participants`, `hasAttachments`,
    `received`). Corrected to eight.
 
-### Orphan requirements (reported, not auto-fixed)
+### Orphan requirements (now resolved by added acceptance criteria)
 
-Every acceptance criterion traces to a requirement. The following requirements are not graded
-by any AC:
+Every acceptance criterion traces to a requirement, and after this second pass every
+requirement is graded:
 
-- **Req 9** (description states the parenthesised form and MUST NOT document the
-  double-quoted form) — no grading AC; see UNRESOLVED-2.
-- **Req 10** (description states the first-token binding rule) — no grading AC.
-- **NFR-1** (deterministic), **NFR-2** (idempotent), **NFR-3** (no new dependency),
-  **NFR-5** (no shape, tier, or annotation change) — no grading AC. NFR-2 has a test
-  (`TestNormalisationIsIdempotent`); the others are structural. NFR-4 is graded by AC-10.
+- **Req 9** and **Req 10** (description content) — now graded by **AC-11**; the canonical-form
+  prohibition of Req 9 is additionally enforced by **AC-9**.
+- **NFR-1** (deterministic) and **NFR-2** (idempotent) — now graded by **AC-12**.
+- **NFR-3** (no new dependency) and **NFR-5** (no shape, tier, or annotation change) — now
+  graded by **AC-13**. NFR-4 remains graded by AC-10.
 
-### Unresolvable items requiring human decision
+### Human decisions received and applied (both prior UNRESOLVED items closed)
 
-- **UNRESOLVED-1 (Affected Components, Motivation, Change Drivers, requirements 9 through 11,
-  Phase 3, Test Strategy).** The CR's description work targets the 25-line syntax reference
-  in `NewSearchMessagesTool` (`internal/tools/search_messages.go`), which is dead code: it is
-  referenced only by its own test and is not wired into any registration path. The live
-  caller-facing surface is `buildSearchMessagesVerb` in `internal/server/mail_verbs.go`,
-  whose `Description` is three sentences (not 25 lines), documents fewer keywords, and already
-  ships the double-quoted phrase form (`subject:"meeting"`) plus two structured `Examples`
-  (`subject:"quarterly review"`, `from:alice@contoso.com hasAttachments:true`). File paths
-  were reconciled, but the prose rewrite is non-trivial and changes the strength of the
-  change drivers. A human must decide: (a) whether to enrich the live registry description
-  into the full corrected syntax reference or merely correct the shorter live description in
-  place; (b) whether to additionally correct or remove the dead `NewSearchMessagesTool`
-  description; and (c) confirm the derived test moves to the `internal/server` package.
-- **UNRESOLVED-2 (Requirement 9 vs AC-9 / the "close the class" mechanism).** Requirement 9
-  says the description MUST NOT document the double-quoted phrase form, but the class-closing
-  test described by AC-9 (`TestEveryDocumentedExampleNormalises`) only asserts that each
-  example is *accepted* by the normalisation. Because Requirement 2 makes the normalisation
-  *accept and rewrite* the double-quoted form, a re-introduced `subject:"..."` example would
-  pass that test and NOT fail the build. The derived-example check therefore cannot enforce
-  Requirement 9. A human must decide whether to strengthen the check to reject the
-  double-quoted form in documented examples (and reconcile that with Requirement 2, which
-  deliberately accepts it) or to accept that Requirement 9 is enforced only by review.
+- **UNRESOLVED-1 — RESOLVED: delete the dead code, fix the live surface.**
+  `NewSearchMessagesTool` and the three tests that exercise only it
+  (`TestSearchMessagesTool_Registration`, `TestSearchMessagesTool_HasParameters`,
+  `TestSearchMessagesToolCanBeAddedToServer`) are deleted; `NewHandleSearchMessages` stays.
+  The corrected KQL reference goes into `buildSearchMessagesVerb`'s `Description` and
+  `Examples` in `internal/server/mail_verbs.go`, whose three shipping example forms
+  (`subject:"meeting"`, `subject:"quarterly review"`, `subject:"Design Review"`) are all the
+  double-quoted form row 6 shows Graph rejects. The derived-example test moves to the
+  `internal/server` package. Motivation, Change Drivers, Affected Components, requirements 9
+  through 11, Phase 3 (and its diagram), the Test Strategy tables (add, remove), and
+  Estimated Effort were rewritten accordingly, and the "25-line reference" framing was
+  corrected to the actual live description (three sentences plus two structured examples).
+- **UNRESOLVED-2 — RESOLVED: assert documented examples are already canonical.** The
+  class-closing check is now two assertions: every documented example normalises without
+  error, and `normalise(example)` equals `example`. A re-introduced `subject:"..."` example
+  rewrites to the parenthesised form, so the equality fails and the build fails. Requirement
+  2 is unaffected, because normalisation still accepts and translates the double-quoted form
+  for callers at runtime; documentation is deliberately held to the stricter standard, and
+  requirement 9, AC-9, and the renamed test (`TestDocumentedExamplesAreCanonical`) now state
+  that asymmetry explicitly.
+
+No UNRESOLVED items remain.
 <!-- /review-summary -->
