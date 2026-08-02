@@ -219,13 +219,13 @@ func GetEnv(key, defaultValue string) string {
 // Side effects: reads environment variables and calls os.UserHomeDir.
 func LoadConfig() Config {
 	cfg := Config{
-		ClientID:        ResolveClientID(GetEnv("OUTLOOK_MCP_CLIENT_ID", "outlook-desktop")),
-		TenantID:        GetEnv("OUTLOOK_MCP_TENANT_ID", "common"),
-		AuthRecordPath:  GetEnv("OUTLOOK_MCP_AUTH_RECORD_PATH", "~/.outlook-local-mcp/auth_record.json"),
-		CacheName:       GetEnv("OUTLOOK_MCP_CACHE_NAME", "outlook-local-mcp"),
-		DefaultTimezone: GetEnv("OUTLOOK_MCP_DEFAULT_TIMEZONE", "auto"),
-		LogLevel:        GetEnv("OUTLOOK_MCP_LOG_LEVEL", "warn"),
-		LogFormat:       GetEnv("OUTLOOK_MCP_LOG_FORMAT", "json"),
+		ClientID:        ResolveClientID(GetEnv(EnvClientID, "outlook-desktop")),
+		TenantID:        GetEnv(EnvTenantID, "common"),
+		AuthRecordPath:  GetEnv(EnvAuthRecordPath, "~/.outlook-local-mcp/auth_record.json"),
+		CacheName:       GetEnv(EnvCacheName, "outlook-local-mcp"),
+		DefaultTimezone: GetEnv(EnvDefaultTimezone, "auto"),
+		LogLevel:        GetEnv(EnvLogLevel, "warn"),
+		LogFormat:       GetEnv(EnvLogFormat, "json"),
 	}
 
 	if strings.HasPrefix(cfg.AuthRecordPath, "~/") {
@@ -235,21 +235,21 @@ func LoadConfig() Config {
 		}
 	}
 
-	maxRetries, err := strconv.Atoi(GetEnv("OUTLOOK_MCP_MAX_RETRIES", "3"))
+	maxRetries, err := strconv.Atoi(GetEnv(EnvMaxRetries, "3"))
 	if err != nil {
-		slog.Warn("invalid OUTLOOK_MCP_MAX_RETRIES, using default", "value", GetEnv("OUTLOOK_MCP_MAX_RETRIES", "3"), "default", 3)
+		slog.Warn("invalid OUTLOOK_MCP_MAX_RETRIES, using default", "value", GetEnv(EnvMaxRetries, "3"), "default", 3)
 		maxRetries = 3
 	}
 	cfg.MaxRetries = maxRetries
 
-	retryBackoffMS, err := strconv.Atoi(GetEnv("OUTLOOK_MCP_RETRY_BACKOFF_MS", "1000"))
+	retryBackoffMS, err := strconv.Atoi(GetEnv(EnvRetryBackoffMS, "1000"))
 	if err != nil {
-		slog.Warn("invalid OUTLOOK_MCP_RETRY_BACKOFF_MS, using default", "value", GetEnv("OUTLOOK_MCP_RETRY_BACKOFF_MS", "1000"), "default", 1000)
+		slog.Warn("invalid OUTLOOK_MCP_RETRY_BACKOFF_MS, using default", "value", GetEnv(EnvRetryBackoffMS, "1000"), "default", 1000)
 		retryBackoffMS = 1000
 	}
 	cfg.RetryBackoffMS = retryBackoffMS
 
-	timeoutStr := GetEnv("OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS", "30")
+	timeoutStr := GetEnv(EnvRequestTimeoutSeconds, "30")
 	timeoutSec, err := strconv.Atoi(timeoutStr)
 	if err != nil || timeoutSec <= 0 {
 		slog.Warn("invalid OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS, using default", "value", timeoutStr, "default", 30)
@@ -257,9 +257,9 @@ func LoadConfig() Config {
 	}
 	cfg.RequestTimeout = time.Duration(timeoutSec) * time.Second
 
-	cfg.LogSanitize = strings.ToLower(GetEnv("OUTLOOK_MCP_LOG_SANITIZE", "true")) != "false"
+	cfg.LogSanitize = strings.ToLower(GetEnv(EnvLogSanitize, "true")) != "false"
 
-	shutdownStr := GetEnv("OUTLOOK_MCP_SHUTDOWN_TIMEOUT_SECONDS", "15")
+	shutdownStr := GetEnv(EnvShutdownTimeoutSeconds, "15")
 	shutdownSec, err := strconv.Atoi(shutdownStr)
 	if err != nil {
 		slog.Warn("invalid OUTLOOK_MCP_SHUTDOWN_TIMEOUT_SECONDS, using default",
@@ -277,34 +277,34 @@ func LoadConfig() Config {
 	}
 	cfg.ShutdownTimeout = time.Duration(shutdownSec) * time.Second
 
-	cfg.AuditLogEnabled = strings.ToLower(GetEnv("OUTLOOK_MCP_AUDIT_LOG_ENABLED", "true")) != "false"
-	cfg.AuditLogPath = GetEnv("OUTLOOK_MCP_AUDIT_LOG_PATH", "")
+	cfg.AuditLogEnabled = strings.ToLower(GetEnv(EnvAuditLogEnabled, "true")) != "false"
+	cfg.AuditLogPath = GetEnv(EnvAuditLogPath, "")
 
-	cfg.ReadOnly = strings.EqualFold(GetEnv("OUTLOOK_MCP_READ_ONLY", "false"), "true")
+	cfg.ReadOnly = strings.EqualFold(GetEnv(EnvReadOnly, "false"), "true")
 
-	cfg.OTELEnabled = strings.EqualFold(GetEnv("OUTLOOK_MCP_OTEL_ENABLED", "false"), "true")
-	cfg.OTELEndpoint = GetEnv("OUTLOOK_MCP_OTEL_ENDPOINT", "")
-	cfg.OTELServiceName = GetEnv("OUTLOOK_MCP_OTEL_SERVICE_NAME", "outlook-local-mcp")
+	cfg.OTELEnabled = strings.EqualFold(GetEnv(EnvOTELEnabled, "false"), "true")
+	cfg.OTELEndpoint = GetEnv(EnvOTELEndpoint, "")
+	cfg.OTELServiceName = GetEnv(EnvOTELServiceName, "outlook-local-mcp")
 
-	cfg.LogFile = GetEnv("OUTLOOK_MCP_LOG_FILE", "")
+	cfg.LogFile = GetEnv(EnvLogFile, "")
 
 	// Resolve timezone auto-detection before validation.
 	if cfg.DefaultTimezone == "auto" {
 		cfg.DefaultTimezone = DetectTimezone()
 	}
 
-	explicitAuthMethod := GetEnv("OUTLOOK_MCP_AUTH_METHOD", "")
+	explicitAuthMethod := GetEnv(EnvAuthMethod, "")
 	cfg.AuthMethod, cfg.AuthMethodSource = InferAuthMethod(cfg.ClientID, explicitAuthMethod)
 
-	cfg.AccountsPath = GetEnv("OUTLOOK_MCP_ACCOUNTS_PATH", "")
+	cfg.AccountsPath = GetEnv(EnvAccountsPath, "")
 	if cfg.AccountsPath == "" {
 		cfg.AccountsPath = filepath.Join(filepath.Dir(cfg.AuthRecordPath), "accounts.json")
 	}
 
-	cfg.TokenStorage = GetEnv("OUTLOOK_MCP_TOKEN_STORAGE", "auto")
+	cfg.TokenStorage = GetEnv(EnvTokenStorage, "auto")
 
-	cfg.MailEnabled = strings.EqualFold(GetEnv("OUTLOOK_MCP_MAIL_ENABLED", "false"), "true")
-	cfg.MailManageEnabled = strings.EqualFold(GetEnv("OUTLOOK_MCP_MAIL_MANAGE_ENABLED", "false"), "true")
+	cfg.MailEnabled = strings.EqualFold(GetEnv(EnvMailEnabled, "false"), "true")
+	cfg.MailManageEnabled = strings.EqualFold(GetEnv(EnvMailManageEnabled, "false"), "true")
 
 	// Mail management is a superset of read-only mail access. Enabling
 	// MailManageEnabled implicitly enables MailEnabled so that mail tool
@@ -313,7 +313,7 @@ func LoadConfig() Config {
 		cfg.MailEnabled = true
 	}
 
-	maxAttachStr := GetEnv("OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES", "10485760")
+	maxAttachStr := GetEnv(EnvMaxAttachmentSizeBytes, "10485760")
 	maxAttach, err := strconv.ParseInt(maxAttachStr, 10, 64)
 	if err != nil || maxAttach <= 0 {
 		slog.Warn("invalid OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES, using default",
@@ -324,7 +324,7 @@ func LoadConfig() Config {
 
 	// ProvenanceTag uses os.Getenv directly so that an explicit empty value
 	// disables tagging, while an unset variable uses the default tag name.
-	if v, ok := os.LookupEnv("OUTLOOK_MCP_PROVENANCE_TAG"); ok {
+	if v, ok := os.LookupEnv(EnvProvenanceTag); ok {
 		cfg.ProvenanceTag = v
 	} else {
 		cfg.ProvenanceTag = "com.github.desek.outlook-local-mcp.created"
