@@ -229,6 +229,22 @@ honesty, not an improvement, and this change request does not do it.
   NOT fall back to a default version string, because a fabricated version is the exact
   failure FR-8 exists to remove. This mirrors the existing `repoRootLlmsTxt` behaviour in
   `site/build/seo.plugin.ts`.
+* **AC-8** Each of the three new pages is optimised exactly as the documentation pages
+  are: its built HTML carries the `DOC_FONTS` preloads (the same four `rel="preload"`
+  font links `concepts.html` carries), carries the stylesheet inlined as a `<style>`
+  block, and carries no remaining local `rel="stylesheet"` link.
+* **AC-8a** The trust anchor `assertMatrix` entry in `site/lighthouserc.json` asserts
+  `cumulative-layout-shift` at severity `error` with the threshold unchanged at 0.01, and
+  the gate passes across two independent measurement rounds on the same build. If the
+  threshold is missed after the fix, this criterion is met instead by a published ceiling
+  recorded in this change request with its measurement chain and what would move it. It
+  MUST NOT be met by lowering the threshold, nor by leaving the assertion at `warn` with no
+  published ceiling.
+* **AC-8b** No page emitted by the `pageTemplate` in `site/build/doc.pages.ts` can reach
+  `dist` without being optimised. Demonstrated by adding a fourth doc-template page in a
+  scratch build and confirming it is either optimised automatically or fails the build by
+  name, never published silently unoptimised. This asserts the class is closed, which a
+  passing build on the three known pages does not show.
 * **AC-7** None of the three new pages states a tool-surface figure of its own, and the
   extended `assertNoBareClaims` scan demonstrably reaches their Markdown sources: a bare
   tool-surface figure introduced into one of them MUST fail
@@ -255,9 +271,10 @@ Every file the phases below touch, verified to exist at these paths on
 | `site/src/components/Footer.tsx` | Three internal links | 4 |
 | `.agents/scripts/site.pages.mjs` | Add three pages to `PAGES` | 5 |
 | `.agents/scripts/site.content.check.mjs` | Markdown claim scan, text floors | 5, 6 |
-| `site/lighthouserc.json` | Collect URLs, anchor the root pattern, new matrix entry | 5, 6 |
+| `site/lighthouserc.json` | Collect URLs, anchor the root pattern, matrix entry, CLS to error | 5, 6, 8 |
 | `site/build/seo.jsonld.ts` | Source `softwareVersion` from the release manifest | 7 |
 | `site/build/release.version.ts` | New: reads the release manifest at build time | 7 |
+| `site/build/prerender.mjs` | Optimise the trust anchor pages with `DOC_FONTS` | 8 |
 
 Not modified, but affected in behaviour and therefore verified: `site/build/sitemap.ts`
 picks up the new pages from the registry with no edit, and `site.validate.mjs`,
@@ -486,16 +503,26 @@ the environment"):
 This is therefore the same defect the documentation pages already had and had fixed, on the
 page set that was not re-checked afterwards, which is the exact recurrence
 `docs/reference/site-quality.md` warns about. The remedy is to route the three new pages
-through `optimisePage` with `DOC_FONTS`, in `site/build/prerender.mjs`. That file belongs to
-no phase of this change request, so the work is not smuggled into Phase 6; it is recorded
-here as the outstanding item that promotes the CLS assertion.
+through `optimisePage` with `DOC_FONTS`, in `site/build/prerender.mjs`. That file belonged
+to no phase of this change request when the measurement was taken, so the work was
+correctly not smuggled into Phase 6. It is now **Phase 8**, added in response to this
+finding, and that phase both applies the fix and promotes the assertion.
 
 Accordingly, in `site/lighthouserc.json` the trust anchor entry asserts performance,
 accessibility, best-practices and SEO at 1, LCP at 1,700 ms and TBT at 50 ms with severity
-`error`, and keeps CLS at 0.01 with severity `warn`. **The 0.01 threshold is not lowered.**
-The published ceiling is 0.0311, and what would have to change to move it is named above;
-once `prerender.mjs` optimises these pages, CLS is re-measured and the assertion is promoted
-to `error` at the unchanged 0.01.
+`error`, and keeps CLS at 0.01 with severity `warn` until Phase 8 lands. **The 0.01
+threshold is not lowered.**
+
+**0.0311 is a pre-fix baseline, not a published ceiling.** The distinction is load-bearing
+and the earlier wording here got it wrong. A ceiling is the best a page can do *after* its
+defects are fixed, and publishing one ends the question by saying what would have to change
+to move it. 0.0311 is instead what these pages measure *while carrying* a known, located,
+named defect whose fix is already specified. Recording it as a ceiling would retire a
+question that is still open and would invite the next reader to treat a repairable number as
+a property of the pages. It is retained here in full, with its measurement chain, because it
+is the evidence that motivated Phase 8 and the baseline that Phase 8's re-measurement is
+compared against. The ceiling question is asked only if CLS still misses 0.01 after the fix,
+and it is answered then, with a fresh measurement, not now.
 
 ### Phase 7: Source the published software version instead of transcribing it
 
@@ -547,6 +574,73 @@ node -e "const m=require('./.release-please-manifest.json')['.'];const h=require
 The second command asserts AC-6 directly: the built page must carry the manifest's
 version, not merely some version.
 
+### Phase 8: Route the trust anchor pages through the page optimiser and close the CLS gate
+
+Files: `site/build/prerender.mjs`, `site/lighthouserc.json`
+
+Added in response to the Phase 6 measurement above. The three trust anchor pages ship with
+a render-blocking stylesheet and zero font preloads, because `prerender.mjs` applies
+`optimisePage` to a hardcoded list naming `index.html` and the three documentation pages,
+and nothing added the new pages to it. A late Inter swap then charges roughly 0.031 to
+Cumulative Layout Shift against the 0.01 bar.
+
+`DOC_FONTS` is the correct preload set for these pages, not `HERO_FONTS`. They are emitted
+by the same `pageTemplate` in `doc.pages.ts` as the documentation pages, carry the same
+`main.doc-page` wrapper, and read as prose in Inter with inline code in Geist Mono. The
+shifting node Chrome named, `body.antialiased > main.doc-page > p`, is that template's
+paragraph.
+
+1. Route the three pages through `optimisePage` with `DOC_FONTS`, by extending the set the
+   existing documentation-page loop iterates. Do not add a second loop or a parallel code
+   path, and leave the landing page on its own path: it alone takes `deferClientScript` and
+   `HERO_FONTS`. The loop's existing fail-loudly-on-missing-page behaviour applies to the
+   new entries unchanged.
+2. **Derive the set rather than extending a literal, and prefer this to step 1's literal
+   form where it is workable.** The authoritative marker for "this page uses the doc-page
+   template" is already in the artifact: every page `pageTemplate` emits carries
+   `<main class="doc-page">`, and `optimisePage` preserves it. Build the loop's set by
+   scanning `dist` recursively for HTML files carrying that marker, excluding
+   `index.html`, which has its own path. A page added by any future change is then
+   optimised the moment it is emitted, with no list to remember.
+
+   This is not gold-plating, it is the project's own documented remedy applied to the
+   mechanism that produced the defect. The hardcoded list has now failed three times in the
+   same way: once when the documentation pages were left unoptimised after the landing page
+   was fixed, once when `DOC_FONTS` was missing the bold faces (both recorded in that
+   file's own comments), and now on the trust anchor pages. The repository's standing rule
+   is that correcting named instances produces a clean following run without closing the
+   class, and that what closes a class of this shape is a check deriving its cases from the
+   authoritative source rather than from a list of known-bad ones.
+
+   If the scan is judged unworkable, take step 1's literal list **and** add a coverage
+   assertion: after the loop, fail the build naming any `dist` HTML file that carries
+   `class="doc-page"` and was not optimised. Either route closes the class; a bare literal
+   list does not, and MUST NOT be the end state.
+3. Re-measure Cumulative Layout Shift for the three pages on a clean build, Lighthouse
+   mobile, three runs per URL. Then run the instrument a second time over the same
+   unchanged build and confirm the two rounds agree, per the project's measurement rules.
+   The Phase 6 round is the baseline to compare against, and it is exactly the run that
+   showed why a single round is not enough here: `privacy` passed on one lucky run of six
+   before the second round exposed 0.0311 as its real figure.
+4. Promote the trust anchor `assertMatrix` entry's `cumulative-layout-shift` assertion from
+   `warn` to `error` at the **unchanged** 0.01 threshold, and delete the `_comment` line
+   that records the pending fix, since it will no longer be pending.
+5. If CLS still misses 0.01 after the fix, that is the point at which a real ceiling is
+   published: record the new measurement chain, say what would have to change to move it,
+   and amend this change request. The 0.01 threshold MUST NOT be lowered quietly, and the
+   assertion MUST NOT be left at `warn` without a published ceiling explaining why.
+
+Verify:
+
+```bash
+rm -rf site/dist site/dist-ssr && pnpm --dir site run build
+# each new page carries four preloads and an inlined stylesheet, and no stylesheet link
+grep -c 'rel="preload"' site/dist/about/index.html    # expect 4, as on concepts.html
+grep -c '<style>' site/dist/privacy/index.html        # expect at least 1
+grep -c 'rel="stylesheet"' site/dist/contact/index.html # expect 0
+pnpm --dir site run lighthouse
+```
+
 ## Verification
 
 This change touches `site/**` and `.agents/scripts/**` only. It adds no Go code and
@@ -592,6 +686,14 @@ nothing outside the site moved.
   tracing recorded in the pull request.
 * The contrast audit (`site.contrast.audit.mjs`) MUST report zero failures for the
   three new pages at all four widths.
+* **AC-8, AC-8a, AC-8b** The three new pages' built HTML is compared against
+  `concepts.html` for preload count, inlined `<style>`, and absence of a local stylesheet
+  link. Cumulative Layout Shift is re-measured over two independent rounds on the same
+  clean build and the rounds MUST agree before the figure is trusted; the Phase 6 table is
+  the baseline. The class-closure criterion is exercised by introducing a fourth
+  doc-template page and confirming it cannot reach `dist` unoptimised. Asserting only that
+  the three known pages now pass would repeat the error that produced this defect, which
+  was a clean run on the pages someone remembered to check.
 * **FR-8, AC-6, AC-6a, AC-6b** The built landing page's `softwareVersion` is compared
   against `.release-please-manifest.json` on the same build and MUST match; a grep of
   `site/build/seo.jsonld.ts` MUST find no version literal; and a build run against a
@@ -623,10 +725,10 @@ The requestor settled a third question on 2026-08-23, in response to this review
 Reviewed 2026-08-23 against `dev/is-agentic-site` at `5c2037b` plus the uncommitted
 `da19458` site trust-signal work.
 
-FINDINGS: 19 (drift 6, contradiction 4, ambiguity 5, coverage 2, ordering 2)
-FIXES APPLIED: 19
+FINDINGS: 20 (drift 6, contradiction 4, ambiguity 5, coverage 2, ordering 2, defect 1)
+FIXES APPLIED: 20
 UNRESOLVED: 0
-PHASES: 7
+PHASES: 8
 
 DRIFT (6), reconciled against the current codebase:
 0. `site/build/seo.jsonld.ts` publishes `softwareVersion: '0.8.0'`, a literal written
@@ -687,6 +789,28 @@ COVERAGE (2):
 2. FR-7 had no acceptance criterion exercising it, so it was the one requirement with no
    AC. Added AC-7, which asserts the scan reaches the new Markdown sources rather than
    merely that the check passes.
+
+DEFECT (1), found during Phase 6 implementation and added as Phase 8:
+1. The three trust anchor pages are never routed through `optimisePage` in
+   `site/build/prerender.mjs`, which applies to a hardcoded list naming `index.html` and
+   the three documentation pages. They therefore ship with a render-blocking stylesheet
+   and zero font preloads, and a late Inter swap charges roughly 0.031 to Cumulative
+   Layout Shift against the 0.01 bar. Located by Chrome's `layout-shifts` audit
+   (`body.antialiased > main.doc-page > p`, "Web font loaded",
+   `inter-latin-400-normal.woff2`) and confirmed in the build output: zero `rel="preload"`
+   links on `dist/about/index.html` against four on `dist/concepts.html`.
+
+   Phase 6 handled this correctly by holding the CLS assertion at `warn` rather than
+   lowering the 0.01 threshold. Two changes were made here on top of that. The 0.0311
+   figure is reframed as a pre-fix baseline rather than a published ceiling, because a
+   ceiling is what a page cannot beat *after* its defects are fixed and this page carries
+   one whose fix is already specified; recording it as a ceiling would retire an open
+   question. And Phase 8 is required to close the class, not only the instance: the
+   hardcoded list has now failed three times the same way, twice recorded in that file's
+   own comments, so the phase derives the optimised set from the `class="doc-page"` marker
+   in the artifact, with a coverage assertion as the fallback route. AC-8b asserts the
+   closure by introducing a fourth doc-template page, because a clean run on the three
+   known pages is exactly the evidence that failed to catch this twice before.
 
 ORDERING (2), both defects introduced by this review's own first restructure and caught
 before implementation began:
