@@ -194,6 +194,13 @@ else console.log(`ok /index.md: ${fences} Mermaid fences`)
 // which carry no literal digit and so never match.
 await assertNoBareClaims('site/src')
 
+// The same assertion over the trust anchor pages' Markdown sources (CR-0077 FR-7a). Those
+// pages are prose, not components, so their figures would never have been seen by a scan
+// restricted to `.ts`/`.tsx`; FR-7 would have had no check behind it. The rule is the
+// generated manifest's, not a denylist's, so a figure typed into this prose is rejected
+// here for the same reason one typed into a component is.
+await assertNoBareClaims('site/content')
+
 // Tool-surface shape assertion (CR-0073 AC-5, AC-6): the served landing page must present
 // verbs as `operation` values of the four aggregate tools, never as flat top-level tool
 // names, and must not name a domain the server does not have. The obsolete flat names are
@@ -272,7 +279,7 @@ async function collectSeeDocsAnchors() {
 /**
  * Fail on any bare numeric claim about the tool surface reintroduced under a source tree.
  *
- * Walks every `.ts`/`.tsx` file beneath `root`, excluding the generated manifest, and
+ * Walks every `.ts`/`.tsx`/`.md` file beneath `root`, excluding the generated manifest, and
  * matches a number immediately followed (within a few words) by tool, verb, domain, or
  * variable. Each match is reported with its file and 1-indexed line so the author is sent
  * straight to the transcribed figure. The generated `src/generated/` tree is skipped: it is
@@ -300,7 +307,11 @@ async function assertNoBareClaims(root) {
 }
 
 /**
- * Yield every `.ts`/`.tsx` file beneath a directory, skipping the generated manifest tree.
+ * Yield every `.ts`/`.tsx`/`.md` file beneath a directory, skipping the generated manifest tree.
+ *
+ * `.md` is included so page prose is scanned as well as page components (CR-0077 FR-7a): a
+ * page authored in Markdown states its claims in exactly the same way a component does, and
+ * an extension filter is not a meaningful boundary for where a transcribed figure can hide.
  *
  * @param {string} dir Directory to walk.
  * @returns {AsyncGenerator<string>} Absolute-or-relative file paths, matching the input base.
@@ -312,7 +323,7 @@ async function* walkSources(dir) {
     if (entry.isDirectory()) {
       if (entry.name === 'generated') continue
       yield* walkSources(path)
-    } else if (/\.(ts|tsx)$/.test(entry.name)) {
+    } else if (/\.(ts|tsx|md)$/.test(entry.name)) {
       yield path
     }
   }
