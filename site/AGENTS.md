@@ -10,7 +10,18 @@ file adds what is specific to the website and overrides nothing.
 A pre-rendered marketing and documentation site, built with Vite, React and Tailwind v4,
 published to the `gh-pages` branch by CI and served from the apex `outlook-local-mcp.com`.
 It is a set of separate HTML entries, not a single-page application and not a router: the
-landing page plus three documentation pages generated at build time from `docs/*.md`.
+landing page, three documentation pages generated at build time from `docs/*.md`, and three
+trust anchor pages (`/about`, `/contact`, `/privacy`) generated from `site/content/*.md`.
+Both generated sets share the `pageTemplate` in `build/doc.pages.ts`, so a change to that
+template moves all six.
+
+The trust anchor pages are emitted as directory indexes (`about/index.html`), because GitHub
+Pages resolves an extensionless request path only to a directory index. That is why the SEO
+pipeline is keyed by dist-relative *path* rather than by filename: three pages named
+`index.html` collide on a basename, and the collision is silent. Every one of them takes the
+landing page's canonical URL and JSON-LD while the build succeeds and the pages validate
+(CR-0077). `.agents/scripts/site.serve.mjs` reproduces the GitHub Pages fallback locally so
+the extensionless paths are testable here.
 
 ```bash
 pnpm --dir site install --frozen-lockfile
@@ -22,6 +33,13 @@ pnpm --dir site run lighthouse   # the gate; thresholds in lighthouserc.json
 `build` is four steps and the last two matter most: `entry-server.tsx` renders the
 landing page with `react-dom/server`, and `build/prerender.mjs` injects that markup into
 `dist/index.html`, inlines the stylesheet, adds font preloads, and emits `/index.md`.
+
+Which generated pages `prerender.mjs` optimises is **derived from the artifact, not listed**:
+it walks `dist` for HTML carrying the `class="doc-page"` marker the shared template emits,
+and fails the build if that scan finds nothing. The literal list it replaces went stale three
+times in the same way, most recently by shipping the trust anchor pages with a render-blocking
+stylesheet and no preloads at all (CR-0077). Do not reintroduce a page list here; add the
+page and let the scan find it.
 
 ## Invariants
 
@@ -57,12 +75,26 @@ So a new factual claim is added by extending the manifest, not by writing the nu
 component. If the manifest does not yet carry what a component needs, the fix is upstream in
 `internal/surface`, then `make surface-manifest`, never a literal in `site/src`.
 
+The same rule covers the released version. The landing page's `SoftwareApplication`
+`softwareVersion` is read at build time from `.release-please-manifest.json` by
+`build/release.version.ts`, and the build fails naming that file rather than falling back to
+a default, because a fabricated version is the defect the sourcing exists to remove. The
+literal it replaced advertised a version that had never been released (CR-0077). No
+semantic-version literal belongs in `build/seo.jsonld.ts`.
+
 `.agents/scripts/site.content.check.mjs` enforces this: it rejects a bare numeric claim about
-tools, verbs, domains, or configuration variables anywhere under `site/src` outside the
-generated manifest, naming the file and the line, and its per-page text floors catch the
-inverse failure of prose silently deleted. A floor that no longer holds after a legitimate
-content change is re-measured on the corrected build and the reduction accounted for in the
-script, never lowered until the check passes.
+tools, verbs, domains, or configuration variables anywhere under `site/src` **and under
+`site/content`**, outside the generated manifest, naming the file and the line, and its
+per-page text floors catch the inverse failure of prose silently deleted. A floor that no
+longer holds after a legitimate content change is re-measured on the corrected build and the
+reduction accounted for in the script, never lowered until the check passes.
+
+Three further standing assertions in that script guard the page set itself, each derived from
+`build/seo.pages.ts` and `build/seo.jsonld.ts` rather than a hand-kept list, so a fourth trust
+anchor page is covered with no script edit: every extensionless path resolves to its directory
+index over HTTP, every page's footer links `/about`, `/contact` and `/privacy` (and every
+generated page links back to `/`), and every page carries its own canonical plus exactly the
+schema.org entities its registry key declares and none of the landing page's.
 
 ## The design is adopted as authored
 

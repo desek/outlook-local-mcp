@@ -18,7 +18,7 @@ pnpm --dir site run build                          # must precede every check be
 pnpm --dir site run lighthouse                     # the gate; thresholds in site/lighthouserc.json
 node .agents/scripts/site.lighthouse.summary.mjs   # per-page scores and Core Web Vitals medians
 node .agents/scripts/site.validate.mjs             # W3C Nu, real errors separated from CSS-profile lag
-node .agents/scripts/site.contrast.audit.mjs       # every rendered text node, 4 pages x 4 widths
+node .agents/scripts/site.contrast.audit.mjs       # every rendered text node, every page x 4 widths
 node .agents/scripts/site.content.check.mjs        # text without JS, one h1, SeeDocs anchors, crawler files
 node .agents/scripts/site.screenshot.mjs <out-dir> # deterministic capture, 135 tiles
 node .agents/scripts/site.visual.diff.mjs <a> <b>  # per-channel comparison of two capture sets
@@ -37,6 +37,26 @@ node .agents/scripts/site.screenshot.mjs /tmp/shots-before /tmp/before/site/dist
 node .agents/scripts/site.screenshot.mjs /tmp/shots-after
 node .agents/scripts/site.visual.diff.mjs /tmp/shots-before /tmp/shots-after
 ```
+
+### The page set the gates cover comes from one list
+
+`.agents/scripts/site.pages.mjs` holds the page set, and the content check, the W3C
+validation, the contrast audit and the screenshot capture all import it, so a page is
+enrolled in four gates by one edit. Lighthouse is the exception: its URLs and thresholds live
+in `site/lighthouserc.json` and are added separately.
+
+The set is the landing page, the three documentation pages, and the three trust anchor pages
+`about/index.html`, `contact/index.html` and `privacy/index.html` added by CR-0077. The trust
+anchor pages are measured at their directory-index path, where their text floors were
+baselined; a separate assertion drives the extensionless `/about`, `/contact` and `/privacy`
+over HTTP, because that is the URL a visitor and a crawler actually request.
+
+A page added to `site.pages.mjs` without a matching `assertMatrix` entry in
+`lighthouserc.json` is not ungated, it is *mis*gated: the landing page's pattern once matched
+every directory index, so the trust anchor pages would have been graded against thresholds
+that assert no performance score at all. Anchor the root pattern and give the new page an
+entry of its own. Which pages the optimiser touches is **not** a list to update; `prerender.mjs`
+derives that from the `class="doc-page"` marker in the built artifact.
 
 ## The screenshot harness is only trustworthy because five clocks are frozen
 
@@ -110,6 +130,13 @@ before the gate had ever run there. Measured across four runs on GitHub's runner
 | index.html, runner at `benchmarkIndex` ≈ 3,100 | **1.00 / 1.00 / 1.00** | 45 to 53 ms | 1,660 to 1,664 ms |
 | index.html, runner at 2,100 to 2,500 | 0.66 to 0.97 | 193 to 1,675 ms | 1,658 to 2,108 ms |
 | the three documentation pages | 1.00 every run | 0 ms every run | 1,506 to 1,665 ms |
+
+The trust anchor pages behave as the documentation pages do, which is expected: they are
+static HTML from the same template, with no client bundle to schedule. They are held to the
+same bar, performance, accessibility, best practices and SEO at 1, LCP at 1,700 ms, TBT at
+50 ms, CLS at 0.01, all at severity `error`. Their CLS reached that bar only after
+`prerender.mjs` began optimising them, and the pre-fix figure of roughly 0.031 was a defect
+in the build rather than a property of the pages, so it is not a published ceiling (CR-0077).
 
 The documentation pages are stable to the millisecond. The landing page is not: Total
 Blocking Time varies thirtyfold on *identical commits*, and because TBT carries 30% of the
