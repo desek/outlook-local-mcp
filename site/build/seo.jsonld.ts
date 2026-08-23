@@ -4,9 +4,11 @@
  * Emits the GEO structured data required by CR-0070 FR-39 to FR-45. Every page carries
  * at least one valid schema.org entity in its pre-rendered head:
  *
- *  - the landing page: SoftwareApplication (nine named properties), FAQPage (the five
+ *  - the landing page: SoftwareApplication (the nine properties FR-40 names, plus `url`
+ *    and a free `offers` for engine-readable identity and price), FAQPage (the five
  *    named topics), and Organization expressing the GigWhere acknowledgement as a real
- *    `contributor` property;
+ *    `contributor` property and carrying a `contactPoint` for a machine-readable
+ *    support channel;
  *  - the quickstart page: HowTo mirroring docs/quickstart.md, plus a WebPage;
  *  - the concepts and troubleshooting pages: a TechArticle.
  *
@@ -31,7 +33,8 @@ const GIGWHERE = 'https://gigwhere.com'
 /**
  * organization is the publisher Organization entity. It names GigWhere as a
  * `contributor` so the acknowledgement is a first-class structured-data property and
- * not only footer text (FR-43).
+ * not only footer text (FR-43), and carries a `contactPoint` so the project states a
+ * machine-readable support channel a generative engine can surface.
  *
  * `contributor` rather than `sponsor` is deliberate: GigWhere contributed time and
  * testing support, not money or goods, and schema.org `sponsor` denotes support
@@ -44,6 +47,16 @@ function organization(): Record<string, unknown> {
     name: 'Outlook Local MCP',
     url: SITE_ORIGIN,
     logo: `${SITE_ORIGIN}/icon.png`,
+    // A machine-readable contact channel so a generative engine can answer "how do I
+    // reach this project" and verify it is a real, supported project. The project is
+    // open source with no staffed inbox, so the contact point is its public issue
+    // tracker rather than a personal email or a postal address, neither of which
+    // exists for it. A ContactPoint with contactType and url is valid schema.org.
+    contactPoint: {
+      '@type': 'ContactPoint',
+      contactType: 'technical support',
+      url: `${REPO}/issues`,
+    },
     contributor: {
       '@type': 'Organization',
       name: 'GigWhere',
@@ -53,8 +66,9 @@ function organization(): Record<string, unknown> {
 }
 
 /**
- * softwareApplication is the landing page's SoftwareApplication entity, carrying all
- * nine properties FR-40 names.
+ * softwareApplication is the landing page's SoftwareApplication entity, carrying the
+ * nine properties FR-40 names plus `url` and a free `offers`, so a generative engine
+ * reads both the canonical page and the zero price.
  *
  * `featureList` is composed from the surface manifest (CR-0073 FR-15): it names the four
  * aggregate tools and the full and default verb counts, all read from the generated
@@ -65,6 +79,7 @@ function softwareApplication(): Record<string, unknown> {
   return {
     '@type': 'SoftwareApplication',
     name: 'Outlook Local MCP',
+    url: SITE_ORIGIN,
     description:
       'A local, single-binary Model Context Protocol server that connects Claude and other MCP clients to Microsoft Outlook Calendar and Mail through the Microsoft Graph API.',
     applicationCategory: 'DeveloperApplication',
@@ -74,6 +89,14 @@ function softwareApplication(): Record<string, unknown> {
     programmingLanguage: 'Go',
     downloadUrl: `${REPO}/releases`,
     softwareVersion: '0.8.0',
+    // The project is free and open source, so the Offer states a zero price rather than
+    // omitting price data. A SoftwareApplication with an explicit free Offer reads as a
+    // gratis product to a generative engine instead of one with unknown cost.
+    offers: {
+      '@type': 'Offer',
+      price: '0',
+      priceCurrency: 'USD',
+    },
     featureList: `Read and write Microsoft Calendar and Mail from a chat: check availability, book and reschedule meetings, search and send messages, and manage several accounts. Grouped as the ${domainNames.join(', ')} tools.`,
     dateModified: LAST_UPDATED_ISO,
   }

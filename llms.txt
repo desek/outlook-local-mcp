@@ -4,6 +4,14 @@
 
 This server embeds its own documentation and exposes it through three verbs on the `system` aggregate tool: `system.list_docs`, `system.search_docs`, and `system.get_docs`. Each embedded document is also available as an MCP resource at `doc://outlook-local-mcp/{slug}`. LLM clients that support `resources/list` and `resources/read` can fetch documents natively; clients that do not can use the `system.*_docs` verbs instead. Call `{tool: "system", args: {operation: "list_docs"}}` to see the available documents, or `{tool: "system", args: {operation: "status"}}` for the server entry point including `docs.base_uri`.
 
+## When to use this
+
+Reach for this server when a user asks an assistant to read or act on their own Microsoft Outlook calendar or mail on the machine the assistant runs on. It is the right tool for jobs like: check what a week looks like, find a free slot and book or reschedule a meeting, list or search calendar events, read a mail folder, search messages by content, or draft and send a reply, all against a real Microsoft account. It supports several accounts at once, so it also fits "do this on my work account, not my personal one".
+
+Do not reach for it when there is no local Microsoft account to connect, when the task is a bulk server-side mailbox migration or admin operation, or when the user wants a hosted multi-tenant web API. This is a local, single-binary MCP server that runs on the user's own machine and speaks to Microsoft Graph directly; it has no hosted endpoint and no API keys.
+
+To call it, connect over the Model Context Protocol and dispatch a verb on one of the four aggregate tools (`calendar`, `mail`, `account`, `system`) with a required `operation`. Start with `{tool: "system", args: {operation: "status"}}` to confirm the server is up, then `{tool: "calendar", args: {operation: "help"}}` or the same `help` verb on any domain to discover that domain's verbs and parameters.
+
 ## Site
 
 - [Landing page (Markdown)](https://outlook-local-mcp.com/index.md): A Markdown representation of the project landing page, with its capability and privacy diagrams as Mermaid, for clients that prefer Markdown over HTML.
