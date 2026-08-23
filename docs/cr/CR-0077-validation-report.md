@@ -1,23 +1,26 @@
 # CR-0077 Validation Report
 
 ## Summary
-Requirements: 11/11 | Acceptance Criteria: 13/14 | Tests: 7/10 | Gaps: 4
+Requirements: 11/11 | Acceptance Criteria: 14/14 | Tests: 10/10 | Gaps: 0
+(all four gaps FIXED; see the gap-fix pass recorded below)
 
-One acceptance criterion fails outright. **AC-1** requires that
-`.agents/scripts/site.serve.mjs` resolve an extensionless path to the directory
-index; it does not, and it is the one file AC-1 names that the branch never
-touched. A probe of `/about`, `/contact`, and `/privacy` through that server
-returns `404` on the current build. The page content behind those paths is
-correct and every other property of the pages holds, so this is a harness gap
-rather than a broken page, but it is graded FAIL because the criterion states the
-requirement in MUST form and names the file that must satisfy it.
+The original audit graded **AC-1** FAIL and downgraded three Test Strategy rows.
+All four findings were harness work, and all four are now closed:
 
-Three further rows are downgraded because the Test Strategy names checks that do
-not exist in the harness: no assertion covers the footer links (FR-6a, FR-6b), no
-standing assertion covers AC-2a, and the content check drives
-`about/index.html` rather than the extensionless path AC-1 is about. In each case
-the property itself was verified during this audit; what is missing is the
-automated guard that would catch a regression.
+* `.agents/scripts/site.serve.mjs` resolves an extensionless path to the
+  directory index, so `/about`, `/contact`, and `/privacy` return `200` with the
+  correct document. Trailing-slash, `.html`, and 404 behaviour are unchanged.
+* `.agents/scripts/site.content.check.mjs` now carries three standing assertions
+  that did not exist: the extensionless paths resolve over HTTP (AC-1), the
+  footer crawl path is intact by `href` in both directions (FR-6a, FR-6b, AC-3),
+  and each page's canonical names its own URL while it carries exactly the
+  schema.org entities its registry key declares and none of the landing page's
+  (AC-2a).
+
+No page content, no requirement, and no acceptance criterion was changed. Each
+new assertion derives its cases from `site/build/seo.pages.ts` and
+`site/build/seo.jsonld.ts` rather than a hand-kept list, so a fourth trust anchor
+page is covered without editing the script.
 
 Scope: branch `dev/is-agentic-site`, merge-base `origin/main` at `5c2037b`, HEAD
 `e310b8a`. Group A pre-CR work (`da19458`, `ba97e6f`) is excluded from
@@ -87,10 +90,10 @@ is closed and the closure is confirmed independently of the commit that claimed 
 
 | AC # | Description | Status | Evidence |
 |---|---|---|---|
-| AC-1 | Extensionless `/about`, `/contact`, `/privacy` each return HTML >= 500 chars no-JS with exactly one `<h1>`; **`site.serve.mjs` MUST resolve the extensionless path to the directory index** | **FAIL** | Probed this session through `.agents/scripts/site.serve.mjs` against `site/dist`: `/about` → **404**, `/contact` → **404**, `/privacy` → **404**. Only `/about/` (trailing slash) and `/about/index.html` return 200. `site.serve.mjs:52-54` appends `index.html` only when the path already ends in `/`; an extensionless path resolves to a directory and `readFile` fails. `git log --oneline $(git merge-base origin/main HEAD)..HEAD -- .agents/scripts/site.serve.mjs` returns **0 commits** — the file AC-1 names was never modified, and it is absent from the CR's Affected Components table. The content and `<h1>` sub-clauses hold at the directory-index path (1,845 / 1,719 / 2,729 chars, 1 `<h1>` each) but are never exercised at the extensionless path this criterion is about. |
+| AC-1 | Extensionless `/about`, `/contact`, `/privacy` each return HTML >= 500 chars no-JS with exactly one `<h1>`; **`site.serve.mjs` MUST resolve the extensionless path to the directory index** | **FIXED** | `.agents/scripts/site.serve.mjs:57` — an extensionless path with no matching file now falls back to `<path>/index.html`, mirroring GitHub Pages. Re-probed against a clean `site/dist`: `/about` → **200**, 44,625 bytes, `<h1>About Outlook Local MCP</h1>`; `/contact` → **200**, 44,754 bytes, `<h1>Contact</h1>`; `/privacy` → **200**, 45,411 bytes, `<h1>Privacy</h1>`. Existing behaviour unchanged in the same probe: `/about/` and `/about/index.html` 200 and byte-identical, `/concepts.html` 200, and `/nope`, `/nope/`, `/assets` each still **404** so a missing artefact stays a measurable failure. Now guarded by a standing assertion, `assertExtensionlessPaths` in `site.content.check.mjs`, which drives every directory-index registry entry over HTTP: `ok extensionless paths: /about, /contact, /privacy each resolve to their directory index`. The content and `<h1>` sub-clauses continue to hold (1,845 / 1,719 / 2,729 chars, 1 `<h1>` each) |
 | AC-2 | Each page in `sitemap.xml` with extensionless URL, own canonical naming that URL, own OG and Twitter card, the FR-4 entity; `site.validate.mjs` zero real errors | PASS | `sitemap.xml` lists `https://outlook-local-mcp.com/{about,contact,privacy}`; each built page carries `<link rel="canonical" href="https://outlook-local-mcp.com/about">` (etc.), `og:title` / `og:type` / `og:url`, `twitter:card="summary_large_image"`, and its assigned entity. `node .agents/scripts/site.validate.mjs` this session: `0 real error(s)` on all seven pages |
-| AC-2a | No new page carries the landing canonical or its `SoftwareApplication` / `FAQPage` / `Organization` JSON-LD | PASS | Per-page grep on built output: `SoftwareApplication\|FAQPage\|"Organization"` → **0** on each of the three; landing canonical `href="https://outlook-local-mcp.com/"` → **0** on each. Mechanism: path-keyed match `site/build/seo.pages.ts:144-147`, `site/build/seo.plugin.ts:65-71`, distinct Rollup keys `site/vite.config.ts:24-27`; `aboutPage` deliberately embeds no Organization node (`seo.jsonld.ts:226-233` docstring) |
-| AC-3 | Landing HTML links all three (FR-6a); each generated page footer links the other two and `/` (FR-6b); both without JavaScript | PASS | Verified by grep on the pre-rendered, JS-free artefacts — see FR-6a and FR-6b rows. No automated assertion guards this; see Gap 2 |
+| AC-2a | No new page carries the landing canonical or its `SoftwareApplication` / `FAQPage` / `Organization` JSON-LD | PASS (now guarded) | Standing assertion added: `assertPageIdentity` in `site.content.check.mjs` requires, per registry entry, that the canonical equals `${SITE_ORIGIN}${page.path}` and that the page's top-level JSON-LD entities are exactly the set its key declares, with no landing entity on any subpage — `ok page identity: 7 pages, each with its own canonical and exactly its assigned entities`. Falsified by substitution against a mutated copy of `dist`: retyping about's entity and repointing privacy's canonical at `/` both fail, naming the page. Original evidence: per-page grep on built output: `SoftwareApplication\|FAQPage\|"Organization"` → **0** on each of the three; landing canonical `href="https://outlook-local-mcp.com/"` → **0** on each. Mechanism: path-keyed match `site/build/seo.pages.ts:144-147`, `site/build/seo.plugin.ts:65-71`, distinct Rollup keys `site/vite.config.ts:24-27`; `aboutPage` deliberately embeds no Organization node (`seo.jsonld.ts:226-233` docstring) |
+| AC-3 | Landing HTML links all three (FR-6a); each generated page footer links the other two and `/` (FR-6b); both without JavaScript | PASS (now guarded) | Verified by grep on the pre-rendered, JS-free artefacts — see FR-6a and FR-6b rows. Now also guarded by `assertFooterLinks` in `site.content.check.mjs`, which asserts the `href` targets themselves on every registry page: `ok footer links: /about, /contact, /privacy linked from every page, root linked back from each generated page`. Falsified by substitution: retargeting the landing page's `/about` link to an external URL fails the check by page name |
 | AC-4 | Content check passes with a **measured** floor per new page, not the 500-char minimum | PASS | `site.content.check.mjs:69-77` records `about/index.html: 1845`, `contact/index.html: 1719`, `privacy/index.html: 2729` — all measured values, none is 500; rationale and instrument validation at `:121-135`; check exits 0 with each page at exactly its floor, reproducing the recorded measurement |
 | AC-4a | Lighthouse passes with the three pages in `collect.url` and matched by an `assertMatrix` entry of their own; root pattern anchored | PASS | `site/lighthouserc.json:10-12` (three URLs), `:27` root pattern anchored to `^https?://[^/]+/index\.html$`, `:48-59` dedicated trust anchor entry. Both rounds: `Checking assertions against 7 URL(s), 21 total run(s)`, exit 0. The report demonstrably contains the three pages — per-URL metrics extracted from `.lighthouseci/lhr-*.json` for `/about/index.html`, `/contact/index.html`, `/privacy/index.html` |
 | AC-5 | Every privacy claim traceable to the code producing it | PASS | Token storage → `internal/auth/cache_backend_cgo.go:11-37` (keychain probe), `internal/auth/active_backend.go:22` and `cache_cgo.go:19,65` (file AES-256-GCM fallback); optional OTel → `internal/config/config.go:89-95` and `:285-286` (`GetEnv(EnvOTELEnabled, "false")`, `GetEnv(EnvOTELEndpoint, "")` — off and empty by default); identity platform → `internal/auth/authcode.go:152` (`https://login.microsoftonline.com/`); loopback sign-in socket → `internal/auth/auth.go:262` (`RedirectURL: "http://localhost"`); Graph service root → no `SetBaseUrl` or `graph.microsoft.com` in any non-test Go file, so the `msgraph-sdk-go` default stands, as AC-5 states. Log sanitisation claim → `internal/config/config.go:260` (`GetEnv(EnvLogSanitize, "true") != "false"`, on by default) |
@@ -106,10 +109,10 @@ is closed and the closure is confirmed independently of the commit that claimed 
 
 | Test File | Test Name | Specified | Exists | Matches Spec |
 |---|---|---|---|---|
-| `.agents/scripts/site.content.check.mjs` | Each new page exists at its directory-index path, clears its recorded floor, exactly one `<h1>`, JS disabled (FR-1, FR-2, FR-3, AC-1) | Yes | Yes | **PARTIAL** — floor, `<h1>`, and JS-disabled assertions all present and passing (`:160-178`), but the check drives `${origin}/about/index.html` (`:163`, from `PAGES` in `site.pages.mjs:19-27`), never the extensionless `/about` that AC-1 is about. AC-1's serving clause has no test behind it |
+| `.agents/scripts/site.content.check.mjs` | Each new page exists at its directory-index path, clears its recorded floor, exactly one `<h1>`, JS disabled (FR-1, FR-2, FR-3, AC-1) | Yes | Yes | **PASS (was PARTIAL, now FIXED)** — floor, `<h1>`, and JS-disabled assertions all present and passing, measured at the directory-index path where the floors were baselined. The extensionless path AC-1 is about is now exercised too, by `assertExtensionlessPaths`, which requires HTTP 200 and a non-empty document for every directory-index registry entry through the same served origin the rest of the check measures against |
 | `.agents/scripts/site.validate.mjs` | Each new page posted to the W3C Nu checker, zero real errors (FR-4, FR-5, AC-2) | Yes | Yes | PASS — executed: `validate about/index.html: 0 real error(s)`, likewise contact and privacy; 7/7 pages clean |
-| — | A dedicated assertion confirms each new page's canonical names its own extensionless URL and its head carries none of the landing page's three entities (AC-2a) | Yes | **No** | **PARTIAL** — the property holds and was verified by hand this session and in Phase 3 (`69447da`), which the Test Strategy permits as an enumerated manual step. But no standing assertion exists in `site.content.check.mjs` or elsewhere, so the silent-failure mode AC-2a exists to catch is unguarded going forward |
-| `.agents/scripts/site.content.check.mjs` | "The content check asserts the three links are present in the pre-rendered landing HTML and in each generated page's footer" (FR-6a, FR-6b, AC-3) | Yes | **No** | **GAP** — no footer-link assertion exists anywhere in the script. Its assertions are text floor, `<h1>` count, answer-first kickers, SeeDocs anchors, crawler files, Mermaid fences, bare claims, and tool-surface shape. Coverage is only indirect via `TEXT_FLOOR`: the landing floor rose exactly 19 chars for the three labels (`:103-109`), so deleting them fails the floor, but an `href` changed to a wrong or external target passes untouched |
+| `.agents/scripts/site.content.check.mjs` | A dedicated assertion confirms each new page's canonical names its own extensionless URL and its head carries none of the landing page's three entities (AC-2a) | Yes | **Yes (added)** | **PASS (was PARTIAL, now FIXED)** — `assertPageIdentity` asserts both halves per registry entry, deriving the expected canonical from `seo.pages.ts` and the expected entity set from `entitiesFor` in `seo.jsonld.ts`, so the cases come from the build rather than a list. Landing entities are read from the `index` key, not restated. Negative test executed against a mutated copy of `dist`: a retyped entity, a landing entity on a subpage, and a collided canonical each fail, naming the page |
+| `.agents/scripts/site.content.check.mjs` | "The content check asserts the three links are present in the pre-rendered landing HTML and in each generated page's footer" (FR-6a, FR-6b, AC-3) | Yes | **Yes (added)** | **PASS (was GAP, now FIXED)** — `assertFooterLinks` reads every registry page's built HTML and requires `href="/about"`, `href="/contact"`, and `href="/privacy"` (the directory-index entries, derived from the registry), plus `href="/"` on every page other than `index.html`. The indirect `TEXT_FLOOR` coverage still catches deletion; this catches retargeting, which is the failure the labels cannot show |
 | `.agents/scripts/site.content.check.mjs` | Scan MUST fail on a deliberately introduced bare figure in a new Markdown source, then pass once removed (FR-7, FR-7a) | Yes | Yes | PASS — both halves executed this session; failure names `site/content/about.md:35` |
 | `site/lighthouserc.json` | Lighthouse passes and the report MUST be confirmed to contain three new page entries (AC-4a) | Yes | Yes | PASS — two rounds, exit 0, 7 URLs asserted; the three entries confirmed present in `.lighthouseci/lhr-*.json`, not merely assumed from a passing pattern |
 | — | Each privacy claim traced by hand to the symbol AC-5 names, tracing recorded (AC-5) | Yes | Yes | PASS — full tracing performed and recorded in the AC-5 row above. Note the CR says "recorded in the pull request"; no PR exists for this branch yet, so the tracing is recorded here and in `69447da` |
@@ -134,15 +137,17 @@ Merge-base `5c2037b`, HEAD `e310b8a`.
 | `site/content/privacy.md` | +54 / -0 (new) | FR-3, FR-7, AC-4, AC-5 |
 | `site/src/components/Footer.tsx` | +25 / -0 | FR-6a, AC-3 (Phase 4) |
 | `.agents/scripts/site.pages.mjs` | +17 / -4 | AC-2, AC-4, contrast-audit entry (Phase 5) |
-| `.agents/scripts/site.content.check.mjs` | +42 / -4 | FR-7a, AC-4, AC-7 (Phases 5, 6) |
+| `.agents/scripts/site.content.check.mjs` | +42 / -4 (Phases 5, 6) plus +201 / -1 (gap fix) | FR-7a, AC-4, AC-7; and AC-1, AC-2a, AC-3 from the gap fix |
+| `.agents/scripts/site.serve.mjs` | +10 / -3 (gap fix) | AC-1 |
 | `site/lighthouserc.json` | +17 / -2 | AC-4a, AC-8a (Phases 5, 6, 8) |
 | `site/build/prerender.mjs` | +51 / -8 | AC-8, AC-8a, AC-8b (Phase 8) |
 | `.gitignore` | +11 / -0 | Phase 3 step 4 (8 of 11 lines); see below |
 | `docs/cr/CR-0077-agent-trust-anchor-pages.md` | +886 / -0 | The CR itself (authoring, review, Phase 6 amendment, finalization) |
 
-Every Functional Requirement and every Acceptance Criterion except AC-1 maps to at
-least one changed file with a specific hunk. **AC-1's serving clause maps to no
-changed hunk at all**, which is the FAIL recorded above.
+Every Functional Requirement and every Acceptance Criterion now maps to at least
+one changed file with a specific hunk. AC-1's serving clause, which mapped to no
+changed hunk at the time of the audit, maps to the `site.serve.mjs` resolution
+rule added by the gap fix.
 
 ### Unmapped changed files
 
@@ -167,7 +172,10 @@ identified Group A set.
 
 ## Gaps
 
-**Gap 1 — AC-1 (FAIL). `site.serve.mjs` does not resolve extensionless paths.**
+All four gaps below were closed in a gap-fix pass after the audit. Each retains
+the original finding, followed by what was changed and the evidence it now holds.
+
+**Gap 1 — AC-1 (FAIL → FIXED). `site.serve.mjs` did not resolve extensionless paths.**
 
 AC-1 states that serving `site/dist` with `.agents/scripts/site.serve.mjs` MUST
 resolve `/about`, `/contact`, and `/privacy` to their directory indexes, matching
@@ -192,7 +200,25 @@ else if (!extname(path)) path += '/index.html'
 not resolve, so a missing artefact stays a measurable failure rather than falling
 back to a shell.
 
-**Gap 2 — Test Strategy row 4 (GAP). No footer-link assertion exists.**
+*Resolution.* Applied exactly as written, at `.agents/scripts/site.serve.mjs:57`,
+with the module docstring updated to state the rule and why it exists. Probe over
+a clean `site/dist`:
+
+```
+/about              200 text/html 44625  <h1>About Outlook Local MCP</h1>
+/contact            200 text/html 44754  <h1>Contact</h1>
+/privacy            200 text/html 45411  <h1>Privacy</h1>
+/about/             200 text/html 44625  (unchanged)
+/about/index.html   200 text/html 44625  (unchanged)
+/concepts.html      200 text/html 64456  (unchanged)
+/nope  /nope/  /assets   404            (unchanged)
+```
+
+The 404 path is retained for anything that still does not resolve, including a
+bare directory with no index, so the fix widens resolution without softening the
+failure signal.
+
+**Gap 2 — Test Strategy row 4 (GAP → FIXED). No footer-link assertion existed.**
 
 The Test Strategy asserts that "the content check asserts the three links are
 present in the pre-rendered landing HTML and in each generated page's footer".
@@ -210,7 +236,17 @@ Minimal fix: add one assertion to `site.content.check.mjs` that, for each entry 
 `site/build/seo.pages.ts` paths rather than a literal list, so a fourth trust
 anchor page is covered without editing the script.
 
-**Gap 3 — Test Strategy row 1 (PARTIAL). The content check never drives the
+*Resolution.* `assertFooterLinks` added to `site.content.check.mjs`. The expected
+link set is derived from the registry (`readPageRegistry` parses
+`site/build/seo.pages.ts`), so the directory-index entries define the anchors and
+a fourth trust anchor page is covered with no script edit. Passing output:
+`ok footer links: /about, /contact, /privacy linked from every page, root linked
+back from each generated page`. Instrument falsified by substitution against a
+mutated copy of `dist`: rewriting the landing page's `href="/about"` to
+`href="https://example.com/about"` produces
+`FAIL footer links: index.html carries no href="/about" (the footer is the only crawl path to that page)`.
+
+**Gap 3 — Test Strategy row 1 (PARTIAL → FIXED). The content check never drove the
 extensionless path.**
 
 `PAGES` names `about/index.html`, so the check exercises the directory-index path
@@ -221,7 +257,13 @@ Minimal fix, after Gap 1: add a small assertion driving `/about`, `/contact`, an
 Keep the existing `PAGES` loop as is; the floors and `<h1>` counts are correct at
 the directory-index path and should stay measured there.
 
-**Gap 4 — Test Strategy row 3 (PARTIAL). AC-2a has no standing assertion.**
+*Resolution.* `assertExtensionlessPaths` added, driving every directory-index
+registry entry over the served origin and requiring HTTP 200 with a non-empty
+body. The `PAGES` loop is untouched, so the floors stay measured where they were
+baselined. Passing output: `ok extensionless paths: /about, /contact, /privacy
+each resolve to their directory index`.
+
+**Gap 4 — Test Strategy row 3 (PARTIAL → FIXED). AC-2a had no standing assertion.**
 
 The canonical-and-entity separation was verified by hand in Phase 3 and again in
 this audit, but nothing guards it. AC-2a's own text explains why that is
@@ -237,8 +279,47 @@ and that no page other than `index.html` contains `"SoftwareApplication"`,
 `site/build/seo.pages.ts`, so the check derives its cases from the registry rather
 than from a list.
 
+*Resolution.* `assertPageIdentity` added, going one step further than the sketch
+above: as well as the canonical and the absence of the landing page's entities, it
+asserts that each page's top-level JSON-LD entities are **exactly** the set its
+registry key declares. The expected set is read from `entitiesFor` in
+`site/build/seo.jsonld.ts` and the landing entities from the `index` key, so no
+entity name is transcribed into the check. Passing output: `ok page identity: 7
+pages, each with its own canonical and exactly its assigned entities`. Falsified
+by substitution against a mutated copy of `dist`, which produced all three failure
+classes the criterion is about:
+
+```
+FAIL page identity: about/index.html declares entities [FAQPage], expected exactly [AboutPage] from its registry key "about"
+FAIL page identity: about/index.html asserts the landing page's "FAQPage" entity, which only / may state
+FAIL page identity: privacy/index.html canonical is "https://outlook-local-mcp.com/", expected "https://outlook-local-mcp.com/privacy"
+```
+
 ---
 
-None of the four gaps requires a change to the trust anchor pages themselves. All
-four are harness work: one behaviour fix in `site.serve.mjs` and three assertions
-in `site.content.check.mjs`.
+None of the four gaps required a change to the trust anchor pages themselves. All
+four were harness work: one behaviour fix in `site.serve.mjs` and three assertions
+in `site.content.check.mjs`, all now applied and verified.
+
+### Gap-fix verification
+
+| Gate | Command | Result |
+|---|---|---|
+| Site build | `rm -rf site/dist site/dist-ssr && pnpm --dir site run build` | exit 0, `prerender: optimised 6 doc-page documents` |
+| Content check | `node .agents/scripts/site.content.check.mjs` | exit 0, `content-check: all assertions hold`, including the three new assertions |
+| Negative test | same check against a mutated copy of `dist` | `content-check: 4 failing`, each naming its page — the three new assertions all fire |
+| Serve probe | direct HTTP probe through `site.serve.mjs` | `/about`, `/contact`, `/privacy` → 200; trailing-slash, `.html`, and 404 behaviour unchanged |
+
+The instrument was validated before its results were trusted: the content check
+was run twice over the unchanged build and returned identical character counts for
+all seven pages, and each new assertion was falsified by substitution rather than
+accepted on a passing run alone.
+
+### Left as noted
+
+The `/resume.sh` entry in `.gitignore`, flagged above as outside the CR's stated
+`.gitignore` scope, is left in place. `resume.sh` is a machine-local session
+script that exists in the working tree; removing the ignore line would make it
+show as untracked and invite an accidental commit, which is a worse outcome than
+three lines of incidental hygiene. No CR-0077 requirement depends on it either
+way.
