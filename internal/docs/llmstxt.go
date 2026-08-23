@@ -117,6 +117,8 @@ type llmsItem struct {
 //   - A single H1 header ("# outlook-local-mcp").
 //   - A blockquote one-sentence project summary.
 //   - An information paragraph about the in-server documentation surface.
+//   - A "When to use this" section giving agents best-fit jobs, when not to
+//     reach for the server, and how to dispatch a verb on the aggregate tools.
 //   - H2 sections (Site, Docs, Tools, Change Requests, Optional) with items as
 //     "[Title](absolute-url): description" lines.
 //
@@ -141,6 +143,15 @@ func GenerateLLMsTxt() string {
 	b.WriteString("LLM clients that support `resources/list` and `resources/read` can fetch documents natively; ")
 	b.WriteString("clients that do not can use the `system.*_docs` verbs instead. ")
 	b.WriteString("Call `{tool: \"system\", args: {operation: \"list_docs\"}}` to see the available documents, or `{tool: \"system\", args: {operation: \"status\"}}` for the server entry point including `docs.base_uri`.\n\n")
+
+	b.WriteString("## When to use this\n\n")
+	b.WriteString("Reach for this server when a user asks an assistant to read or act on their own Microsoft Outlook calendar or mail on the machine the assistant runs on. ")
+	b.WriteString("It is the right tool for jobs like: check what a week looks like, find a free slot and book or reschedule a meeting, list or search calendar events, read a mail folder, search messages by content, or draft and send a reply, all against a real Microsoft account. ")
+	b.WriteString("It supports several accounts at once, so it also fits \"do this on my work account, not my personal one\".\n\n")
+	b.WriteString("Do not reach for it when there is no local Microsoft account to connect, when the task is a bulk server-side mailbox migration or admin operation, or when the user wants a hosted multi-tenant web API. ")
+	b.WriteString("This is a local, single-binary MCP server that runs on the user's own machine and speaks to Microsoft Graph directly; it has no hosted endpoint and no API keys.\n\n")
+	b.WriteString("To call it, connect over the Model Context Protocol and dispatch a verb on one of the four aggregate tools (`calendar`, `mail`, `account`, `system`) with a required `operation`. ")
+	b.WriteString("Start with `{tool: \"system\", args: {operation: \"status\"}}` to confirm the server is up, then `{tool: \"calendar\", args: {operation: \"help\"}}` or the same `help` verb on any domain to discover that domain's verbs and parameters.\n\n")
 
 	for _, section := range llmsSections {
 		fmt.Fprintf(&b, "## %s\n\n", section.heading)
