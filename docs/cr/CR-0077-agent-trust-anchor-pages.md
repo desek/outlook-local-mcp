@@ -9,7 +9,7 @@ stakeholders:
 priority: "medium"
 target-version: "0.9.0"
 source-branch: dev/is-agentic-site
-source-commit: e1e9988
+source-commit: 275e1cb
 quality-standards-compliance:
   - build: ✓ make ci exit 0
   - vet: ✓ pass
