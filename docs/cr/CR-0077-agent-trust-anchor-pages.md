@@ -1,13 +1,25 @@
 ---
 id: "CR-0077"
-status: "draft"
+status: "completed"
 date: 2026-08-22
+completed-date: 2026-08-23
 requestor: desek
 stakeholders:
   - desek
 priority: "medium"
 target-version: "0.9.0"
 source-branch: dev/is-agentic-site
+source-commit: e1e9988
+quality-standards-compliance:
+  - build: ✓ make ci exit 0
+  - vet: ✓ pass
+  - format: ✓ pass
+  - tidy: ✓ pass
+  - lint: ✓ 0 issues
+  - test: ✓ pass
+  - sbom: ✓ pass
+  - vuln-scan: ✓ pass
+  - license-check: ✓ pass
 ---
 
 # Agent Trust Anchor Pages: About, Contact, and Privacy
