@@ -246,12 +246,12 @@ Every file the phases below touch, verified to exist at these paths on
 | `site/build/seo.pages.ts` | Extend `PageKey`, add three `PageSeo` entries, match by path | 1 |
 | `site/build/seo.plugin.ts` | Stop reducing the match key with `basename` | 1 |
 | `site/vite.config.ts` | Derive Rollup input keys from the slug | 1 |
-| `site/build/doc.pages.ts` | Per-page output path, recursive mkdir, footer links | 2, 4 |
-| `site/content/about.md` | New | 2 |
-| `site/content/contact.md` | New | 2 |
-| `site/content/privacy.md` | New | 2 |
-| `.gitignore` | Ignore the three generated output directories | 2 |
-| `site/build/seo.jsonld.ts` | `AboutPage`, `ContactPage`, privacy `WebPage` entities | 3 |
+| `site/build/seo.jsonld.ts` | `AboutPage`, `ContactPage`, privacy `WebPage` entities | 2 |
+| `site/build/doc.pages.ts` | Per-page output path, recursive mkdir, footer links | 3, 4 |
+| `site/content/about.md` | New | 3 |
+| `site/content/contact.md` | New | 3 |
+| `site/content/privacy.md` | New | 3 |
+| `.gitignore` | Ignore the three generated output directories | 3 |
 | `site/src/components/Footer.tsx` | Three internal links | 4 |
 | `.agents/scripts/site.pages.mjs` | Add three pages to `PAGES` | 5 |
 | `.agents/scripts/site.content.check.mjs` | Markdown claim scan, text floors | 5, 6 |
@@ -293,14 +293,27 @@ absorb them before any page is authored:
 
 Phases are sequential. Each is verified before the next begins.
 
+**Structured data is added before the pages are emitted, and the order is load-bearing.**
+`seo.plugin.ts` runs `transformIndexHtml` for every emitted HTML file, and for any file
+`pageForFile` resolves it calls `renderJsonLd`, which reaches `entitiesFor` and then
+`byKey[page.key]()`. A page that is registered in `seo.pages.ts` but has no branch in
+`byKey` therefore looks up `undefined` and calls it, throwing at build time the moment
+that page is first emitted.
+
+That failure is not caught by the typecheck. `byKey` is typed `Record<PageKey, ...>`, so
+a missing branch would ordinarily be a compile error, but `site/tsconfig.json` references
+only `tsconfig.app.json`, whose `include` is `["src"]`. Nothing under `site/build/` is
+typechecked by `tsc -b`, and Vite transpiles without checking types, so the
+non-exhaustive record compiles clean and fails only at runtime. The ordering below is the
+control, not the type system, and the `Record<PageKey, ...>` type MUST NOT be weakened to
+an index signature regardless, so the guard is restored if `site/build/` is ever brought
+into a typechecked project.
+
 ### Phase 1: Make the pipeline addressable by path, not by filename
 
 Files: `site/build/seo.pages.ts`, `site/build/seo.plugin.ts`, `site/vite.config.ts`
 
-1. Extend `PageKey` with `'about' | 'contact' | 'privacy'`. The `byKey` record in
-   `site/build/seo.jsonld.ts` is typed `Record<PageKey, ...>`, so this makes a missing
-   JSON-LD branch a compile error rather than a runtime gap. Do not weaken that type to
-   an index signature.
+1. Extend `PageKey` with `'about' | 'contact' | 'privacy'`.
 2. Add the three `PageSeo` entries with `file` set to the dist-relative output path
    (`about/index.html`) and `path` set to the extensionless canonical path (`/about`),
    each with its own title and description.
@@ -311,11 +324,36 @@ Files: `site/build/seo.pages.ts`, `site/build/seo.plugin.ts`, `site/vite.config.
 4. Change the Rollup input keys in `vite.config.ts` to derive from the page slug rather
    than `basename(p, '.html')`, so no two entries collide on `index`.
 
+This phase registers the three pages without emitting them. No HTML file resolves to the
+new keys yet, so `renderJsonLd` is never called for them and the absent `byKey` branches
+cannot throw. `sitemap.xml` does list the three new URLs from this phase onward, ahead of
+the pages existing; that is transient and closes in Phase 3, and the tree MUST NOT be
+deployed between phases.
+
 Verify: `pnpm --dir site run build` succeeds and `site/dist/index.html` still carries
 the landing page's own canonical tag and `SoftwareApplication` JSON-LD, unchanged. This
 phase must be provably inert for the existing four pages before any page is added.
 
-### Phase 2: Author the Markdown and emit the directory-index pages
+### Phase 2: Structured data
+
+Files: `site/build/seo.jsonld.ts`
+
+1. Add an `aboutPage`, a `contactPage`, and a privacy `webPage` entity builder. The
+   contact entity states the GitHub issue tracker as its contact channel and reuses the
+   existing `REPO` constant, publishing no email address and no postal address.
+2. Add all three branches to `entitiesFor`. All three are added in this phase, not one
+   per page later, because a single missing branch crashes the build for every page once
+   emission begins.
+
+Verify: `pnpm --dir site run build` succeeds and the existing four pages' JSON-LD is
+byte-identical to Phase 1's output. The new entities cannot be observed in built HTML
+yet, because no page carrying them is emitted until Phase 3; assert instead that
+`entitiesFor` returns the entity FR-4 assigns for each of the three new keys, by calling
+it directly against each new `PageSeo` entry. Confirming exhaustiveness here is the whole
+point of the phase, and it MUST NOT be deferred to the typecheck, which does not read
+this file.
+
+### Phase 3: Author the Markdown and emit the directory-index pages
 
 Files: `site/content/about.md`, `site/content/contact.md`, `site/content/privacy.md`
 (new), `site/build/doc.pages.ts`, `.gitignore`
@@ -331,20 +369,13 @@ Files: `site/content/about.md`, `site/content/contact.md`, `site/content/privacy
    the existing per-page entries for the generated `concepts.html`, `quickstart.html`,
    and `troubleshooting.html`, so generated output stays untracked.
 
+This is the first phase in which the three pages are emitted, so it is the first in which
+the Phase 1 path matching and the Phase 2 JSON-LD branches are exercised end to end.
+
 Verify: `pnpm --dir site run build`, then confirm `site/dist/about/index.html` and its
-two siblings exist and each carries its own canonical tag naming the extensionless URL.
-
-### Phase 3: Structured data
-
-Files: `site/build/seo.jsonld.ts`
-
-1. Add an `aboutPage`, a `contactPage`, and a privacy `webPage` entity builder. The
-   contact entity states the GitHub issue tracker as its contact channel and reuses the
-   existing `REPO` constant, publishing no email address and no postal address.
-2. Add the three branches to `entitiesFor`.
-
-Verify: `pnpm --dir site run build`, then confirm each new page's head carries exactly
-the entity FR-4 assigns it and none of the landing page's entities (AC-2a).
+two siblings exist, each carries its own canonical tag naming the extensionless URL, each
+carries exactly the entity FR-4 assigns it, and none carries any of the landing page's
+`SoftwareApplication`, `FAQPage`, or `Organization` entities (AC-2a).
 
 ### Phase 4: Footer links
 
@@ -380,6 +411,12 @@ Files: `.agents/scripts/site.pages.mjs`, `.agents/scripts/site.content.check.mjs
    root, and add a third `assertMatrix` entry for the three new pages. Without step 4
    the new pages are graded against the landing page's thresholds, which assert no
    performance score at all.
+
+The text floors for the three new pages are deliberately not set here; Phase 6 measures
+and records them. Until it does, `TEXT_FLOOR[page]` is `undefined` for each new page and
+`text < undefined` evaluates to `false`, so the content check reports `ok` for them and
+enforces nothing. A green run at this phase is therefore not evidence the floors hold. Do
+not read it as one, and do not skip Phase 6 on the strength of it.
 
 Verify: `node .agents/scripts/site.content.check.mjs`,
 `node .agents/scripts/site.validate.mjs`, and
@@ -530,8 +567,8 @@ The requestor settled a third question on 2026-08-23, in response to this review
 Reviewed 2026-08-23 against `dev/is-agentic-site` at `5c2037b` plus the uncommitted
 `da19458` site trust-signal work.
 
-FINDINGS: 17 (drift 6, contradiction 4, ambiguity 5, coverage 2)
-FIXES APPLIED: 17
+FINDINGS: 19 (drift 6, contradiction 4, ambiguity 5, coverage 2, ordering 2)
+FIXES APPLIED: 19
 UNRESOLVED: 0
 PHASES: 7
 
@@ -553,7 +590,7 @@ DRIFT (6), reconciled against the current codebase:
 3. Current State omitted `site/public/404.html`, added by `da19458` and served as a page.
    Added, and the `contactPoint` claim confirmed present in `seo.jsonld.ts`.
 4. `.gitignore` ignores each generated page individually (lines 79 to 81). The three new
-   generated output directories need entries and were absent from scope. Added to Phase 2.
+   generated output directories need entries and were absent from scope. Added to Phase 3.
 5. Scope omitted the harness fan-out: `site.pages.mjs` `PAGES` is imported by
    `site.validate.mjs`, `site.contrast.audit.mjs` and `site.screenshot.mjs` as well as the
    content check. Stated in Phase 5 and in Affected Components.
@@ -594,6 +631,28 @@ COVERAGE (2):
 2. FR-7 had no acceptance criterion exercising it, so it was the one requirement with no
    AC. Added AC-7, which asserts the scan reaches the new Markdown sources rather than
    merely that the check passes.
+
+ORDERING (2), both defects introduced by this review's own first restructure and caught
+before implementation began:
+1. The phase order was build-breaking. The first restructure put page emission before the
+   JSON-LD branches. `seo.plugin.ts` calls `renderJsonLd` for every emitted file that
+   `pageForFile` resolves, reaching `byKey[page.key]()`; with the pages registered in
+   Phase 1 and no branch until the structured-data phase, the emit phase would look up
+   `undefined` and call it, throwing at build time. That phase's own verify step, which
+   asked to confirm the emitted pages carry their canonical tags, was therefore
+   unsatisfiable. Structured data now runs as Phase 2 and emission as Phase 3, with the
+   dependency stated above the phase list rather than left implicit in the numbering.
+2. Phase 1 claimed the `Record<PageKey, ...>` type makes a missing JSON-LD branch "a
+   compile error rather than a runtime gap". It does not. `site/tsconfig.json` references
+   only `tsconfig.app.json`, whose `include` is `["src"]`, so nothing under `site/build/`
+   is typechecked by `tsc -b`, and Vite transpiles without checking types. The record is
+   non-exhaustive at runtime and compiles clean. The claim is corrected, the ordering is
+   named as the actual control, and the `Record<PageKey, ...>` type is still required to
+   stay as it is so the guard returns if `site/build/` is ever typechecked.
+
+   This is worth recording rather than quietly fixing: the false claim is what made the
+   bad order look safe. Having written that a missing branch could not reach a build, the
+   restructure had no reason to order the phases against it.
 
 BLOCKER FOUND AND ABSORBED (the substantive result of this review):
 Emitting the pages as directory indexes, which GitHub Pages requires for extensionless
