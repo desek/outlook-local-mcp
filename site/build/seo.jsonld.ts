@@ -10,7 +10,9 @@
  *    `contributor` property and carrying a `contactPoint` for a machine-readable
  *    support channel;
  *  - the quickstart page: HowTo mirroring docs/quickstart.md, plus a WebPage;
- *  - the concepts and troubleshooting pages: a TechArticle.
+ *  - the concepts and troubleshooting pages: a TechArticle;
+ *  - the trust anchor pages: an AboutPage, a ContactPage stating the issue tracker as the
+ *    project's only contact channel, and a WebPage for privacy (CR-0077 FR-4).
  *
  * Every entity carries a dateModified equal to the shared editorial date, so the
  * structured-data date matches the visible last-updated line (FR-45). The blocks are
@@ -18,7 +20,7 @@
  * page's SoftwareApplication `featureList` composes its tool-surface figures from the
  * generated surface manifest (CR-0073 FR-15), so the count it publishes tracks the code.
  *
- * @agents-index Builds the schema.org JSON-LD script blocks per page: SoftwareApplication, FAQPage, Organization, HowTo, and TechArticle.
+ * @agents-index Builds the schema.org JSON-LD script blocks per page: SoftwareApplication, FAQPage, Organization, HowTo, TechArticle, AboutPage, ContactPage, and WebPage.
  */
 import { SITE_ORIGIN, LAST_UPDATED_ISO } from '../src/site.meta'
 import { canonicalUrl, type PageKey, type PageSeo } from './seo.pages'
@@ -213,6 +215,52 @@ function webPage(page: PageSeo): Record<string, unknown> {
 }
 
 /**
+ * aboutPage is the about page's AboutPage entity (CR-0077 FR-4).
+ *
+ * It states only the page's own identity: what the page is about, where it lives, and
+ * when it was last edited. It deliberately embeds no Organization node, because the
+ * publisher identity is the landing page's to state and a second copy of it on a
+ * subpage would be a second, independently drifting assertion of the same fact.
+ *
+ * @param page  The about page being described.
+ */
+function aboutPage(page: PageSeo): Record<string, unknown> {
+  return {
+    '@type': 'AboutPage',
+    name: page.title,
+    description: page.description,
+    url: canonicalUrl(page),
+    dateModified: LAST_UPDATED_ISO,
+  }
+}
+
+/**
+ * contactPage is the contact page's ContactPage entity (CR-0077 FR-4).
+ *
+ * The single contact channel is the public issue tracker, built from the same REPO
+ * constant the rest of this file uses so the structured data cannot name a repository
+ * the other entities do not. No email address and no postal address is published: the
+ * project has neither a staffed inbox nor premises, and structured data is read as fact
+ * by generative engines, so a contact route that does not exist must not be asserted.
+ *
+ * @param page  The contact page being described.
+ */
+function contactPage(page: PageSeo): Record<string, unknown> {
+  return {
+    '@type': 'ContactPage',
+    name: page.title,
+    description: page.description,
+    url: canonicalUrl(page),
+    mainEntity: {
+      '@type': 'ContactPoint',
+      contactType: 'technical support',
+      url: `${REPO}/issues`,
+    },
+    dateModified: LAST_UPDATED_ISO,
+  }
+}
+
+/**
  * entitiesFor returns the list of schema.org entities for a page key.
  *
  * @param page  The page whose entities are wanted.
@@ -224,6 +272,11 @@ function entitiesFor(page: PageSeo): Record<string, unknown>[] {
     quickstart: () => [howTo(), webPage(page)],
     concepts: () => [techArticle(page)],
     troubleshooting: () => [techArticle(page)],
+    about: () => [aboutPage(page)],
+    contact: () => [contactPage(page)],
+    // WebPage is the privacy page's settled type, not a fallback: schema.org defines no
+    // PrivacyPolicy type, so there is no richer type to prefer (CR-0077 FR-4).
+    privacy: () => [webPage(page)],
   }
   return byKey[page.key]()
 }
