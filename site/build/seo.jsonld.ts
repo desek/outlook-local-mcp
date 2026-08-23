@@ -16,15 +16,18 @@
  *
  * Every entity carries a dateModified equal to the shared editorial date, so the
  * structured-data date matches the visible last-updated line (FR-45). The blocks are
- * authored here rather than derived from page copy, with one exception: the landing
+ * authored here rather than derived from page copy, with two exceptions: the landing
  * page's SoftwareApplication `featureList` composes its tool-surface figures from the
- * generated surface manifest (CR-0073 FR-15), so the count it publishes tracks the code.
+ * generated surface manifest (CR-0073 FR-15), so the count it publishes tracks the code,
+ * and its `softwareVersion` is read from the release manifest (CR-0077 FR-8), so the
+ * version it publishes tracks what was actually released.
  *
  * @agents-index Builds the schema.org JSON-LD script blocks per page: SoftwareApplication, FAQPage, Organization, HowTo, TechArticle, AboutPage, ContactPage, and WebPage.
  */
 import { SITE_ORIGIN, LAST_UPDATED_ISO } from '../src/site.meta'
 import { canonicalUrl, type PageKey, type PageSeo } from './seo.pages'
 import { domainNames } from '../src/surface'
+import { releaseVersion } from './release.version'
 
 /** The public source repository, reused across several entity properties. */
 const REPO = 'https://github.com/desek/outlook-local-mcp'
@@ -76,6 +79,10 @@ function organization(): Record<string, unknown> {
  * aggregate tools and the full and default verb counts, all read from the generated
  * record rather than transcribed, so the structured data a generative engine quotes can
  * never state a tool surface the server does not expose.
+ *
+ * `softwareVersion` is read from the release manifest for the same reason (CR-0077 FR-8):
+ * a transcribed literal advertised a version that had never been released, so the value
+ * comes from `.release-please-manifest.json` and no version literal lives in this file.
  */
 function softwareApplication(): Record<string, unknown> {
   return {
@@ -90,7 +97,7 @@ function softwareApplication(): Record<string, unknown> {
     codeRepository: REPO,
     programmingLanguage: 'Go',
     downloadUrl: `${REPO}/releases`,
-    softwareVersion: '0.8.0',
+    softwareVersion: releaseVersion(),
     // The project is free and open source, so the Offer states a zero price rather than
     // omitting price data. A SoftwareApplication with an explicit free Offer reads as a
     // gratis product to a generative engine instead of one with unknown cost.
