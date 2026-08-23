@@ -61,6 +61,11 @@ export const DOC_PAGES: readonly DocPage[] = [
  * build time. The body holds exactly one <h1> (the document's own top heading) inside
  * a <main>, so the page satisfies the single-<h1> rule without pre-rendering React.
  *
+ * The footer links every generated page back to the site root and to the three trust
+ * anchor pages, so no generated page is a crawl dead end and each trust anchor page
+ * reaches the other two (CR-0077 FR-6b). The narrative docs share this footer, which is
+ * intended: the links are site-wide, not page-specific.
+ *
  * @param title  The page title, from the document's first level-1 heading.
  * @param body  The rendered HTML fragment for the document body.
  * @param description  The meta description text.
@@ -83,6 +88,7 @@ function pageTemplate(title: string, body: string, description: string): string 
 ${body}
     </main>
     <footer class="doc-footer">
+      <p><a href="/">Home</a> &middot; <a href="/about">About</a> &middot; <a href="/contact">Contact</a> &middot; <a href="/privacy">Privacy</a></p>
       <p>Last updated <time datetime="${LAST_UPDATED_ISO}">${escapeHtml(LAST_UPDATED_DISPLAY)}</time></p>
     </footer>
   </body>

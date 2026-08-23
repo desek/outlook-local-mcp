@@ -13,6 +13,18 @@ const DEVELOPER_LINKS = [
   { label: 'Changelog', href: 'https://github.com/desek/outlook-local-mcp/releases', external: true },
 ] as const
 
+/**
+ * DOCUMENT_LINKS are the trust anchor pages (CR-0077 FR-6a). They are separate
+ * documents rather than sections of this page, so they are plain navigations: no
+ * smooth-scroll handler (which only applies to `#` anchors) and no `target="_blank"`,
+ * which would treat an internal page as an external destination.
+ */
+const DOCUMENT_LINKS = [
+  { label: 'About', href: '/about' },
+  { label: 'Contact', href: '/contact' },
+  { label: 'Privacy', href: '/privacy' },
+] as const
+
 export default function Footer() {
   const handleInternalClick = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     if (href.startsWith('#')) {
@@ -152,6 +164,19 @@ export default function Footer() {
           <span className="text-xs text-white/50 font-sans">
             MIT License — outlook-local-mcp
           </span>
+
+          {/* Trust anchor pages (CR-0077 FR-6a): internal documents, plain navigation. */}
+          <nav className="flex items-center gap-4" aria-label="Site information">
+            {DOCUMENT_LINKS.map((link) => (
+              <a
+                key={link.label}
+                href={link.href}
+                className="text-xs text-white/50 font-sans hover:text-brand-lime transition-colors duration-200"
+              >
+                {link.label}
+              </a>
+            ))}
+          </nav>
 
           {/* Platform badges */}
           <div className="flex items-center gap-1.5">
