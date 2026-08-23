@@ -46,15 +46,16 @@
           }
         },
         {
+          "_comment": "The trust anchor pages are static HTML of the same shape as the documentation pages, so they carry the doc-page bar (CR-0077 phase 6). Six of the seven thresholds were met on a clean build over three runs each and are asserted at error: all four categories at 1, LCP 1354-1369ms against 1700, TBT 0ms against 50. Cumulative Layout Shift is held at warn and its 0.01 threshold is deliberately NOT lowered. Measured 0.0260 (about) and 0.0119 (contact) identically on every run, and 0.0311/0.0311/0.0000 on privacy, which passes today only because lhci aggregates maxNumericValue optimistically. Chrome's layout-shifts audit attributes it to inter-latin-400-normal.woff2 arriving late, and the built pages confirm the mechanism: they carry zero rel=preload links because build/prerender.mjs applies optimisePage to index.html and the three doc pages by name and was never extended to these. That is the same defect the doc pages already fixed, recurring on the page set that was not re-checked; the ceiling and the full measurement chain are in CR-0077 phase 6. Promote this line to error, unchanged at 0.01, once prerender.mjs optimises these pages.",
           "matchingUrlPattern": ".*/(about|contact|privacy)/index\\.html$",
           "assertions": {
-            "categories:performance": ["warn", { "minScore": 1 }],
-            "categories:accessibility": ["warn", { "minScore": 1 }],
-            "categories:best-practices": ["warn", { "minScore": 1 }],
-            "categories:seo": ["warn", { "minScore": 1 }],
-            "largest-contentful-paint": ["warn", { "maxNumericValue": 1700 }],
+            "categories:performance": ["error", { "minScore": 1 }],
+            "categories:accessibility": ["error", { "minScore": 1 }],
+            "categories:best-practices": ["error", { "minScore": 1 }],
+            "categories:seo": ["error", { "minScore": 1 }],
+            "largest-contentful-paint": ["error", { "maxNumericValue": 1700 }],
             "cumulative-layout-shift": ["warn", { "maxNumericValue": 0.01 }],
-            "total-blocking-time": ["warn", { "maxNumericValue": 50 }]
+            "total-blocking-time": ["error", { "maxNumericValue": 50 }]
           }
         }
       ]

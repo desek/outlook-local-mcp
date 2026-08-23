@@ -67,10 +67,13 @@ const distDir = process.argv[2] ?? 'site/dist'
  * measured the same way on both sides of the comparison.
  */
 const TEXT_FLOOR = {
-  'index.html': 12002,
+  'index.html': 12021,
   'quickstart.html': 7390,
   'concepts.html': 15582,
   'troubleshooting.html': 17468,
+  'about/index.html': 1845,
+  'contact/index.html': 1719,
+  'privacy/index.html': 2729,
 }
 
 /**
@@ -97,6 +100,14 @@ const TEXT_FLOOR = {
  * added content in as the new minimum. The other three page floors did not move, because
  * phase 4 touched no content outside the landing page.
  *
+ * The landing-page floor was raised a fourth time by CR-0077 phase 6, from 12,002 to
+ * 12,021, an increase of 19 characters measured on a clean build with this script's own
+ * method. The increase is accounted for in full and exactly by phase 4's footer nav
+ * (FR-6a), which adds three link labels to the always-rendered bottom bar: "About" (5) plus
+ * "Contact" (7) plus "Privacy" (7) is 19 characters. No prose was added or removed, so the
+ * floor rises only by the labels, and it rises rather than staying put because the links
+ * are the crawl path to the trust anchor pages: a build that drops them must fail here.
+ *
  * The landing-page floor was raised a third time by the CR-0073 iteration session, from
  * 11,942 to 12,002, an increase of 60 characters. The session replaced the count-led
  * wording a visitor meets first with outcome-led wording: the hero stat now names what the
@@ -106,6 +117,22 @@ const TEXT_FLOOR = {
  * reference, still read from the manifest. The replacement prose is marginally longer than
  * the figures it replaced, so the floor rises to lock it in. The other three page floors
  * did not move, because the session touched no content outside the landing page.
+ *
+ * The three trust anchor page floors are first baselines, not re-baselines. CR-0077 phase 5
+ * enrolled the pages in this check with no floor at all, so `text < undefined` was false and
+ * they reported ok while nothing was enforced on them. Phase 6 measured each on a clean
+ * build with this script's own method and recorded the measured value as the floor: about
+ * 1,845, contact 1,719, privacy 2,729. The instrument was validated before the figures were
+ * trusted, by running it twice over the unchanged build; both runs returned identical
+ * lengths for all seven pages, so the noise floor is 0 characters and any later shortfall is
+ * a real loss of content rather than measurement drift.
+ *
+ * These pages are short, and that is precisely what makes their floors load-bearing. Their
+ * whole purpose is to be legible to an agent that executes no JavaScript, and each is small
+ * enough that a prerender or template regression could reduce it to a near-empty shell
+ * without looking obviously broken. Privacy is the largest of the three because it
+ * enumerates what leaves the machine; contact is the smallest because it is one addressable
+ * route to a human.
  */
 
 /** Crawler-facing files the CR requires the build to emit. */

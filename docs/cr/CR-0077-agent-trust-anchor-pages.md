@@ -441,6 +441,62 @@ Files: `.agents/scripts/site.content.check.mjs`, `site/lighthouserc.json`
 
 Verify: `pnpm --dir site run lighthouse` passes.
 
+#### Amendment: the measured result of step 3
+
+Step 3 was executed and six of its seven thresholds were met outright, so they are asserted
+at `error`. Cumulative Layout Shift was not met, and is held at `warn` rather than raised,
+because the measurement attributes the miss to a defect in the build rather than to a limit
+of the pages.
+
+Measured on a clean build (`pnpm --dir site run build` after removing `dist` and
+`dist-ssr`), Lighthouse mobile, three runs per URL:
+
+| Page | Perf | A11y | BP | SEO | LCP | TBT | CLS |
+|---|---|---|---|---|---|---|---|
+| `/about/index.html` | 1 | 1 | 1 | 1 | 1,357 to 1,369 ms | 0 ms | 0.0260, 0.0260, 0.0260 |
+| `/contact/index.html` | 1 | 1 | 1 | 1 | 1,354 to 1,355 ms | 0 ms | 0.0119, 0.0119, 0.0119 |
+| `/privacy/index.html` | 1 | 1 | 1 | 1 | 1,354 to 1,355 ms | 0 ms | 0.0311, 0.0311, 0.0000 |
+
+The instrument was then run a second time over the same unchanged build, which is what
+exposed how thin the `privacy` pass was: the second round measured 0.0311 on all three runs,
+so the single 0.0000 above was the outlier and the page had been passing the 0.01 assertion
+on one lucky run out of six. The other two pages returned figures identical to sixteen
+decimal places across both rounds, so the noise floor on this metric is zero for them and
+the whole of the observed spread on `privacy` is one anomalous run.
+
+The chain that establishes the CLS finding as a defect, applying the discriminator recorded
+in `docs/reference/site-quality.md` ("identical across runs, a defect; swinging across runs,
+the environment"):
+
+1. The figure is identical to sixteen decimal places across all three runs on `about` and
+   `contact`, so it is not runner variance. `privacy` measured 0.0311 on five of six runs
+   across the two rounds, and passed the 0.01 assertion on the first round only because
+   `lhci` aggregates `maxNumericValue` optimistically and one run returned 0.000. A gate
+   whose green depends on which run wins is not a gate.
+2. Chrome's own `layout-shifts` audit names the shifting node and its cause outright:
+   `body.antialiased > main.doc-page > p`, sub-item cause "Web font loaded", asset
+   `inter-latin-400-normal.woff2`.
+3. The mechanism is confirmed in the build output rather than inferred:
+   `dist/about/index.html` carries zero `rel="preload"` links and still carries a
+   render-blocking `rel="stylesheet"` link, against four preloads and an inlined stylesheet
+   on `dist/concepts.html`. `site/build/prerender.mjs` applies `optimisePage` to
+   `index.html` and to the three documentation pages by name, and the trust anchor pages
+   were added to the site after that list without being added to it.
+
+This is therefore the same defect the documentation pages already had and had fixed, on the
+page set that was not re-checked afterwards, which is the exact recurrence
+`docs/reference/site-quality.md` warns about. The remedy is to route the three new pages
+through `optimisePage` with `DOC_FONTS`, in `site/build/prerender.mjs`. That file belongs to
+no phase of this change request, so the work is not smuggled into Phase 6; it is recorded
+here as the outstanding item that promotes the CLS assertion.
+
+Accordingly, in `site/lighthouserc.json` the trust anchor entry asserts performance,
+accessibility, best-practices and SEO at 1, LCP at 1,700 ms and TBT at 50 ms with severity
+`error`, and keeps CLS at 0.01 with severity `warn`. **The 0.01 threshold is not lowered.**
+The published ceiling is 0.0311, and what would have to change to move it is named above;
+once `prerender.mjs` optimises these pages, CLS is re-measured and the assertion is promoted
+to `error` at the unchanged 0.01.
+
 ### Phase 7: Source the published software version instead of transcribing it
 
 Files: `site/build/release.version.ts` (new), `site/build/seo.jsonld.ts`
