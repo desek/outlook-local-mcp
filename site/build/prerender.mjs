@@ -15,7 +15,7 @@
  */
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import { dirname, resolve } from 'node:path'
+import { dirname, resolve, relative } from 'node:path'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const siteRoot = resolve(here, '..')
@@ -211,16 +211,59 @@ writeFileSync(
   'utf8',
 )
 
-for (const page of ['concepts.html', 'quickstart.html', 'troubleshooting.html']) {
-  const path = resolve(siteRoot, `dist/${page}`)
-  let html
-  try {
-    html = readFileSync(path, 'utf8')
-  } catch (err) {
-    fail(`documentation page dist/${page} is missing: ${err?.message ?? err}`)
+const distDir = resolve(siteRoot, 'dist')
+
+/** Marks a page emitted by the `pageTemplate` in build/doc.pages.ts. optimisePage preserves it. */
+const DOC_PAGE_MARKER = 'class="doc-page"'
+
+/**
+ * Lists every .html file under a directory, recursively, as paths relative to dist.
+ *
+ * @param {string} dir  Absolute directory to walk.
+ * @returns {string[]} dist-relative paths, e.g. `concepts.html`, `about/index.html`.
+ */
+function htmlFilesUnder(dir) {
+  const out = []
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = resolve(dir, entry.name)
+    if (entry.isDirectory()) out.push(...htmlFilesUnder(full))
+    else if (entry.isFile() && entry.name.endsWith('.html')) out.push(relative(distDir, full))
   }
-  writeFileSync(path, optimisePage(html, page, DOC_FONTS), 'utf8')
+  return out
 }
+
+// Which pages get optimised is *derived from the artifact*, not listed here. Every page the
+// doc.pages.ts pageTemplate emits carries `<main class="doc-page">`, so scanning dist for
+// that marker names the exact set, and a page added by any future change is optimised the
+// moment it is emitted.
+//
+// The literal list this replaces went stale three times in the same way: the documentation
+// pages were left unoptimised after the landing page was fixed, DOC_FONTS was missing the
+// bold faces, and then the trust anchor pages (about, contact, privacy) shipped with a
+// render-blocking stylesheet and no preloads at all, charging ~0.031 to Cumulative Layout
+// Shift against a 0.01 bar (CR-0077). Correcting the named instances each time produced a
+// clean following run without closing the class; deriving the set from the authoritative
+// marker is what closes it.
+//
+// The landing page is excluded because it is not a doc-page and is on its own path above:
+// it alone takes deferClientScript and HERO_FONTS. Nested index.html files (about/, contact/,
+// privacy/) are doc-pages and are included.
+let optimised = 0
+for (const page of htmlFilesUnder(distDir)) {
+  if (page === 'index.html') continue
+  const path = resolve(distDir, page)
+  const html = readFileSync(path, 'utf8')
+  if (!html.includes(DOC_PAGE_MARKER)) continue
+  writeFileSync(path, optimisePage(html, page, DOC_FONTS), 'utf8')
+  optimised += 1
+}
+
+// A build that emits no doc-page at all means the marker moved or the template changed
+// shape, and the scan is then silently optimising nothing. Fail rather than publish it.
+if (optimised === 0) {
+  fail(`no page carrying ${DOC_PAGE_MARKER} found under dist; the doc-page template changed shape`)
+}
+console.log(`prerender: optimised ${optimised} doc-page documents`)
 
 console.log(`prerender: injected ${appHtml.length} chars into dist/index.html`)
 
