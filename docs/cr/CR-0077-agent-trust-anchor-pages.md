@@ -130,6 +130,22 @@ plain probe of `/about`, `/contact`, or `/privacy` resolves.
   `.ts` and `.tsx` files (the `walkSources` extension filter), so Markdown page sources
   are unscanned and FR-7 would otherwise have no check behind it. The scan MUST be
   extended to cover the new pages' Markdown sources.
+* **FR-8** The `softwareVersion` property of the landing page's `SoftwareApplication`
+  entity MUST be sourced from the project's authoritative release record at build time.
+  It MUST NOT be a transcribed literal, and no version literal may remain in
+  `site/build/seo.jsonld.ts`.
+
+  This is the same hand-typed-literal class CR-0073 removed from the tool-surface
+  figures, and it has already failed in the same way. The literal `'0.8.0'` was written
+  once, in commit `09397dd`, and has never been touched since. The latest release tag is
+  `v0.5.1` and `.release-please-manifest.json` reads `0.5.1`, so the published structured
+  data currently advertises a version that has never existed. A generative engine reading
+  the site is being told a falsehood today, not at some future release.
+
+  The authoritative record is `.release-please-manifest.json` (the `"."` key). It is
+  tracked, it is written by release-please on every release, it matches the git tag, and
+  its value is already in the bare `0.5.1` form schema.org expects, so it is used
+  verbatim with no `v` prefix added and no transformation applied.
 
 ### Non-Goals
 
@@ -200,6 +216,25 @@ honesty, not an improvement, and this change request does not do it.
   and enum helpers, and the `GraphServiceClient` is constructed in `internal/tools`
   against the SDK's own default service root. The citation is corrected so the criterion
   can actually be traced.
+* **AC-6** The `softwareVersion` in the built `site/dist/index.html` JSON-LD equals the
+  `"."` value of `.release-please-manifest.json` on that same build, compared as strings.
+  Asserting the property merely exists is not sufficient, because the pre-change literal
+  also exists and is wrong.
+* **AC-6a** No semantic-version literal remains anywhere in `site/build/seo.jsonld.ts`,
+  confirmed by grep. This is asserted separately from AC-6 because a build that reads the
+  manifest while leaving a stale literal behind as a fallback or a comment satisfies AC-6
+  and still leaves the defect in place for the next reader to copy.
+* **AC-6b** The site build fails loudly, naming the file, when
+  `.release-please-manifest.json` is missing or its `"."` key is absent. The build MUST
+  NOT fall back to a default version string, because a fabricated version is the exact
+  failure FR-8 exists to remove. This mirrors the existing `repoRootLlmsTxt` behaviour in
+  `site/build/seo.plugin.ts`.
+* **AC-7** None of the three new pages states a tool-surface figure of its own, and the
+  extended `assertNoBareClaims` scan demonstrably reaches their Markdown sources: a bare
+  tool-surface figure introduced into one of them MUST fail
+  `.agents/scripts/site.content.check.mjs`, naming the file and line, and the check MUST
+  pass once it is removed. A passing check alone does not satisfy this criterion, because
+  a scan that never opens the new files also passes.
 
 ## Affected Components
 
@@ -221,6 +256,8 @@ Every file the phases below touch, verified to exist at these paths on
 | `.agents/scripts/site.pages.mjs` | Add three pages to `PAGES` | 5 |
 | `.agents/scripts/site.content.check.mjs` | Markdown claim scan, text floors | 5, 6 |
 | `site/lighthouserc.json` | Collect URLs, anchor the root pattern, new matrix entry | 5, 6 |
+| `site/build/seo.jsonld.ts` | Source `softwareVersion` from the release manifest | 7 |
+| `site/build/release.version.ts` | New: reads the release manifest at build time | 7 |
 
 Not modified, but affected in behaviour and therefore verified: `site/build/sitemap.ts`
 picks up the new pages from the registry with no edit, and `site.validate.mjs`,
@@ -367,6 +404,56 @@ Files: `.agents/scripts/site.content.check.mjs`, `site/lighthouserc.json`
 
 Verify: `pnpm --dir site run lighthouse` passes.
 
+### Phase 7: Source the published software version instead of transcribing it
+
+Files: `site/build/release.version.ts` (new), `site/build/seo.jsonld.ts`
+
+This phase is independent of Phases 1 to 6 and touches no trust anchor page. It is
+carried here because it is the same defect class in the same file, and because the
+landing page's structured data is currently publishing a version that has never been
+released.
+
+**Source selection.** The release version is not currently exposed to the site build,
+and the minimal wiring is to read the record that already holds it rather than to
+introduce a second one. The candidates and why one wins:
+
+* `.release-please-manifest.json`, the `"."` key. **Chosen.** Tracked in the repository,
+  written by release-please on every release, currently `0.5.1` and matching the `v0.5.1`
+  tag, readable by Node at site build time with no new build step, and already in the
+  bare form schema.org wants.
+* The provenance pipeline (`site/build/provenance.ts`, `build-info.json`). **Rejected.**
+  It deliberately carries commit, build time, run, and environment, and no version. Its
+  governing rule is that provenance must never fabricate identity, and it collapses to a
+  `local` marker off CI. A release version is a different fact from which build produced
+  the artefact, and a site built locally must still publish the real released version.
+* `internal/buildinfo` and `main.version`. **Rejected.** Both are populated at Go link
+  time from goreleaser `ldflags`. No Go binary is built or executed during the site
+  build, so neither value is reachable from Vite.
+* `site/package.json` `version`. **Rejected.** It reads `0.0.0` and is not maintained as
+  the release version.
+
+1. Add `site/build/release.version.ts` exporting a single function that reads
+   `.release-please-manifest.json` from the repository root and returns the `"."` value.
+   Resolve the path from the module's own location, matching how `repoRootLlmsTxt` in
+   `site/build/seo.plugin.ts` reaches the repository root. Throw an error naming the file
+   when it is missing or the key is absent (AC-6b). Do not supply a default.
+2. In `site/build/seo.jsonld.ts`, replace `softwareVersion: '0.8.0'` with a call to that
+   function. Delete the literal outright rather than leaving it as a fallback or a
+   comment (AC-6a). Update the `softwareApplication` docstring to state that the version
+   is read from the release manifest, matching how it already documents `featureList` as
+   manifest-derived.
+
+Verify:
+
+```bash
+pnpm --dir site run build
+grep -nE "[0-9]+\.[0-9]+\.[0-9]+" site/build/seo.jsonld.ts   # must find no version literal
+node -e "const m=require('./.release-please-manifest.json')['.'];const h=require('fs').readFileSync('site/dist/index.html','utf8');process.exit(h.includes('\"softwareVersion\": \"'+m+'\"')?0:1)"
+```
+
+The second command asserts AC-6 directly: the built page must carry the manifest's
+version, not merely some version.
+
 ## Verification
 
 This change touches `site/**` and `.agents/scripts/**` only. It adds no Go code and
@@ -412,6 +499,12 @@ nothing outside the site moved.
   tracing recorded in the pull request.
 * The contrast audit (`site.contrast.audit.mjs`) MUST report zero failures for the
   three new pages at all four widths.
+* **FR-8, AC-6, AC-6a, AC-6b** The built landing page's `softwareVersion` is compared
+  against `.release-please-manifest.json` on the same build and MUST match; a grep of
+  `site/build/seo.jsonld.ts` MUST find no version literal; and a build run against a
+  temporarily renamed manifest MUST fail naming the file rather than emitting a default.
+  The last case is exercised deliberately, because a fallback path that is never taken
+  looks identical to one that does not exist.
 
 ## Settled Decisions
 
@@ -426,15 +519,29 @@ The requestor settled both privacy questions on 2026-08-23:
 Both decisions are settled. The implementor MUST NOT introduce an email address or a
 postal address on any of the three new pages or in any structured-data entity.
 
+The requestor settled a third question on 2026-08-23, in response to this review:
+
+* **The hardcoded `softwareVersion` is absorbed into this change request** as Phase 7,
+  rather than deferred to a separate one. It is sourced from
+  `.release-please-manifest.json` at build time and the literal is deleted. Scope is the
+  version property only; no other provenance or release wiring is in scope here.
+
 <!-- review-summary -->
 Reviewed 2026-08-23 against `dev/is-agentic-site` at `5c2037b` plus the uncommitted
 `da19458` site trust-signal work.
 
-FINDINGS: 15 (drift 5, contradiction 4, ambiguity 5, coverage 1)
-FIXES APPLIED: 15
-UNRESOLVED: 1
+FINDINGS: 17 (drift 6, contradiction 4, ambiguity 5, coverage 2)
+FIXES APPLIED: 17
+UNRESOLVED: 0
+PHASES: 7
 
-DRIFT (5), reconciled against the current codebase:
+DRIFT (6), reconciled against the current codebase:
+0. `site/build/seo.jsonld.ts` publishes `softwareVersion: '0.8.0'`, a literal written
+   once in `09397dd` and never updated. The latest tag is `v0.5.1` and
+   `.release-please-manifest.json` reads `0.5.1`, so the live site advertises a version
+   that has never been released. Raised in the first review pass as the sole UNRESOLVED
+   item; the requestor chose to absorb it, and it is now FR-8, AC-6, AC-6a, AC-6b and
+   Phase 7.
 1. AC-5 cited "the Graph client" as the owner of outbound destinations. No such
    component exists here: `internal/graph` holds errors, retry, serialization and enum
    helpers, and `GraphServiceClient` is constructed in `internal/tools` against the
@@ -478,12 +585,15 @@ AMBIGUITY (5):
 5. No phase stated its verification command. Each now does, plus a Verification section
    naming the governing workflow.
 
-COVERAGE (1):
+COVERAGE (2):
 1. FR-7 (no tool-surface figure) had no executable rule behind it. `assertNoBareClaims`
    walks only `.ts`/`.tsx` via the `walkSources` extension filter, so Markdown sources are
    unscanned. The repository standard requires prose and executable rule together. Added
    FR-7a, Phase 5 step 2, and a Test Strategy entry requiring the scan be proven to reach
    the new files by failing on a deliberately introduced figure.
+2. FR-7 had no acceptance criterion exercising it, so it was the one requirement with no
+   AC. Added AC-7, which asserts the scan reaches the new Markdown sources rather than
+   merely that the check passes.
 
 BLOCKER FOUND AND ABSORBED (the substantive result of this review):
 Emitting the pages as directory indexes, which GitHub Pages requires for extensionless
@@ -501,12 +611,25 @@ against the landing page's thresholds, which assert no performance score. Phase 
 the first two before any page is authored; Phase 5 step 4 removes the third. AC-2a asserts
 the outcome directly rather than relying on the build passing.
 
-UNRESOLVED (1), requiring human decision:
-`site/build/seo.jsonld.ts` hardcodes `softwareVersion: '0.8.0'` in the
-`softwareApplication` entity. This CR targets 0.9.0, so the published structured data will
-state a version the release does not match. It is a hand-typed literal of exactly the kind
-CR-0073 removed elsewhere, but it is pre-existing, outside this CR's stated scope, and
-fixing it properly means sourcing the version from the build rather than editing the
-literal. Decide whether to absorb it here as a Phase 7, raise a separate CR, or leave it.
-Not fixed in this review, because it is a scope decision rather than a defect in this CR.
+UNRESOLVED: none. The one item raised in the first review pass, the hardcoded
+`softwareVersion`, was returned by the requestor with a decision to absorb it into this
+change request. It is now FR-8, AC-6, AC-6a, AC-6b, and Phase 7, and the phase count is
+seven.
+
+Version source, recorded because the phase turns on it: `.release-please-manifest.json`
+(the `"."` key) is authoritative and readable at site build time, and the release version
+was not otherwise exposed to the site build, so Phase 7 adds the minimal wiring
+(`site/build/release.version.ts`) rather than a second literal. The provenance pipeline
+was considered and rejected: it deliberately carries no version, its governing rule is that
+it must never fabricate identity, and it collapses to a `local` marker off CI, whereas a
+locally built site must still publish the real released version. `internal/buildinfo` and
+`main.version` were rejected because both are populated at Go link time and no Go binary
+is built or run during the site build. `site/package.json` reads `0.0.0` and is not
+maintained as the release version.
+
+The severity of this item rose on investigation rather than falling. It was raised as a
+future-drift risk on the assumption the literal tracked some earlier release. It does not:
+`0.8.0` has never been a release of this project, so the correction is to a claim that is
+false today, which is why AC-6 compares the built value against the manifest rather than
+merely asserting the property is present.
 <!-- /review-summary -->
