@@ -5,37 +5,37 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <link rel="icon" type="image/png" href="/icon.png" />
-    <title>Concepts — Outlook Local MCP</title>
+    <title>About Outlook Local MCP — Outlook Local MCP</title>
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/inter-latin-400-normal-C38fXH4l.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/inter-latin-700-normal-Yt3aPRUw.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-400-normal-DTRLJnHl.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-600-normal-V-KvD_pi.woff2" />
-    <meta name="description" content="Core concepts for Outlook Local MCP: output tiers, the multi-account model, mail gating, OAuth scopes, and observability for the local Microsoft Outlook MCP server." />
+    <meta name="description" content="What Outlook Local MCP is, who builds it, the open source licence it ships under, and how it relates to the Microsoft Graph API it calls on your behalf." />
       <meta name="build:commit" content="2cce019aaa908f96659dfe4edeaa8f336ea7b667" />
     <meta name="build:time" content="2026-08-24T18:05:30.937Z" />
     <meta name="build:run" content="32760374403" />
     <meta name="build:environment" content="ci" />
-      <link rel="canonical" href="https://outlook-local-mcp.com/concepts.html" />
-    <meta property="og:title" content="Concepts — Outlook Local MCP" />
-    <meta property="og:description" content="Core concepts for Outlook Local MCP: output tiers, the multi-account model, mail gating, OAuth scopes, and observability for the local Microsoft Outlook MCP server." />
+      <link rel="canonical" href="https://outlook-local-mcp.com/about" />
+    <meta property="og:title" content="About — Outlook Local MCP" />
+    <meta property="og:description" content="What Outlook Local MCP is, who builds it, the open source licence it ships under, and how it relates to the Microsoft Graph API it calls on your behalf." />
     <meta property="og:type" content="article" />
-    <meta property="og:url" content="https://outlook-local-mcp.com/concepts.html" />
+    <meta property="og:url" content="https://outlook-local-mcp.com/about" />
     <meta property="og:image" content="https://outlook-local-mcp.com/icon.png" />
     <meta property="og:image:alt" content="The Outlook Local MCP wordmark" />
     <meta property="og:site_name" content="Outlook Local MCP" />
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="Concepts — Outlook Local MCP" />
-    <meta name="twitter:description" content="Core concepts for Outlook Local MCP: output tiers, the multi-account model, mail gating, OAuth scopes, and observability for the local Microsoft Outlook MCP server." />
+    <meta name="twitter:title" content="About — Outlook Local MCP" />
+    <meta name="twitter:description" content="What Outlook Local MCP is, who builds it, the open source licence it ships under, and how it relates to the Microsoft Graph API it calls on your behalf." />
     <meta name="twitter:image" content="https://outlook-local-mcp.com/icon.png" />
     <meta name="twitter:image:alt" content="The Outlook Local MCP wordmark" />
     <meta name="build:updated" content="2026-07-30" />
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
-        "@type": "TechArticle",
-        "headline": "Concepts — Outlook Local MCP",
-        "description": "Core concepts for Outlook Local MCP: output tiers, the multi-account model, mail gating, OAuth scopes, and observability for the local Microsoft Outlook MCP server.",
-        "url": "https://outlook-local-mcp.com/concepts.html",
+        "@type": "AboutPage",
+        "name": "About — Outlook Local MCP",
+        "description": "What Outlook Local MCP is, who builds it, the open source licence it ships under, and how it relates to the Microsoft Graph API it calls on your behalf.",
+        "url": "https://outlook-local-mcp.com/about",
         "dateModified": "2026-07-30"
       }
     </script>
@@ -47,286 +47,31 @@
   </head>
   <body class="antialiased">
     <main class="doc-page">
-<h1 id="concepts">Concepts</h1>
-<p>Core concepts for outlook-local-mcp. Use these as background when the Quick Start or Troubleshooting guide is not enough.</p>
-<h2 id="output-tiers">Output tiers</h2>
-<p>All read tools accept an <code>output</code> parameter with three modes. Write tools return concise text confirmations unconditionally.</p>
-<p><strong><code>text</code></strong> (default) returns pre-formatted plain text optimised for LLM context consumption. Collections render as numbered lists with human-readable fields and a total count. A 12,000-token raw Graph API event becomes roughly 150-800 tokens in text mode — a 60-70% reduction. The LLM can pass this through without additional formatting.</p>
-<p><strong><code>summary</code></strong> returns compact JSON with a deliberately curated field set per tool. Useful when the LLM needs structured data for programmatic reasoning. Nested objects are flattened: start/end become plain dateTime strings, organizer becomes a name string. Summary mode includes a <code>displayTime</code> field with a pre-formatted human-readable time string.</p>
-<p><strong><code>raw</code></strong> returns the full, unmodified Graph API serialisation including empty values. Use this when you need HTML body content, recurrence patterns, attendee email addresses, or other detailed fields. <code>raw</code> is never the default; it must be requested explicitly.</p>
-<p>Invalid values return an error: <code>output must be &#39;summary&#39;, &#39;raw&#39;, or &#39;text&#39;</code>.</p>
-<h2 id="multi-account-model-and-upn-identity">Multi-account model and UPN identity</h2>
-<p>The server supports managing multiple Microsoft accounts simultaneously. Each account is identified by a human-chosen <strong>label</strong> (e.g., <code>work</code>, <code>personal</code>). The User Principal Name (UPN, e.g. <code>alice@contoso.com</code>) resolved from Microsoft Graph <code>/me</code> is the <strong>canonical identity</strong> and is persisted to <code>accounts.json</code> in the <code>upn</code> field.</p>
-<p>UPN is available immediately at startup without a Graph API call and is shown in all account surfaces (<code>account.list</code>, <code>system.status</code>, elicitation prompts, write-tool confirmations). Any tool that accepts an <code>account</code> parameter resolves it by label first, then by case-insensitive UPN fallback — so <code>account=alice@contoso.com</code> and <code>account=work</code> both target the same entry.</p>
-<p>Account selection logic for calendar and mail verbs:</p>
-<ul>
-<li><strong>Explicit selection</strong> — pass <code>account: &quot;label&quot;</code> or <code>account: &quot;upn&quot;</code>.</li>
-<li><strong>Single authenticated account, no others</strong> — auto-selected silently.</li>
-<li><strong>Single authenticated account with disconnected siblings</strong> — auto-selected, with an advisory naming the disconnected accounts by UPN so the LLM can surface them.</li>
-<li><strong>Multiple authenticated accounts</strong> — the server uses MCP Elicitation to prompt for selection.</li>
-<li><strong>All accounts disconnected</strong> — error lists disconnected accounts by UPN and suggests <code>account.login</code>.</li>
-<li><strong>No accounts registered</strong> — error directs to <code>account.add</code>.</li>
-<li><strong>Elicitation unsupported or fails</strong> — the default account is used as a fallback; if no default exists, the error lists available accounts and suggests using the <code>account</code> parameter.</li>
-</ul>
-<p>Each account has its own token cache partition, auth record file, and Graph client instance. The <code>accounts.json</code> file stores only non-secret identity metadata. Tokens and credentials are managed separately by the OS-native token cache. The file is written atomically to prevent corruption on sudden exit.</p>
-<h2 id="auto-default-account-semantics">Auto-default account semantics</h2>
-<p>A <strong>default account</strong> is registered automatically at startup using the server&#39;s configured credentials (<code>CLIENT_ID</code>, <code>TENANT_ID</code>, <code>AUTH_METHOD</code>). Additional accounts added via <code>account.add</code> are persisted to <code>accounts.json</code> and restored on subsequent startups with silent token acquisition from the per-account cache (see CR-0064).</p>
-<p>At startup the server performs a silent token probe (5-second timeout) to pre-authenticate persisted accounts. Accounts with expired tokens are registered as <strong>disconnected</strong> — they remain visible in <code>account.list</code> and <code>system.status</code> and can be reconnected explicitly via <code>account.login</code>, or will be re-authenticated automatically by the auth middleware on the first tool call that targets them.</p>
-<p>The default account cannot be removed via <code>account.remove</code>.</p>
-<h2 id="mcp-elicitation-requirement">MCP elicitation requirement</h2>
-<p>Multi-account features (account selection prompts, inline authentication during <code>account.add</code>) use the MCP Elicitation API. The server declares the <code>elicitation</code> capability at startup. MCP clients that support elicitation receive interactive prompts; clients that do not fall back to the default account for account selection and receive authentication feedback as tool result text.</p>
-<p>For <code>device_code</code> auth without elicitation, <code>account.add</code> uses a two-call pattern: the first call returns the device code and keeps the authentication goroutine alive in the background; the second call with the same label picks up the completed authentication and registers the account.</p>
-<h2 id="read-only-mode">Read-only mode</h2>
-<p>Set <code>OUTLOOK_MCP_READ_ONLY=true</code> to disable all write operations. All write verbs (<code>calendar.create_event</code>, <code>calendar.create_meeting</code>, <code>calendar.update_event</code>, <code>calendar.update_meeting</code>, <code>calendar.delete_event</code>, <code>calendar.cancel_meeting</code>, <code>calendar.respond_event</code>, <code>calendar.reschedule_event</code>, <code>calendar.reschedule_meeting</code>, <code>mail.create_draft</code>, <code>mail.create_reply_draft</code>, <code>mail.create_forward_draft</code>, <code>mail.update_draft</code>, <code>mail.delete_draft</code>) return an error when invoked. Read and search verbs remain fully functional.</p>
-<pre><code class="language-bash">OUTLOOK_MCP_READ_ONLY=true ./outlook-local-mcp
-</code></pre>
-<h2 id="mail-gating">Mail gating</h2>
-<p>Mail access is disabled by default and enabled in two tiers via environment variables:</p>
-<table>
-<thead>
-<tr>
-<th>Variable</th>
-<th>Value</th>
-<th>Effect</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>MAIL_ENABLED</code></td>
-<td><code>false</code> (default)</td>
-<td>Mail verbs unavailable; no mail OAuth scope requested</td>
-</tr>
-<tr>
-<td><code>MAIL_ENABLED</code></td>
-<td><code>true</code></td>
-<td>Enables read-only mail verbs (<code>mail.list_folders</code>, <code>mail.list_messages</code>, <code>mail.search_messages</code>, <code>mail.get_message</code>, <code>mail.get_attachment</code>); requests <code>Mail.Read</code> scope</td>
-</tr>
-<tr>
-<td><code>MAIL_MANAGE_ENABLED</code></td>
-<td><code>true</code></td>
-<td>Enables all mail verbs including draft management (implies <code>MAIL_ENABLED</code>); requests <code>Mail.ReadWrite</code> scope</td>
-</tr>
-</tbody></table>
-<p><code>Mail.Send</code> is <strong>never</strong> requested under any configuration. The model prepares drafts that land in Outlook Drafts for manual review; email is never sent automatically. Enabling mail read for the first time triggers an incremental consent prompt; upgrading to mail manage triggers re-consent.</p>
-<h2 id="tool-annotation-semantics">Tool annotation semantics</h2>
-<p>The four aggregate tools (<code>calendar</code>, <code>mail</code>, <code>account</code>, <code>system</code>) each publish the five MCP annotations (<code>title</code>, <code>readOnlyHint</code>, <code>destructiveHint</code>, <code>idempotentHint</code>, <code>openWorldHint</code>) at tool granularity. Because a single tool hosts many verbs whose individual classifications differ, each aggregate annotation is computed as a <strong>conservative fold</strong> over the verbs actually registered in the running configuration, not hard-coded:</p>
-<ul>
-<li><code>readOnlyHint</code> is <code>true</code> only when <strong>every</strong> registered verb is read-only.</li>
-<li><code>destructiveHint</code> is <code>true</code> when <strong>at least one</strong> registered verb is destructive.</li>
-<li><code>idempotentHint</code> is <code>false</code> when <strong>at least one</strong> registered verb is non-idempotent.</li>
-<li><code>openWorldHint</code> is <code>true</code> when <strong>at least one</strong> registered verb calls Microsoft Graph.</li>
-</ul>
-<p>Every verb declares its own read-only, destructive, idempotent, and open-world classification, and a verb cannot be registered without one. The <code>help</code> verb, present in every domain, is read-only, non-destructive, idempotent, and local.</p>
-<p>Because gating changes the registered verb set, the published annotations are <strong>configuration-dependent</strong>. The same tool reports different hints under different settings:</p>
-<table>
-<thead>
-<tr>
-<th>Tool</th>
-<th>Configuration</th>
-<th><code>readOnlyHint</code></th>
-<th><code>destructiveHint</code></th>
-<th><code>openWorldHint</code></th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>mail</code></td>
-<td>neither <code>MAIL_ENABLED</code> nor <code>MAIL_MANAGE_ENABLED</code></td>
-<td><code>true</code></td>
-<td><code>false</code></td>
-<td><code>true</code></td>
-</tr>
-<tr>
-<td><code>mail</code></td>
-<td><code>MAIL_MANAGE_ENABLED=true</code></td>
-<td><code>false</code></td>
-<td><code>true</code></td>
-<td><code>true</code></td>
-</tr>
-<tr>
-<td><code>system</code></td>
-<td>auth method is not <code>auth_code</code></td>
-<td><code>true</code></td>
-<td><code>false</code></td>
-<td><code>false</code></td>
-</tr>
-<tr>
-<td><code>system</code></td>
-<td>auth method is <code>auth_code</code> (registers <code>complete_auth</code>)</td>
-<td><code>false</code></td>
-<td><code>false</code></td>
-<td><code>true</code></td>
-</tr>
-</tbody></table>
-<p>In the default gated configuration <code>mail</code> therefore advertises <code>readOnlyHint: true</code> because only read verbs are registered, and <code>system</code> advertises <code>openWorldHint: false</code> because every registered verb is local. A client that honours <code>destructiveHint</code> will not prompt for confirmation on read-only mail operations, and a client that honours <code>openWorldHint</code> will correctly treat <code>system</code> as local when <code>complete_auth</code> is absent. <code>readOnlyHint: true</code> is a hint, not the enforcement point; server-side write blocking is governed by <a href="#read-only-mode">read-only mode</a>.</p>
-<h2 id="headless-and-non-interactive-authentication">Headless and non-interactive authentication</h2>
-<p>Authentication is lazy — deferred until the first tool call rather than blocking at startup. Three flows are available, controlled by <code>OUTLOOK_MCP_AUTH_METHOD</code>:</p>
-<p><strong><code>device_code</code></strong> (default for well-known client IDs) — the server obtains a device code from Entra ID and delivers it to the user. If MCP Elicitation is supported, the user sees the code in a prompt; otherwise it appears as tool result text. The tool returns immediately; calling any tool after the user completes sign-in in their browser picks up the cached token automatically. Works in all environments including headless and Docker.</p>
-<p><strong><code>browser</code></strong> (default for custom app registrations) — the system browser opens to the Microsoft login page and the server listens on a localhost port for the OAuth callback. Requires an app registration with <code>http://localhost</code> redirect URI.</p>
-<p><strong><code>auth_code</code></strong> — the system browser opens for OAuth login. The user pastes the redirect URL back via MCP Elicitation or the <code>system.complete_auth</code> verb. Uses PKCE for security. Suitable for headless or remote environments where a localhost port cannot be opened.</p>
-<p>On subsequent runs the server acquires tokens silently using the cached refresh token. No browser interaction is needed unless the refresh token expires (typically after 90 days of inactivity) or the token cache is cleared. When a token expires mid-session, the auth middleware detects the failure and re-initiates the configured flow with client-visible prompts.</p>
-<h2 id="oauth-scopes-used-per-feature">OAuth scopes used per feature</h2>
-<p>The server requests scopes incrementally. Expanding mail access after initial consent triggers a re-consent prompt.</p>
-<table>
-<thead>
-<tr>
-<th>Feature</th>
-<th>OAuth scope</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Calendar (always active)</td>
-<td><code>Calendars.ReadWrite</code></td>
-</tr>
-<tr>
-<td><code>MAIL_ENABLED=false</code> (default)</td>
-<td><em>(none)</em></td>
-</tr>
-<tr>
-<td><code>MAIL_ENABLED=true</code></td>
-<td><code>Mail.Read</code></td>
-</tr>
-<tr>
-<td><code>MAIL_MANAGE_ENABLED=true</code> (implies <code>MAIL_ENABLED</code>)</td>
-<td><code>Mail.ReadWrite</code></td>
-</tr>
-<tr>
-<td>Refresh tokens (always)</td>
-<td><code>offline_access</code> (added automatically by the identity library)</td>
-</tr>
-</tbody></table>
-<p><code>Mail.Send</code> is never requested under any configuration.</p>
-<h2 id="well-known-client-ids">Well-known client IDs</h2>
-<p><code>OUTLOOK_MCP_CLIENT_ID</code> accepts friendly names in addition to raw UUIDs. Resolution is case-insensitive.</p>
-<table>
-<thead>
-<tr>
-<th>Friendly name</th>
-<th>Client ID</th>
-<th>Application</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>outlook-desktop</code> (default)</td>
-<td><code>d3590ed6-52b3-4102-aeff-aad2292ab01c</code></td>
-<td>Outlook desktop</td>
-</tr>
-<tr>
-<td><code>outlook-local-mcp</code></td>
-<td><code>dd5fc5c5-eb9a-4f6f-97bd-1a9fecb277d3</code></td>
-<td>Outlook Local MCP (project app registration)</td>
-</tr>
-<tr>
-<td><code>teams-desktop</code></td>
-<td><code>1fec8e78-bce4-4aaf-ab1b-5451cc387264</code></td>
-<td>Teams desktop and mobile</td>
-</tr>
-<tr>
-<td><code>teams-web</code></td>
-<td><code>5e3ce6c0-2b1f-4285-8d4b-75ee78787346</code></td>
-<td>Teams web</td>
-</tr>
-<tr>
-<td><code>m365-web</code></td>
-<td><code>4765445b-32c6-49b0-83e6-1d93765276ca</code></td>
-<td>Microsoft 365 web</td>
-</tr>
-<tr>
-<td><code>m365-desktop</code></td>
-<td><code>0ec893e0-5785-4de6-99da-4ed124e5296c</code></td>
-<td>Microsoft 365 desktop</td>
-</tr>
-<tr>
-<td><code>m365-mobile</code></td>
-<td><code>d3590ed6-52b3-4102-aeff-aad2292ab01c</code></td>
-<td>Microsoft 365 mobile</td>
-</tr>
-<tr>
-<td><code>outlook-web</code></td>
-<td><code>bc59ab01-8403-45c6-8796-ac3ef710b3e3</code></td>
-<td>Outlook web</td>
-</tr>
-<tr>
-<td><code>outlook-mobile</code></td>
-<td><code>27922004-5251-4030-b22d-91ecd9a37ea4</code></td>
-<td>Outlook mobile</td>
-</tr>
-</tbody></table>
-<p>The default <code>outlook-desktop</code> client ID is pre-authorised for Graph Calendar scopes in all tenants — no admin consent required. If the value is not a recognised friendly name and does not look like a UUID, a warning is logged and the value is used as-is.</p>
-<h2 id="in-server-documentation-surface">In-server documentation surface</h2>
-<p>The server embeds its own documentation and exposes it through three verbs on the <code>system</code> domain:</p>
-<pre><code>{tool: &quot;system&quot;, args: {operation: &quot;list_docs&quot;}}
-{tool: &quot;system&quot;, args: {operation: &quot;search_docs&quot;, query: &quot;token refresh&quot;}}
-{tool: &quot;system&quot;, args: {operation: &quot;get_docs&quot;, slug: &quot;troubleshooting&quot;, section: &quot;keychain-locked&quot;}}
-</code></pre>
-<p>Each document is also exposed as an MCP resource at <code>doc://outlook-local-mcp/{slug}</code> for clients that support <code>resources/list</code> and <code>resources/read</code>. The server status response (<code>system.status</code>) includes a <code>docs</code> section with the base URI and the troubleshooting slug so an LLM client can locate the documentation surface without prior knowledge.</p>
-<p>The embedded bundle contains exactly four slugs: <code>readme</code>, <code>quickstart</code>, <code>concepts</code> (this file), and <code>troubleshooting</code>.</p>
-<p>When troubleshooting or filing an issue, call <code>system.about</code> first to capture the build identity and host environment in a single snapshot (see <a href="troubleshooting#before-you-file-an-issue">Before you file an issue</a>):</p>
-<pre><code>{tool: &quot;system&quot;, args: {operation: &quot;about&quot;, output: &quot;summary&quot;}}
-</code></pre>
-<h2 id="container-runtime">Container runtime</h2>
-<p>The server ships as an OCI container image at <code>ghcr.io/desek/outlook-local-mcp</code>. The image uses stdio transport so the container integrates with MCP clients the same way the native binary does.</p>
-<h3 id="supported">Supported</h3>
-<p>Running inside a container supports the full feature set over stdio:</p>
-<ul>
-<li>All four aggregate domain tools: <code>calendar</code>, <code>mail</code>, <code>account</code>, <code>system</code></li>
-<li>Microsoft Graph API access (ca-certs are included in every variant)</li>
-<li>Multi-account support with file-backed token storage</li>
-<li>Observability: structured logs written to stderr, OpenTelemetry metrics and traces</li>
-<li><code>system.about</code> reports <code>runtime=container</code>, <code>distribution=container</code>, and <code>authBackend=file</code> from both image variants, even on the <code>scratch</code> base where <code>/proc</code> and <code>/.dockerenv</code> may not be readable (see CR-0067 for the <code>RUNNING_IN_CONTAINER</code> detector)</li>
-</ul>
-<h3 id="image-variants">Image variants</h3>
-<table>
-<thead>
-<tr>
-<th>Tag</th>
-<th>Base</th>
-<th>Size</th>
-<th>User</th>
-<th>Use case</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>:latest</code> / <code>:vX.Y.Z</code></td>
-<td><code>scratch</code></td>
-<td>~15 MB</td>
-<td>root (UID 0)</td>
-<td>Default, smallest attack surface, ca-certs only</td>
-</tr>
-<tr>
-<td><code>:distroless</code> / <code>:vX.Y.Z-distroless</code></td>
-<td><code>gcr.io/distroless/static-debian12:nonroot</code></td>
-<td>~17 MB</td>
-<td><code>nonroot</code> (UID 65532)</td>
-<td>Non-root enforcement (Kubernetes PSA restricted, OpenShift, hardened CI)</td>
-</tr>
-<tr>
-<td><code>:debug</code> / <code>:vX.Y.Z-debug</code></td>
-<td>distroless <code>:debug</code></td>
-<td>~20 MB</td>
-<td><code>nonroot</code> (UID 65532)</td>
-<td>Incident response only, includes busybox shell; not for production</td>
-</tr>
-</tbody></table>
-<p>The default <code>:latest</code> tag points at the scratch image. The scratch variant runs as root because there is no alternative inside a <code>FROM scratch</code> image. Users who require a non-root UID should use <code>:distroless</code>.</p>
-<h3 id="limitations">Limitations</h3>
-<p>The OS keychain (Apple Keychain, Windows Credential Manager, libsecret) is not reachable from a Linux container. When the server starts inside a container, it automatically falls back to file-backed token storage and logs a warning at the <code>warn</code> level. Token files land at <code>/data/auth/</code> inside the container.</p>
-<p>Tokens at rest are protected only by filesystem permissions on the host volume, not by the OS keychain. This is a weaker security posture than the native binary on a desktop OS. Users who require keychain-grade protection at rest should use the native binary (<code>go install</code> or Homebrew) rather than the container. See <a href="troubleshooting#container-no-keychain">Container has no keychain access</a> in the troubleshooting guide.</p>
-<h3 id="deferred">Deferred</h3>
-<p>HTTP transport (SSE / streamable-HTTP) is not implemented in this release. The container ships stdio only. HTTP transport requires transport selection, port exposure, multi-client token isolation, and TLS/auth at the transport layer, all deferred to a future CR.</p>
-<h2 id="observability-at-a-glance">Observability at a glance</h2>
-<p><strong>Structured logging</strong> — written to stderr. Configure with:</p>
-<ul>
-<li><code>OUTLOOK_MCP_LOG_LEVEL</code> — minimum severity: <code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code> (default <code>warn</code>)</li>
-<li><code>OUTLOOK_MCP_LOG_FORMAT</code> — <code>json</code> (default) or <code>text</code></li>
-<li><code>OUTLOOK_MCP_LOG_SANITIZE</code> — when <code>true</code> (default), PII such as email addresses and event body content is masked</li>
-<li><code>OUTLOOK_MCP_LOG_FILE</code> — when set, log records are written to both stderr and the specified file (append mode, <code>0600</code> permissions)</li>
-</ul>
-<p><strong>Audit logging</strong> — when <code>OUTLOOK_MCP_AUDIT_LOG_ENABLED=true</code> (default), every tool invocation emits a structured JSON audit entry with the tool name, operation, and outcome. Set <code>OUTLOOK_MCP_AUDIT_LOG_PATH</code> to write entries to a file instead of stderr.</p>
-<p><strong>OpenTelemetry</strong> — optional OTLP gRPC export for metrics and traces:</p>
-<pre><code class="language-bash">OUTLOOK_MCP_OTEL_ENABLED=true \
-OUTLOOK_MCP_OTEL_ENDPOINT=localhost:4317 \
-./outlook-local-mcp
-</code></pre>
-<p>Metrics include per-tool invocation counts and durations. Traces create a span per tool invocation with tool name, parameters, and outcome attributes. Deep-dive OTel attribute lists and the full middleware chain are documented in <code>docs/reference/observability.md</code>.</p>
+<h1 id="about-outlook-local-mcp">About Outlook Local MCP</h1>
+<p>Outlook Local MCP is a Model Context Protocol server that gives an AI assistant a native
+interface to your Microsoft Outlook calendar and mail. It runs as a single local binary on
+your own machine and speaks MCP over stdio, so an assistant such as Claude Desktop or
+Claude Code can read your week, book a meeting, find a thread, or draft a reply by calling
+the server directly rather than by scraping a screen or relaying your data through a hosted
+intermediary.</p>
+<h2 id="open-source">Open source</h2>
+<p>The project is open source and published under the MIT Licence. The full source, the
+licence text, the change history, and the governance records that explain why the software
+is shaped the way it is are all in the public repository. Anyone may read it, build it,
+audit what it sends and where, fork it, or adapt it. There is no closed component, no
+hosted service you must sign up for, and no telemetry you have not switched on yourself.</p>
+<h2 id="relationship-to-the-microsoft-graph-api">Relationship to the Microsoft Graph API</h2>
+<p>The server is a client of the Microsoft Graph API. Every calendar and mail operation it
+performs is a Graph call made with your own credentials, under the OAuth scopes you consent
+to during sign-in, against your own mailbox. Authentication goes to the Microsoft identity
+platform; data goes to and from Microsoft Graph. The server holds no mirror of your mailbox
+and adds no store of its own between you and Microsoft.</p>
+<p>This project is an independent piece of software. It is not affiliated with, endorsed by,
+or sponsored by Microsoft, and Microsoft, Outlook, and Microsoft Graph are trademarks of
+Microsoft Corporation. Access to Graph, and the behaviour of the API itself, remains
+governed by Microsoft&#39;s own terms.</p>
+<h2 id="acknowledgement">Acknowledgement</h2>
+<p>Support and testing by <a href="https://gigwhere.com">GigWhere</a> ❤️</p>
 
     </main>
     <footer class="doc-footer">
