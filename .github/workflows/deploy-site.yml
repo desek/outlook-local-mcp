@@ -40,7 +40,14 @@ jobs:
         with:
           node-version: '22'
       - name: Enable corepack
-        run: corepack enable
+        # Activate the exact pnpm named by site/package.json's packageManager field.
+        # A newer default pnpm on the runner (for example 11.23.0) refuses to switch
+        # down to the pinned 11.18.0 under corepack, failing the install; preparing the
+        # pinned version explicitly makes it the active one. The version is read from
+        # the pin so this workflow carries no second copy of it.
+        run: |
+          corepack enable
+          corepack prepare "pnpm@$(node -p "require('./site/package.json').packageManager.split('@')[1]")" --activate
 
       - name: Install site dependencies
         run: pnpm --dir site install --frozen-lockfile
