@@ -1,4 +1,4 @@
-import { resolve, basename } from 'node:path'
+import { resolve, relative } from 'node:path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -9,6 +9,22 @@ import { generateDocPages } from './build/doc.pages'
 // The site root is this config file's directory. Documentation pages are generated
 // into it as HTML inputs and the landing page (index.html) sits here too.
 const siteRoot = __dirname
+
+/**
+ * inputKey derives a Rollup input key from a generated page's absolute path.
+ *
+ * The key is the page's slug: its path below the site root, without the .html suffix and
+ * without a trailing "/index". A directory-index page (about/index.html) therefore keys
+ * on "about" rather than on "index", so several such pages cannot collide on one key and
+ * be silently reduced to the last by Object.fromEntries (CR-0077).
+ *
+ * @param p  The absolute path of a generated HTML input.
+ * @returns The Rollup input key, for example "concepts" or "about".
+ */
+function inputKey(p: string): string {
+  const slug = relative(siteRoot, p).replace(/\\/g, '/').replace(/\.html$/, '')
+  return slug.endsWith('/index') ? slug.slice(0, -'/index'.length) : slug
+}
 
 export default defineConfig(({ isSsrBuild }) => {
   // For the client build and dev server the documentation pages are generated from
@@ -45,9 +61,7 @@ export default defineConfig(({ isSsrBuild }) => {
             // separate Vite HTML entry pre-rendered without a router (CR-0070 FR-13).
             input: {
               index: resolve(siteRoot, 'index.html'),
-              ...Object.fromEntries(
-                docInputs.map((p) => [basename(p, '.html'), p]),
-              ),
+              ...Object.fromEntries(docInputs.map((p) => [inputKey(p), p])),
             },
           },
         },

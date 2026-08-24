@@ -79,11 +79,22 @@ docs/research/cr-0060-token-economics/runs/
 /site/concepts.html
 /site/quickstart.html
 /site/troubleshooting.html
+# Trust anchor pages generated from site/content/*.md at build time. They are emitted as
+# directory indexes so an extensionless request for /about resolves on GitHub Pages, so
+# the whole generated directory is ignored, not a single file (CR-0077).
+/site/about/
+/site/contact/
+/site/privacy/
 # TypeScript incremental build cache emitted by `tsc -b`.
 /site/*.tsbuildinfo
 # Lighthouse CI reports emitted by `lhci autorun` (site/lighthouserc.json upload
 # target). The thresholds config is committed; the per-run reports are not.
 /site/.lighthouseci/
+
+# Local agent-session convenience scripts (for example a `claude --resume <uuid>`
+# one-liner). They hold a machine-local session identifier that is meaningless in
+# another checkout, so they are never committed.
+/resume.sh
 
 # Local secrets. Never commit: these files hold API tokens and credentials.
 # Anchored to the repository root and also matched at any depth, so a stray

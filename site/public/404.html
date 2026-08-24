@@ -1,0 +1,63 @@
+<!doctype html>
+<!--
+  404.html - the not-found page GitHub Pages serves for any unmatched path.
+
+  GitHub Pages returns this file with a real HTTP 404 status (not a 200 app shell) for
+  every path it cannot resolve on the apex domain, so an agent that probes a wrong URL
+  reads a true 404 and a short recovery map rather than believing the path exists.
+
+  It is a self-contained static file in public/, copied verbatim into dist/ by Vite. It
+  deliberately does not go through the React or pre-render pipeline: a not-found page must
+  render with no build state and no JavaScript. It states no tool-surface figure, so it
+  needs no data from the generated surface manifest.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, follow" />
+    <title>404 Not Found — Outlook Local MCP</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        line-height: 1.6;
+        background: #0b0f14;
+        color: #e6edf3;
+        padding: 2rem;
+      }
+      main { max-width: 40rem; }
+      h1 { font-size: 1.75rem; margin: 0 0 0.5rem; }
+      p { margin: 0.5rem 0; color: #b6c2cf; }
+      ul { margin: 1rem 0 0; padding-left: 1.25rem; }
+      li { margin: 0.35rem 0; }
+      a { color: #a6e22e; }
+      code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>404 — page not found</h1>
+      <p>
+        This is <strong>Outlook Local MCP</strong>, a local, single-binary Model Context
+        Protocol server that connects Claude and other MCP clients to Microsoft Outlook
+        Calendar and Mail. The path you requested does not exist on this site.
+      </p>
+      <p>Where to look next:</p>
+      <ul>
+        <li><a href="/">Home</a> — what the project is and how it works.</li>
+        <li><a href="/quickstart.html">Quick Start</a> — install, configure, and make a first tool call.</li>
+        <li><a href="/concepts.html">Concepts</a> — output tiers, multi-account, mail gating, scopes.</li>
+        <li><a href="/troubleshooting.html">Troubleshooting</a> — auth, tokens, Keychain, throttling.</li>
+        <li><a href="/llms.txt">llms.txt</a> — a machine-readable index for agents, including when to use this server.</li>
+        <li><a href="/sitemap.xml">sitemap.xml</a> — every page this site publishes.</li>
+        <li><a href="https://github.com/desek/outlook-local-mcp">Source repository</a> on GitHub.</li>
+      </ul>
+    </main>
+  </body>
+</html>

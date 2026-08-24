@@ -7,8 +7,14 @@
  * this list, so the set of pages, their canonical URLs, and their social cards can never
  * disagree (CR-0070 FR-19, FR-21 to FR-23).
  *
- * The set mirrors the Vite HTML inputs: the landing page plus the three generated
- * documentation pages. Adding a page is a deliberate edit here.
+ * The set mirrors the Vite HTML inputs: the landing page, the three generated
+ * documentation pages, and the three trust anchor pages. Adding a page is a deliberate
+ * edit here.
+ *
+ * Pages are identified by their dist-relative output path, not by a bare filename. The
+ * trust anchor pages are emitted as directory indexes (about/index.html) so an
+ * extensionless request resolves on GitHub Pages, and three files named index.html
+ * cannot be told apart by basename alone (CR-0077).
  *
  * @agents-index Registry of published pages with canonical path, title, and description; the single source for SEO, sitemap, and JSON-LD.
  */
@@ -18,13 +24,22 @@ import { SITE_ORIGIN } from '../src/site.meta'
  * PageKey identifies a page by the JSON-LD entity family it carries, not merely its
  * URL, so the JSON-LD builder can branch on it without re-parsing filenames.
  */
-export type PageKey = 'index' | 'concepts' | 'quickstart' | 'troubleshooting'
+export type PageKey =
+  | 'index'
+  | 'concepts'
+  | 'quickstart'
+  | 'troubleshooting'
+  | 'about'
+  | 'contact'
+  | 'privacy'
 
 /**
  * PageSeo is the SEO identity of one published page.
  *
  * @property key  The stable page key, also the JSON-LD selector.
- * @property file  The emitted HTML filename at the site root (the transformIndexHtml match target).
+ * @property file  The emitted HTML path relative to the site root, without a leading
+ *   slash (the transformIndexHtml match target). A directory-index page states the
+ *   whole path, for example "about/index.html".
  * @property path  The absolute-from-root URL path, including the leading slash.
  * @property title  The document and og:title text.
  * @property description  The meta description and og:description text.
@@ -78,6 +93,30 @@ export const PAGES: readonly PageSeo[] = [
     description:
       'Recover from common Outlook Local MCP failures: auth errors, token refresh, Keychain access, Graph throttling, mail flags, and account lifecycle issues.',
   },
+  {
+    key: 'about',
+    file: 'about/index.html',
+    path: '/about',
+    title: 'About — Outlook Local MCP',
+    description:
+      'What Outlook Local MCP is, who builds it, the open source licence it ships under, and how it relates to the Microsoft Graph API it calls on your behalf.',
+  },
+  {
+    key: 'contact',
+    file: 'contact/index.html',
+    path: '/contact',
+    title: 'Contact — Outlook Local MCP',
+    description:
+      'How to reach the Outlook Local MCP project: the public GitHub repository, its issue tracker for bugs and feature requests, and what to include in a report.',
+  },
+  {
+    key: 'privacy',
+    file: 'privacy/index.html',
+    path: '/privacy',
+    title: 'Privacy — Outlook Local MCP',
+    description:
+      'Where your mail and calendar data goes: the server runs locally, tokens stay in the operating system keychain, and the only outbound calls are to Microsoft.',
+  },
 ]
 
 /**
@@ -91,11 +130,18 @@ export function canonicalUrl(page: PageSeo): string {
 }
 
 /**
- * pageForFile resolves a page by the HTML filename Vite is transforming.
+ * pageForFile resolves a page by the site-relative HTML path Vite is transforming.
  *
- * @param file  The HTML basename, for example "index.html".
- * @returns The matching PageSeo, or undefined if the file is not a registered page.
+ * The match is on the whole path, not the basename: the trust anchor pages are emitted
+ * as directory indexes, so "about/index.html", "contact/index.html", and the landing
+ * page's own "index.html" all share a basename and only the path tells them apart
+ * (CR-0077). Leading slashes and Windows separators are normalised so "/about/index.html"
+ * and "about\\index.html" both resolve.
+ *
+ * @param file  The site-relative HTML path, for example "index.html" or "/about/index.html".
+ * @returns The matching PageSeo, or undefined if the path is not a registered page.
  */
 export function pageForFile(file: string): PageSeo | undefined {
-  return PAGES.find((p) => p.file === file)
+  const normalised = file.replace(/\\/g, '/').replace(/^\/+/, '')
+  return PAGES.find((p) => p.file === normalised)
 }

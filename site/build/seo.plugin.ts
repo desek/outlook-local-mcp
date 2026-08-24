@@ -17,7 +17,7 @@
  *
  * @agents-index Vite plugin: injects per-page SEO head metadata and emits sitemap.xml and the copied llms.txt.
  */
-import { basename } from 'node:path'
+import { isAbsolute, relative } from 'node:path'
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Plugin } from 'vite'
@@ -49,19 +49,45 @@ function repoRootLlmsTxt(): string {
 }
 
 /**
+ * sitePathForTransform reduces a transformIndexHtml context to the page's site-relative
+ * path, which is the registry's match key.
+ *
+ * The basename is deliberately not used: the trust anchor pages are emitted as directory
+ * indexes, so several pages share the filename index.html and only the path distinguishes
+ * them. Matching on the basename would silently give every one of them the landing page's
+ * canonical URL and JSON-LD (CR-0077).
+ *
+ * @param path  ctx.path, the request or output path, normally leading-slashed.
+ * @param filename  ctx.filename, the absolute path of the source HTML file.
+ * @param root  The resolved Vite root, used to relativise an absolute filename.
+ * @returns The site-relative path with no leading slash, for example "about/index.html".
+ */
+function sitePathForTransform(path: string, filename: string, root: string): string {
+  const raw = (path || filename || '').split('?')[0].split('#')[0]
+  // ctx.path is site-relative but leading-slashed; ctx.filename is an absolute disk path
+  // and only meaningful once relativised against the Vite root.
+  const rel = root && isAbsolute(raw) && raw.startsWith(root) ? relative(root, raw) : raw
+  return rel.replace(/\\/g, '/').replace(/^\/+/, '')
+}
+
+/**
  * seoPlugin builds the Vite plugin.
  *
  * @returns A Vite Plugin injecting per-page SEO head metadata and emitting sitemap.xml
  *   and the copied llms.txt.
  */
 export function seoPlugin(): Plugin {
+  let root = ''
   return {
     name: 'seo-crawler-surface',
+    configResolved(config) {
+      root = config.root
+    },
     // Inject the per-page metadata immediately before </head> for the matching page.
     transformIndexHtml: {
       order: 'pre',
       handler(html: string, ctx) {
-        const file = basename(ctx.path || ctx.filename || '')
+        const file = sitePathForTransform(ctx.path, ctx.filename, root)
         const page = pageForFile(file)
         if (!page) return html
         const head = `${renderSeoHead(page)}\n${renderJsonLd(page)}\n  </head>`

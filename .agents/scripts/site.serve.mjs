@@ -39,9 +39,12 @@ const TYPES = {
 /**
  * Start a static server rooted at `root`.
  *
- * A bare directory request resolves to `index.html`; an unknown path returns 404
- * rather than falling back to the SPA shell, so a missing artefact surfaces as a
- * measurable failure instead of a silently-correct-looking page.
+ * A bare directory request resolves to `index.html`, and so does an extensionless
+ * path (`/about` -> `about/index.html`), mirroring how GitHub Pages resolves a
+ * directory-index page from its extensionless canonical URL. Without that rule the
+ * harness could not measure the pages at the URLs the site actually publishes. An
+ * unknown path returns 404 rather than falling back to the SPA shell, so a missing
+ * artefact surfaces as a measurable failure instead of a silently-correct-looking page.
  *
  * @param {string} root Directory to serve (the built `dist`).
  * @returns {Promise<{origin: string, port: number, close: () => Promise<void>}>}
@@ -51,6 +54,7 @@ export async function serve(root) {
   const server = createServer(async (req, res) => {
     let path = decodeURIComponent(new URL(req.url, 'http://localhost').pathname)
     if (path.endsWith('/')) path += 'index.html'
+    else if (!extname(path)) path += '/index.html'
     const file = join(root, normalize(path).replace(/^(\.\.[/\\])+/, ''))
     try {
       const body = await readFile(file)
