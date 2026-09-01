@@ -6,7 +6,7 @@
 // registry without a matching manifest edit ships an extension that describes a
 // surface that no longer exists. The cases here are derived from the registry
 // under the maximal configuration rather than listed, so a future verb is
-// covered without anyone remembering to add it (CR-0078 Phase 5).
+// covered without anyone remembering to add it.
 //
 // @agents-index: derived check that the extension manifest's per-domain
 // descriptions name every verb the registry registers for that domain.
@@ -75,7 +75,7 @@ func maximalSurfaceConfig() config.Config {
 // TestManifestDescribesEveryRegisteredVerb asserts that every verb the registry
 // registers for a domain under the maximal configuration is named in that
 // domain's extension/manifest.json description, and that the tools array holds
-// exactly the four aggregate domain tools (CR-0078 FR-20, AC).
+// exactly the four aggregate domain tools.
 //
 // The verb name is matched on word boundaries so a shorter name cannot be
 // satisfied by a longer one that contains it: Go's \b treats the underscore as a

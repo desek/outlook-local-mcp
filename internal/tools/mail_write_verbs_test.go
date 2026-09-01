@@ -29,7 +29,7 @@ type mailWriteVerb struct {
 	response string
 }
 
-// mailWriteVerbs enumerates the four verbs added by CR-0078.
+// mailWriteVerbs enumerates the four received-message write verbs.
 func mailWriteVerbs() []mailWriteVerb {
 	return []mailWriteVerb{
 		{

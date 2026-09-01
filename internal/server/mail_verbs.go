@@ -612,7 +612,7 @@ func buildDeleteDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite fun
 // It is the only one of the four received-message write verbs classified
 // destructive and non-idempotent, because the move removes the message from its
 // source folder and mints a new identifier, leaving the caller's original
-// identifier unusable (CR-0078 FR-14).
+// identifier unusable.
 func buildMoveMessageVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
 		Name:        "move_message",

@@ -140,7 +140,7 @@ func mailVerbIsReadOnly(v tools.Verb) bool {
 	return t.Annotations.ReadOnlyHint != nil && *t.Annotations.ReadOnlyHint
 }
 
-// TestSharedParametersNameTheirWriteVerbs asserts CR-0078 FR-16: every parameter
+// TestSharedParametersNameTheirWriteVerbs asserts that every parameter
 // name the mail domain declares on both a read-only verb and a write verb has a
 // published description naming at least one of the declaring write verbs.
 //
@@ -213,7 +213,7 @@ func TestSharedParametersNameTheirWriteVerbs(t *testing.T) {
 	}
 }
 
-// TestDestinationFolderIDIsNotFolderID asserts CR-0078 FR-17: the move
+// TestDestinationFolderIDIsNotFolderID asserts that the move
 // destination is published under its own name with its own description, and is
 // not merged into folder_id.
 //
@@ -246,7 +246,7 @@ func TestDestinationFolderIDIsNotFolderID(t *testing.T) {
 	}
 }
 
-// TestMailManagementVerbsCarryDotIdentity asserts CR-0078 AC-12: the audit
+// TestMailManagementVerbsCarryDotIdentity asserts that the audit
 // record emitted for each received-message write verb carries the same
 // mail.<verb> identity that is passed to the middleware chain.
 //

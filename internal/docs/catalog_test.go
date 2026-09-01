@@ -46,8 +46,7 @@ func TestCatalog_AllSlugsResolve(t *testing.T) {
 }
 
 // TestMailGatingRowNamesMessageManagement asserts that the embedded concepts
-// document's MAIL_MANAGE_ENABLED row stops reading as exhaustive over drafts
-// (CR-0078 FR-24).
+// document's MAIL_MANAGE_ENABLED row stops reading as exhaustive over drafts.
 //
 // The row previously read "including draft management", which an LLM reading the
 // embedded bundle mid-session would take as the complete list of what the gate
