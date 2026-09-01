@@ -2,15 +2,16 @@
 id: "CR-0079"
 name: mail-draft-attachments
 description: Add one mail domain write verb that attaches a file to an existing draft, choosing a direct upload for small files and a chunked upload session for large ones.
-status: "draft"
+status: "completed"
 date: 2026-09-01
+completed-date: 2026-09-02
 requestor: desek
 stakeholders:
   - desek
 priority: "medium"
 target-version: "0.11.0"
 source-branch: docs/cr-implementation-set-0079-0083
-source-commit: ee23a77
+source-commit: 5f5c4ca
 ---
 
 # Mail Draft Attachments
@@ -1129,32 +1130,32 @@ Then Step 41 exercises add_attachment against a draft the harness creates and de
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
-- [ ] Any linter exceptions are documented with justification
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
+- [x] Any linter exceptions are documented with justification
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass, including under the race detector
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass, including under the race detector
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] Every new file carries a package-consistent doc comment and a single index annotation
-- [ ] The new verb's parameters and annotation semantics are documented in the registry, not in markdown
-- [ ] Both troubleshooting entries carry stable anchors
-- [ ] No governance identifier appears in source, test names, or user-facing documentation
+- [x] Every new file carries a package-consistent doc comment and a single index annotation
+- [x] The new verb's parameters and annotation semantics are documented in the registry, not in markdown
+- [x] Both troubleshooting entries carry stable anchors
+- [x] No governance identifier appears in source, test names, or user-facing documentation
 
 ### Code Review
 
 - [ ] Changes submitted via pull request
-- [ ] PR title follows Conventional Commits format
+- [x] PR title follows Conventional Commits format
 - [ ] Code review completed and approved
 - [ ] Changes squash-merged to maintain linear history
 
