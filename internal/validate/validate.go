@@ -224,6 +224,26 @@ func ValidateContentType(value string) error {
 	}
 }
 
+// ValidateFlagStatus validates that value is one of the accepted follow-up flag
+// status values: notFlagged, flagged, or complete (case-insensitive).
+//
+// This gate is load-bearing rather than cosmetic: graph.ParseFlagStatus defaults
+// an unrecognised value to notFlagged, which clears a flag instead of leaving it
+// unchanged, so an invalid value must be refused before it reaches the parser.
+//
+// Parameters:
+//   - value: the flag status string to validate.
+//
+// Returns nil if valid, or an error listing the accepted values.
+func ValidateFlagStatus(value string) error {
+	switch strings.ToLower(value) {
+	case "notflagged", "flagged", "complete":
+		return nil
+	default:
+		return fmt.Errorf("invalid flag_status: %q (accepted: notFlagged, flagged, complete)", value)
+	}
+}
+
 // ValidateAttendeeType validates that value is one of the accepted attendee
 // type values: required, optional, or resource (case-insensitive).
 //

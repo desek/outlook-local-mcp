@@ -431,3 +431,27 @@ func TestValidateContentType(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateFlagStatus asserts the three SDK-defined follow-up flag statuses
+// are accepted case-insensitively, and that a rejection names all three so the
+// caller can correct the value without consulting documentation.
+func TestValidateFlagStatus(t *testing.T) {
+	t.Parallel()
+	for _, v := range []string{"notFlagged", "flagged", "complete", "NOTFLAGGED", "Flagged", "COMPLETE"} {
+		if err := ValidateFlagStatus(v); err != nil {
+			t.Errorf("expected %q to be valid, got: %v", v, err)
+		}
+	}
+	for _, v := range []string{"", "urgent", "unflagged", "done"} {
+		err := ValidateFlagStatus(v)
+		if err == nil {
+			t.Errorf("expected %q to be invalid", v)
+			continue
+		}
+		for _, accepted := range []string{"notFlagged", "flagged", "complete"} {
+			if !strings.Contains(err.Error(), accepted) {
+				t.Errorf("error for %q should name %q, got: %v", v, accepted, err)
+			}
+		}
+	}
+}
