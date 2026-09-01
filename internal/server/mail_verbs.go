@@ -10,7 +10,7 @@
 //   - Gated by MailEnabled: get_conversation, list_attachments, get_attachment.
 //   - Gated by MailManageEnabled: create_draft, create_reply_draft,
 //     create_forward_draft, update_draft, delete_draft, move_message, set_flag,
-//     set_categories, mark_read.
+//     set_categories, mark_read, add_attachment.
 //
 // The aggregate "mail" tool is registered unconditionally (FR-1). The operation
 // enum only includes verbs whose feature flag is enabled at server start (FR-2).
@@ -75,8 +75,8 @@ type mailVerbsConfig struct {
 //     (require Mail.Read scope provided by MailEnabled).
 //   - MailManageEnabled-gated: create_draft, create_reply_draft,
 //     create_forward_draft, update_draft, delete_draft, move_message,
-//     set_flag, set_categories, mark_read (require Mail.ReadWrite scope
-//     provided by MailManageEnabled).
+//     set_flag, set_categories, mark_read, add_attachment (require
+//     Mail.ReadWrite scope provided by MailManageEnabled).
 //
 // Each verb's Handler is pre-wrapped with authMW, accountResolverMW,
 // observability, and audit middleware using the fully-qualified identity
@@ -140,6 +140,7 @@ func buildMailVerbs(c mailVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 			buildSetFlagVerb(c, rc, wrapWrite),
 			buildSetCategoriesVerb(c, rc, wrapWrite),
 			buildMarkReadVerb(c, rc, wrapWrite),
+			buildAddAttachmentVerb(c, rc, wrapWrite),
 		)
 	}
 
@@ -740,6 +741,56 @@ func buildMarkReadVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(s
 			mcp.WithBoolean("is_read",
 				mcp.Required(),
 				mcp.Description("True to mark the message read, false to mark it unread. Required: the verb writes in both directions."),
+			),
+			mcp.WithString("account",
+				mcp.Description("Account label or UPN to use. Omit to auto-select the default account."),
+			),
+		},
+	}
+}
+
+// buildAddAttachmentVerb constructs the add_attachment Verb
+// (MailManageEnabled-gated).
+//
+// The MIME parameter is named mime_type rather than content_type deliberately.
+// The aggregate tool publishes the union of every verb's parameters and merges
+// duplicate names first-occurrence-wins, and the mail domain already declares
+// content_type as a body content type restricted by an enum to text and html.
+// Reusing that name would publish a schema telling a caller an attachment's
+// content type must be text or html, so the distinct concept takes a distinct
+// name.
+func buildAddAttachmentVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
+	return tools.Verb{
+		Name:        "add_attachment",
+		Summary:     "attach a file to an existing draft; bytes supplied base64 in content_bytes",
+		Description: "Attaches a file to an existing draft message. Requires message_id, name, and content_bytes; content_bytes carries the file content as a standard base64-encoded string, and the optional mime_type sets the attachment content type (defaults to application/octet-stream). Only drafts accept attachments: a non-draft message is refused. The transfer mechanism is chosen from the decoded size, small files in a single request and larger ones through a chunked upload session, so the caller never selects it. Attachments above the server's MaxAttachmentSizeBytes limit are rejected before any upload begins. Annotated non-destructive (it only adds, leaving the draft and its existing attachments untouched) and non-idempotent (a repeated call adds a second attachment with a new ID). The confirmation names the draft, the attachment, its size, and the attachment ID the service assigned. Returns a text confirmation and takes no output parameter. Requires MAIL_MANAGE_ENABLED=true.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"message_id": "AAMkAGI2...", "name": "report.pdf", "content_bytes": "JVBERi0xLjQK...", "mime_type": "application/pdf"}, Comment: "attach a PDF to a draft"},
+			{Args: map[string]any{"message_id": "AAMkAGI2...", "name": "notes.txt", "content_bytes": "aGVsbG8gd29ybGQ="}, Comment: "attach a small file without naming its MIME type"},
+		},
+		SeeDocs: []string{"concepts#mail-gating"},
+		Handler: wrapWrite("mail.add_attachment", "write", tools.NewHandleAddAttachment(rc, c.timeout, c.cfg.MaxAttachmentSizeBytes)),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(true),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("message_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the draft message the attachment is added to."),
+			),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("File name the attachment carries in the draft, for example report.pdf."),
+			),
+			mcp.WithString("content_bytes",
+				mcp.Required(),
+				mcp.Description("File content as a standard base64-encoded string. The decoded size selects the transfer path and is checked against the server's attachment size limit."),
+			),
+			mcp.WithString("mime_type",
+				mcp.Description("MIME type of the attachment, for example application/pdf. Omit to default to application/octet-stream. This is the attachment content type, not the draft body content_type."),
 			),
 			mcp.WithString("account",
 				mcp.Description("Account label or UPN to use. Omit to auto-select the default account."),

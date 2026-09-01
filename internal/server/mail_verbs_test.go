@@ -246,6 +246,100 @@ func TestDestinationFolderIDIsNotFolderID(t *testing.T) {
 	}
 }
 
+// mailPublishedSchema returns the flattened mail-domain parameter schema the
+// aggregate tool publishes: every verb's declared properties merged
+// first-occurrence-wins, which is the merge aggregateSchemaOptions performs.
+func mailPublishedSchema(t *testing.T) map[string]map[string]any {
+	t.Helper()
+
+	published := make(map[string]map[string]any)
+	for _, v := range BuildVerbsForInspection(maximalMailConfig())["mail"] {
+		if len(v.Schema) == 0 {
+			continue
+		}
+		tool := mcp.NewTool("_introspect", v.Schema...)
+		for name, raw := range tool.InputSchema.Properties {
+			if name == "operation" {
+				continue
+			}
+			if _, seen := published[name]; seen {
+				continue
+			}
+			schema, ok := raw.(map[string]any)
+			if !ok {
+				t.Fatalf("parameter %q publishes a %T schema, want an object", name, raw)
+			}
+			published[name] = schema
+		}
+	}
+	return published
+}
+
+// schemaEnumValues normalises a property schema's enum field to its string
+// values. The tool builder holds it as []string before marshalling and as
+// []any once it has round-tripped through JSON, so both forms are read rather
+// than assuming the one the in-process builder happens to produce.
+func schemaEnumValues(raw any) []string {
+	switch values := raw.(type) {
+	case []string:
+		return values
+	case []any:
+		out := make([]string, 0, len(values))
+		for _, v := range values {
+			s, _ := v.(string)
+			out = append(out, s)
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// TestMimeTypeIsNotBodyContentType asserts that the attachment MIME type is
+// published under its own name, and that reusing content_type for it was not
+// what happened.
+//
+// The two concepts are genuinely different: content_type is a draft *body*
+// content type, restricted by an enum to text and html, while an attachment's
+// content type is a MIME type such as application/pdf. Because the flattened
+// aggregate schema merges duplicate parameter names first-occurrence-wins and
+// the draft verbs are registered first, a merged name would publish the
+// text-or-html enum over the MIME type and tell a caller that an attachment
+// must be one of two body formats. The separation is asserted here rather than
+// left to a reader of the constructors.
+func TestMimeTypeIsNotBodyContentType(t *testing.T) {
+	published := mailPublishedSchema(t)
+
+	contentType, ok := published["content_type"]
+	if !ok {
+		t.Fatal("the mail domain publishes no content_type parameter")
+	}
+	bodyEnum := schemaEnumValues(contentType["enum"])
+	if len(bodyEnum) == 0 {
+		t.Fatalf("content_type publishes no enum; the body content type must stay restricted, got %#v", contentType["enum"])
+	}
+	want := map[string]bool{"text": true, "html": true}
+	if len(bodyEnum) != len(want) {
+		t.Errorf("content_type enum is %v, want exactly the body formats text and html", bodyEnum)
+	}
+	for _, value := range bodyEnum {
+		if !want[value] {
+			t.Errorf("content_type enum admits %q; it is the draft body content type and must stay text or html", value)
+		}
+	}
+
+	mimeType, ok := published["mime_type"]
+	if !ok {
+		t.Fatal("the mail domain publishes no mime_type parameter; add_attachment must not reuse content_type for the attachment MIME type")
+	}
+	if _, restricted := mimeType["enum"]; restricted {
+		t.Errorf("mime_type publishes an enum %#v; an attachment MIME type is a free string and must not be restricted to the body formats", mimeType["enum"])
+	}
+	if kind, _ := mimeType["type"].(string); kind != "string" {
+		t.Errorf("mime_type publishes type %q, want \"string\"", kind)
+	}
+}
+
 // TestMailManagementVerbsCarryDotIdentity asserts that the audit
 // record emitted for each received-message write verb carries the same
 // mail.<verb> identity that is passed to the middleware chain.

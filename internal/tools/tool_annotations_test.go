@@ -500,3 +500,65 @@ func TestMailManagementVerbAnnotations(t *testing.T) {
 		}
 	}
 }
+
+// TestAddAttachmentAnnotations asserts the four hints the draft-attachment verb
+// declares, read from the registry under the manage gate.
+//
+// The values are asserted per-verb because the aggregate fold hides them: the
+// mail tool already publishes destructiveHint true because of delete_draft and
+// idempotentHint false because of create_draft, so add_attachment's own
+// declaration of destructive false is invisible in the folded result while
+// being exactly what the domain's help output publishes and what a caller
+// reasons about.
+//
+// It is non-destructive because it only adds: the draft and its existing
+// attachments are untouched and nothing becomes unaddressable. It is
+// non-idempotent because the service mints a new attachment identifier on every
+// successful call, so a repeated call with identical arguments leaves a second
+// attachment rather than the same end state.
+func TestAddAttachmentAnnotations(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "browser",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	var opts []mcp.ToolOption
+	present := false
+	for _, v := range verbSets["mail"] {
+		if v.Name == "add_attachment" {
+			opts, present = v.Annotations, true
+			break
+		}
+	}
+	if !present {
+		t.Fatal("verb \"add_attachment\" is not registered under the maximal mail configuration")
+	}
+
+	readOnly, destructive, idempotent, openWorld, declared := verbHints(opts)
+	if !declared {
+		t.Fatal("verb \"add_attachment\" leaves at least one of the four hints undeclared")
+	}
+	exp := aggregateAnnotationExpectation{readOnly: false, destructive: false, idempotent: false, openWorld: true}
+	if readOnly != exp.readOnly || destructive != exp.destructive ||
+		idempotent != exp.idempotent || openWorld != exp.openWorld {
+		t.Errorf("verb \"add_attachment\" hints = readOnly:%t destructive:%t idempotent:%t openWorld:%t, want readOnly:%t destructive:%t idempotent:%t openWorld:%t",
+			readOnly, destructive, idempotent, openWorld,
+			exp.readOnly, exp.destructive, exp.idempotent, exp.openWorld)
+	}
+}
