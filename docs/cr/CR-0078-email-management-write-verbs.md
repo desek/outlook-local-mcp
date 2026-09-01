@@ -90,9 +90,12 @@ Measured facts about the surface as it stands, all read from the repository at
 
 * `site/src/generated/surface.json` records mail at `fullCount` 13, `defaultCount` 5;
   totals across the four domains are 42 full and 33 default.
-* The composed `mail` tool description is approximately 2 200 characters against the
+* The composed `mail` tool description measures **2 209 characters** against the
   4 000-character bound asserted by `TestDescriptionLengthBounded`
-  (`internal/tools/description_quality_test.go:147`).
+  (`internal/tools/description_quality_test.go:147`). The figure is the length of the
+  registered `mail` tool's `Description` under the maximal configuration, read from the
+  registry rather than estimated. The measurement is deterministic: the description is
+  composed from static registry strings, so it has no noise floor and repeats exactly.
 * Cold-start schema for all four tools is 16 753 bytes, a 77% reduction against the
   74 000-byte pre-aggregation baseline, where the gate requires at least 60%
   (`internal/server/schema_size_test.go`, run at `2cce019`).
@@ -106,7 +109,7 @@ flowchart TD
     A["Caller reads a received message"] --> B["mail.get_message and mail.list_messages"]
     B --> C["Model concludes: file it, flag it, label it, mark it read"]
     C --> D{"Is there a verb for that?"}
-    D -->|"Draft"| E["create_draft, update_draft, delete_draft"]
+    D -->|"Draft"| E["create_draft, create_reply_draft, create_forward_draft, update_draft, delete_draft"]
     D -->|"Received message"| F["No verb exists"]
     F --> G["User re-executes the conclusion by hand in Outlook"]
     B --> H["Reads isRead and flag/flagStatus, and filters on both"]
@@ -203,9 +206,39 @@ domain, which is the ambiguity the project's own vocabulary rule exists to preve
 Reusing `flag_status` and `is_read` keeps one concept to one name, and moves the problem
 to the merged description: the flattened schema would tell an LLM that `flag_status` is a
 filter, while `set_flag` requires it as the value to write. The description, not the name,
-is what must change. This change therefore reuses the names and rewrites the two shared
+is what must change. This change therefore reuses the names and rewrites the shared
 descriptions so each names both senses and the verbs they belong to, and adds a check that
-derives its cases from the registry rather than from a list of the two known instances.
+derives its cases from the registry rather than from a list of known instances.
+
+**The class already has two instances this change did not create.** The mail domain's
+declarations were enumerated from `internal/server/mail_verbs.go` at `2cce019` rather than
+assumed, and three parameters other than `account` are already declared by both a
+read-only and a write verb of the domain:
+
+| Parameter | Published description (first occurrence wins) | Write verbs that also declare it |
+|---|---|---|
+| `message_id` | `get_message`: "The unique identifier of the message to retrieve." | `create_reply_draft`, `create_forward_draft`, `update_draft`, `delete_draft` |
+| `importance` | `list_messages`: "Filter by message importance." | `create_draft`, `update_draft` |
+| `account` | `list_folders`: "Account label or UPN to use. Omit to auto-select the default account." | every write verb of every domain |
+
+`message_id` and `importance` are the same defect as `flag_status` and `is_read`: the
+published text describes only the read sense of a parameter a write verb consumes. A check
+that derives its cases from the registry therefore fails on arrival unless those two are
+rewritten as well, which is why this change rewrites **four** shared descriptions and not
+two. Correcting only the two instances this change introduces is exactly the
+instance-level remedy the project has already recorded as failing to close a class.
+
+`account` is exempt and the exemption is stated in the requirement rather than left to the
+check's author. It is the account-selection parameter, declared with identical text by
+every verb of every domain, carries no read or write sense, and naming its fourteen
+declaring write verbs would inflate the published schema for no gain.
+
+The check is scoped to the `mail` domain. The same enumeration over
+`internal/server/calendar_verbs.go` finds ten shared parameters (`account`, `calendar_id`,
+`categories`, `end_datetime`, `event_id`, `importance`, `is_all_day`, `sensitivity`,
+`show_as`, `start_datetime`), which would make the calendar description rewrites larger
+than this entire change. Extending the check to every domain is recorded as follow-on work
+rather than absorbed here.
 
 `destination_folder_id` is deliberately **not** merged into the existing `folder_id`.
 `folder_id` scopes a read to a folder; the move destination is a different concept in the
@@ -259,8 +292,11 @@ flowchart TD
    to the existing set, and its confirmation **MUST** state the resulting category list.
 7. `set_categories` **MUST** validate the supplied `categories` string with
    `validate.ValidateStringLength` against `validate.MaxCategoriesLen`, the same bound
-   the calendar and draft verbs already apply, and **MUST** split it on commas with
-   surrounding whitespace trimmed and empty entries dropped.
+   `create_event` (`internal/tools/create_event.go:219`) and `update_event`
+   (`internal/tools/update_event.go:195`) already apply and the only two call sites of
+   that bound at `2cce019`; no draft verb declares a `categories` parameter. It **MUST**
+   split the value on commas with surrounding whitespace trimmed and empty entries
+   dropped.
 8. `set_categories` **MUST** treat an empty or whitespace-only `categories` value as an
    instruction to clear every category, and its confirmation **MUST** state that the
    message now carries no categories rather than printing an empty list.
@@ -269,9 +305,10 @@ flowchart TD
 10. Every one of the four verbs **MUST** validate `message_id` with
     `validate.ValidateResourceID` and **MUST** reject an invalid identifier before any
     Graph request is issued.
-11. None of the four verbs **MUST** reject a message on the basis of its draft state:
-    they operate on received messages, and the `isDraft` guard that `update_draft` and
-    `delete_draft` apply **MUST NOT** be applied here.
+11. Every one of the four verbs **MUST NOT** reject a message on the basis of its draft
+    state: they operate on received messages, and the `isDraft` guard that `update_draft`
+    and `delete_draft` apply (`verifyIsDraft`, `internal/tools/update_draft.go:218`)
+    **MUST NOT** be applied here.
 12. Every one of the four verbs **MUST** return a text confirmation unconditionally and
     **MUST NOT** declare an `output` parameter, per the project's write-verb tiering rule.
 13. Every confirmation **MUST** be constructed from the message Graph returns in the
@@ -284,9 +321,15 @@ flowchart TD
     identity `mail.<verb>`, so the audit record and the OpenTelemetry attributes carry the
     same `{domain}.{operation}` identity as every other verb.
 16. For every parameter name declared by both a read-only verb and a write verb of the
-    same domain, the description published on the aggregate tool **MUST** name each
-    declaring write verb, so the flattened schema cannot describe a shared parameter in
-    only its read sense.
+    **`mail`** domain, excluding the account-selection parameter `account`, the
+    description published on the aggregate tool **MUST** name at least one declaring write
+    verb, so the flattened schema cannot describe a shared parameter in only its read
+    sense. At `2cce019` this predicate selects exactly four parameters once this change
+    lands: `flag_status` and `is_read`, newly shared by `set_flag` and `mark_read`, and
+    `message_id` and `importance`, already shared before this change and already published
+    in their read sense only. All four descriptions **MUST** be rewritten. `account` is
+    exempt because it is declared with identical text by every verb of every domain and
+    carries no read or write sense.
 17. `move_message` **MUST** name its destination parameter `destination_folder_id` and
     **MUST NOT** reuse `folder_id`, which scopes a read rather than naming a destination.
 18. Every one of the four verbs **MUST** carry a non-empty `Summary` of at most eighty
@@ -321,9 +364,9 @@ flowchart TD
 1. Each verb's handler **MUST** live in its own file under `internal/tools/`, named for
    the verb, mirroring the existing one-file-per-verb layout of the mail domain.
 2. The composed `mail` tool description **MUST** stay below 4 000 characters. It measures
-   approximately 2 200 characters at `2cce019` with thirteen verbs, so four additional
-   inventory lines and a longer introduction leave substantial headroom, but the bound is
-   asserted rather than assumed.
+   2 209 characters at `2cce019` with thirteen verbs, so four additional inventory lines
+   and a longer introduction leave substantial headroom, but the bound is asserted by
+   `TestDescriptionLengthBounded` rather than assumed.
 3. The cold-start schema reduction **MUST** stay at or above 60% against the documented
    74 000-byte baseline. It measures 77% at `2cce019` (16 753 bytes for four tools).
 4. Every error raised by the four verbs **MUST** carry a fix instruction naming what to
@@ -331,9 +374,9 @@ flowchart TD
    headless caller that cannot read an interactive surface still receives the correction.
 5. The change **MUST NOT** add a third-party dependency.
 6. Each verb **MUST** issue exactly one Graph request on the success path: one `POST` for
-   `move_message` and one `PATCH` for each of the other three. No verb **MUST** perform a
-   read-modify-write round trip, since each writes a property whose new value is supplied
-   in full by the caller.
+   `move_message` and one `PATCH` for each of the other three. Every one of the four verbs
+   **MUST NOT** perform a read-modify-write round trip, since each writes a property whose
+   new value is supplied in full by the caller.
 7. Every handler **MUST** route its Graph call through `graph.RetryGraphCall` and
    `graph.WithTimeout`, and **MUST** redact Graph errors with the existing helpers, so
    retry, timeout, and redaction behaviour is identical to the verbs already registered.
@@ -352,11 +395,21 @@ flowchart TD
   the four verbs. It is separate from `FormatDraftConfirmation`
   (`internal/tools/draft_helpers.go:84`) because the draft formatter closes with the
   draft-specific sentence about the Drafts folder, which is false for these verbs.
+  The project convention names `internal/tools/text_format.go` as the home for text
+  formatters; this file follows the existing exception rather than inventing one, since
+  `FormatDraftConfirmation` already lives in `draft_helpers.go` alongside the verbs it
+  serves, and the new formatter is used by exactly the four handlers of this change.
+* `internal/validate/validate.go`: a `ValidateFlagStatus` helper alongside the existing
+  `ValidateImportance` (line 137) and `ValidateContentType` (line 218), returning an error
+  that names the three accepted values (Phase 1, NFR-4).
 * `internal/server/mail_verbs.go`: four new `build*Verb` constructors appended to the
   `MailManageEnabled` block of `buildMailVerbs` (line 130), carrying `Summary`,
   `Description`, `Examples`, `SeeDocs`, `Annotations`, and `Schema` per FR-14 and FR-18;
-  plus the two shared-parameter description rewrites on `buildListMessagesVerb` required
-  by FR-16.
+  plus the four shared-parameter description rewrites required by FR-16, on
+  `buildListMessagesVerb` (`flag_status`, `is_read`, `importance`) and
+  `buildGetMessageVerb` (`message_id`).
+* `internal/server/mail_verbs_test.go`: the registry-derived shared-parameter check and
+  the destination-versus-scope assertion (Phase 4).
 * `internal/server/server.go`: the `mail` domain `Intro` string (line 174), which
   enumerates the `MailManageEnabled` write verbs by name and is currently exhaustive.
 * `internal/graph/enums.go`: a `ParseFlagStatus` helper alongside the existing
@@ -377,10 +430,13 @@ flowchart TD
 * `docs/prompts/mcp-tool-crud-test.md`: four new lifecycle steps and the widened skip
   range (FR-22).
 * `internal/tools/dispatch_registry_test.go`: the `verbInventoryGolden` list (FR-23).
+* `internal/server/manifest_sync_test.go` (new): the derived check asserting each domain's
+  `extension/manifest.json` description names every verb the registry registers for that
+  domain (Phase 5).
 * `scripts/crud-test.sh`: **no change required.** Its per-domain accounting keys on the
   MCP tool name `mcp__outlook-local-mcp__mail`, not on the operation verb
-  (`scripts/crud-test.sh:114`), so additional mail verbs raise the existing `mcp_mail`
-  counter. The script's own maintenance comment (`:100-108`) requires edits only for a new
+  (`scripts/crud-test.sh:115`), so additional mail verbs raise the existing `mcp_mail`
+  counter. The script's own maintenance comment (`:100-109`) requires edits only for a new
   top-level domain, and this change adds none.
 * `docs/bench/crud-runs.csv`: **no column change.** The 23-column header is per-domain,
   not per-verb; new runs will simply record a higher `mcp_mail` value and more turns.
@@ -393,8 +449,13 @@ flowchart TD
 * Their handlers, registry entries, annotations, schemas, and unit tests.
 * The shared write-confirmation formatter for received-message writes.
 * The `ParseFlagStatus` enum helper.
-* The two shared-parameter description rewrites on `list_messages` required by the
-  flattened aggregate schema, and the derived check that closes that class.
+* The four shared-parameter description rewrites required by the flattened aggregate
+  schema (`flag_status`, `is_read`, and `importance` on `list_messages`, and `message_id`
+  on `get_message`), and the registry-derived check, scoped to the `mail` domain, that
+  closes that class there. Two of the four are pre-existing instances the check surfaces;
+  they are in scope because a check that derives its cases from the registry fails on
+  arrival without them, and correcting only the instances this change introduces is the
+  instance-level remedy the project has already recorded as failing to close a class.
 * The domain introduction, the extension manifest mail description, and the regenerated
   surface manifest.
 * A derived check asserting the extension manifest's per-domain descriptions name every
@@ -478,12 +539,15 @@ four inventory lines in the description, and exactly two new flattened parameter
 `destination_folder_id` and `categories`. `flag_status` and `is_read` add no entry,
 because they merge into the declarations `list_messages` already publishes, and
 `message_id` and `account` are already published. Both measured gates keep large margins:
-description length approximately 2 200 of 4 000 characters, cold-start schema 16 753
-bytes against a ceiling of roughly 29 600.
+description length 2 209 of 4 000 characters, cold-start schema 16 753 bytes against a
+ceiling of roughly 29 600.
 
-The one place this change touches existing behaviour is the two shared parameter
-descriptions on `list_messages`, which are rewritten to cover both senses. No filter
-semantics change; only the text an LLM reads.
+The one place this change touches existing behaviour is four shared parameter
+descriptions: `flag_status`, `is_read`, and `importance` on `list_messages`, and
+`message_id` on `get_message`, each rewritten to cover both senses. No filter semantics
+change and no parameter is renamed; only the text an LLM reads. Two of the four,
+`importance` and `message_id`, were already published in their read sense only before this
+change, and are corrected here because the registry-derived check of FR-16 selects them.
 
 ### Business Impact
 
@@ -498,7 +562,8 @@ the same shape as handlers that already exist, and the risk concentrates in one 
 ```mermaid
 flowchart LR
     subgraph P1["Phase 1: Shared foundations"]
-        A1["ParseFlagStatus enum helper"] --> A2["Received-message confirmation formatter"]
+        A1["ParseFlagStatus enum helper"] --> A2["ValidateFlagStatus validation helper"]
+        A2 --> A3["Received-message confirmation formatter"]
     end
     subgraph P2["Phase 2: The three property writes"]
         B1["set_flag"] --> B2["set_categories"]
@@ -508,8 +573,8 @@ flowchart LR
         C1["move_message handler"] --> C2["New identifier in the confirmation"]
     end
     subgraph P4["Phase 4: Registry and flattened schema"]
-        D1["Four registry entries with annotations"] --> D2["Shared parameter descriptions"]
-        D2 --> D3["Derived shared-parameter check"]
+        D1["Four registry entries with annotations"] --> D2["Four shared parameter descriptions"]
+        D2 --> D3["Derived shared-parameter check, mail domain"]
     end
     subgraph P5["Phase 5: Surface, docs, harness"]
         E1["Domain intro and extension manifest"] --> E2["Regenerate surface manifest"]
@@ -521,15 +586,21 @@ flowchart LR
 
 ### Phase 1: Shared foundations
 
-Build the two pieces both later phases depend on, so no handler invents its own.
+Build the three pieces both later phases depend on, so no handler invents its own.
 
 1. Add `ParseFlagStatus(s string) models.FollowupFlagStatus` to `internal/graph/enums.go`,
-   mirroring `ParseImportance`. Accept exactly `notFlagged`, `flagged`, and `complete`.
-   An unrecognised value is rejected by the validation helper before parsing, so the
-   parser itself needs no error return, matching the existing helpers' shape.
+   mirroring `ParseImportance` (`internal/graph/enums.go:38`). Accept exactly
+   `notFlagged`, `flagged`, and `complete`, the three values the pinned SDK's
+   `models.FollowupFlagStatus` defines. The parser **MUST NOT** return an error, matching
+   the existing helpers' shape, and **MUST** default an unrecognised value to
+   `NOTFLAGGED_FOLLOWUPFLAGSTATUS`. Because that default *clears* a flag rather than
+   leaving it unchanged, `validate.ValidateFlagStatus` **MUST** be called before the
+   parser on every path, and the verb's schema **MUST** carry the three-value enum, so an
+   unrecognised value is refused before it can reach the parser at all. The doc comment
+   states the default explicitly for the same reason.
 2. Add a `validate.ValidateFlagStatus` helper alongside the existing
-   `ValidateImportance` and `ValidateContentType` in `internal/validate/validate.go`,
-   returning an error that names the three accepted values (NFR-4).
+   `ValidateImportance` (`internal/validate/validate.go:137`) and `ValidateContentType`
+   (`:218`), returning an error that names the three accepted values (NFR-4).
 3. Add `internal/tools/mail_write_confirmation.go` with a formatter that renders the
    action, the subject (falling back to `(No subject)`), the message identifier, the
    changed field and its resulting value, and an optional extra line for the consequence
@@ -579,7 +650,9 @@ They are built together because they share a shape and must not diverge.
 3. A move whose destination does not resolve returns a redacted Graph error accompanied by
    the instruction to obtain a destination identifier from `list_folders` (NFR-4).
 
-**Affected components:** `internal/tools/move_message.go` (new) and its test file.
+**Affected components:** `internal/tools/move_message.go` (new) and its test file, plus
+`internal/tools/mail_write_verbs_test.go` (new), which holds the assertions that span all
+four handlers and can only be written once the fourth handler exists.
 
 ### Phase 4: Registry entries and the flattened schema
 
@@ -595,15 +668,23 @@ They are built together because they share a shape and must not diverge.
 3. Declare all four annotation hints explicitly on each verb, per the matrix (FR-14).
 4. Declare each verb's `Schema`, marking `message_id` and the verb's value parameter as
    required, and declaring **no** `output` parameter (FR-12).
-5. Rewrite the `flag_status` and `is_read` parameter descriptions on
-   `buildListMessagesVerb` so each names both its filter sense and the write verb that
-   consumes it, since first-occurrence-wins merging publishes those two strings on the
-   aggregate tool (FR-16).
-6. Add the derived check in `internal/server/mail_verbs_test.go`: collect every parameter
-   name declared by more than one verb in a domain, partition the declaring verbs by their
-   `readOnlyHint`, and assert that where both partitions are non-empty the published
-   description names each declaring write verb. The check takes its cases from the
-   registry, so a future shared parameter is covered without anyone adding it to a list.
+5. Rewrite four shared parameter descriptions so each names both its read sense and at
+   least one write verb that consumes it, since first-occurrence-wins merging publishes
+   those strings on the aggregate tool (FR-16). Three are on `buildListMessagesVerb`
+   (`flag_status`, `is_read`, `importance`) and one is on `buildGetMessageVerb`
+   (`message_id`). `importance` and `message_id` are pre-existing instances of the same
+   defect and are corrected here because the derived check in step 6 selects them; the
+   filter semantics of `list_messages` are unchanged, and only the published text moves.
+6. Add the derived check in `internal/server/mail_verbs_test.go`: build the `mail` domain's
+   verb set under the maximal configuration, collect every parameter name declared by more
+   than one verb, partition the declaring verbs by their `readOnlyHint`, and assert that
+   where both partitions are non-empty the published description names at least one
+   declaring write verb. The check takes its cases from the registry, so a future shared
+   mail parameter is covered without anyone adding it to a list. `account` is the single
+   exempted name, exempted in the check with the reason stated inline: it is declared with
+   identical text by every verb of every domain and carries no read or write sense.
+   The check is scoped to the `mail` domain; extending it to `calendar`, where the same
+   enumeration finds ten shared parameters, is follow-on work and is out of scope here.
 
 **Affected components:** `internal/server/mail_verbs.go`,
 `internal/server/mail_verbs_test.go`.
@@ -654,7 +735,7 @@ call.
 | `internal/tools/mail_write_verbs_test.go` | `TestInvalidMessageIDRejectedByEveryWriteVerb` | Identifier validation applies to all four, not only the one it was written for | Malformed `message_id` against each of the four handlers | Every call errors, and no request reaches the test server |
 | `internal/tools/mail_write_verbs_test.go` | `TestNoDraftGuardOnReceivedMessageWrites` | None of the four applies the draft guard | Canned message with `isDraft` false, each of the four handlers | Every call succeeds, and none returns the not-a-draft refusal |
 | `internal/tools/mail_write_verbs_test.go` | `TestWriteVerbsHonourTimeoutAndRedaction` | Timeout reporting and Graph error redaction are the shared behaviour, not per-handler improvisation | A test server that hangs, and one that returns a Graph error carrying a token-like string | Timeout message names the configured seconds; the error text is redacted and carries a fix instruction |
-| `internal/tools/move_message_test.go` | `TestMoveMessage_UnresolvableDestinationCarriesFix` | The error names the correction | Canned Graph 404 for the destination | Error text names `list_folders` as the way to obtain a destination ID |
+| `internal/tools/move_message_test.go` | `TestMoveMessage_UnresolvableDestinationCarriesFix` | The error names the correction on both channels | Canned Graph 404 for the destination, with the handler's logger bound to a capture buffer | Tool result text names `list_folders` as the way to obtain a destination ID, and the captured log record carries the same correction (AC-24) |
 | `internal/tools/set_flag_test.go` | `TestSetFlag_Success` | The follow-up flag is written | `flag_status` of `flagged` | PATCH body carries the flag; confirmation states `flagged` |
 | `internal/tools/set_flag_test.go` | `TestSetFlag_RejectsUnknownStatus` | Only the three statuses are accepted | `flag_status` of `urgent` | Error naming `notFlagged`, `flagged`, `complete`; no request issued |
 | `internal/tools/set_flag_test.go` | `TestSetFlag_AcceptsNonDraftMessage` | No draft guard is applied | Canned message with `isDraft` false | Success, not the "not a draft" refusal |
@@ -665,16 +746,18 @@ call.
 | `internal/tools/mark_read_test.go` | `TestMarkRead_SetsRead` | The read state is written | `is_read` true | PATCH body sets `isRead` true; confirmation states read |
 | `internal/tools/mark_read_test.go` | `TestMarkRead_SetsUnread` | The inverse is written | `is_read` false | PATCH body sets `isRead` false; confirmation states unread |
 | `internal/tools/mark_read_test.go` | `TestMarkRead_RequiresIsRead` | The boolean is required | `message_id` only | Error naming `is_read`; no request issued |
-| `internal/tools/mail_write_confirmation_test.go` | `TestConfirmationsUseGraphResponseNotArguments` | Confirmations echo the service, not the request | Canned response whose values differ from the request arguments | Every confirmation reports the response values |
-| `internal/tools/mail_write_confirmation_test.go` | `TestStateSetVerbsAreIdempotent` | Repeating a call leaves the same end state | Two identical calls to each of the three property writes | Identical PATCH body and identical confirmation text both times |
-| `internal/tools/mail_write_confirmation_test.go` | `TestSingleGraphRequestPerWrite` | No read-modify-write round trip | One call per verb | Exactly one request observed per verb |
+| `internal/tools/mail_write_confirmation_test.go` | `TestFormatMailWriteConfirmationFields` | The shared formatter renders every required field and the no-subject fallback | Action, subject (present and empty), message ID, changed field and value, optional consequence line | The rendered text names the action, the subject or `(No subject)`, the ID, and the resulting value |
+| `internal/tools/mail_write_verbs_test.go` | `TestConfirmationsUseGraphResponseNotArguments` | Confirmations echo the service, not the request | Canned response whose values differ from the request arguments, against each of the four handlers | Every confirmation reports the response values |
+| `internal/tools/mail_write_verbs_test.go` | `TestStateSetVerbsAreIdempotent` | Repeating a call leaves the same end state | Two identical calls to each of the three property writes | Identical PATCH body and identical confirmation text both times |
+| `internal/tools/mail_write_verbs_test.go` | `TestSingleGraphRequestPerWrite` | No read-modify-write round trip | One call per verb | Exactly one request observed per verb |
 | `internal/tools/tool_annotations_test.go` | `TestMailManagementVerbAnnotations` | Each new verb's four hints match the matrix | The registry under `MailManageEnabled` | `move_message` non-read-only, destructive, non-idempotent, open-world; the other three non-destructive and idempotent |
 | `internal/tools/verb_metadata_test.go` | `TestWriteVerbsDeclareNoOutputParameter` | Write verbs take no output tier, derived across every domain | Every registered verb whose `readOnlyHint` is false | No verb declares an `output` parameter |
-| `internal/server/mail_verbs_test.go` | `TestSharedParametersNameTheirWriteVerbs` | A shared parameter's published description covers its write sense | Every parameter declared by both a read-only and a write verb of a domain | The published description names each declaring write verb |
+| `internal/server/mail_verbs_test.go` | `TestSharedParametersNameTheirWriteVerbs` | A shared parameter's published description covers its write sense, with the cases taken from the registry rather than from a list | Every parameter declared by both a read-only and a write verb of the `mail` domain under the maximal configuration, excluding `account` | The published description names at least one declaring write verb, for `flag_status`, `is_read`, `importance`, and `message_id` alike |
 | `internal/server/mail_verbs_test.go` | `TestDestinationFolderIDIsNotFolderID` | Scoping and destination stay distinct | The mail aggregate schema | Both `folder_id` and `destination_folder_id` are published, with distinct descriptions |
 | `internal/server/manifest_sync_test.go` | `TestManifestDescribesEveryRegisteredVerb` | The extension manifest names every verb of every domain | `extension/manifest.json` and the registry under the maximal configuration | Every verb name appears in its domain's description; the `tools` array holds exactly four entries |
 | `internal/server/server_test.go` | `TestRegisterTools_MailManage_RegistersManagementVerbs` | The four verbs register only when gated on | `MailManageEnabled` true | All four present in the operation enum; tool count 4 |
 | `internal/server/readonly_test.go` | `TestReadOnlyBlocksMailManagementVerbs` | Read-only mode blocks all four | Read-only server, each verb invoked | Each returns the read-only refusal naming `mail.<verb>` |
+| `internal/server/mail_verbs_test.go` | `TestMailManagementVerbsCarryDotIdentity` | The audit and telemetry identity is the same `mail.<verb>` string the refusal names | Each of the four verbs invoked against a server with audit capture enabled | The emitted audit record's tool field reads `mail.<verb>`, matching the identity passed to `wrapWrite` and to `WithObservability` (AC-12) |
 | `internal/docs/catalog_test.go` | `TestMailGatingRowNamesMessageManagement` | The embedded gating table stops reading as exhaustive | The embedded `concepts.md` bundle entry | The mail management row names received-message management alongside draft management |
 
 ### Tests to Modify
@@ -709,6 +792,14 @@ criterion whose gate is invisible reads as ungraded.
 | `internal/surface/surface_test.go` | `TestRecordCountsMatchBuiltVerbs`, `TestDefaultCountExcludesGatedVerbs`, `TestEveryVerbCarriesSummaryAndGate` | AC-17: derived counts and gate attribution for the four new verbs |
 | `internal/auth/auth_test.go` | `TestScopes_CalendarOnly`, `TestScopes_WithMail`, `TestScopes_MailManage`, `TestScopes_MailManageImpliesRead`, `TestScopes_NoMailSend` | AC-21: the requested scope set is unchanged and `Mail.Send` stays unrequested |
 | `internal/tools/dispatch_test.go` | the registry-size assertion at `:267` | AC-1: every registered verb is routable, with no gap between the slice and the map |
+
+One clause of AC-22, "no third-party dependency has been added", is not graded by a Go test
+and is graded instead by `make tidy` inside `make ci` together with an empty `go.mod` and
+`go.sum` diff on the branch. It is recorded here so the criterion does not read as
+ungraded. Likewise, AC-18's "the lifecycle prompt contains a step exercising each of the
+four verbs" is graded by review of the prompt diff, since nothing in the repository binds
+the prompt's prose to the registry, which is the open drift class the project already
+documents.
 
 ## Acceptance Criteria
 
@@ -834,16 +925,19 @@ Then move_message is not read-only, is destructive, is not idempotent, and is op
 Given a server started in read-only mode with mail management enabled
 When each of the four verbs is invoked
 Then each returns the read-only refusal naming its mail dot verb identity
-  And that same identity is the one recorded in the audit record and the telemetry attributes
+Given instead a server with mail management enabled and audit capture on
+When each of the four verbs is invoked
+Then the emitted audit record names the same mail dot verb identity, which is the string passed to both the observability wrapper and the audit wrapper
 ```
 
 ### AC-13: A shared parameter's published description covers its write sense
 
 ```gherkin
-Given a parameter name declared by both a read-only verb and a write verb of the same domain
+Given a parameter name other than account declared by both a read-only verb and a write verb of the mail domain
 When the description published on the aggregate tool is read
-Then it names each declaring write verb
-  And a future shared parameter is covered by the same check without being added to a list
+Then it names at least one declaring write verb
+  And this holds for message_id and importance, which were already shared before this change, as well as for flag_status and is_read
+  And a future shared mail parameter is covered by the same check without being added to a list
 ```
 
 ### AC-14: Scoping and destination stay distinct
@@ -1040,9 +1134,13 @@ verb non-idempotent so a client does not retry it blindly. AC-2 grades all three
 **Impact:** medium
 **Mitigation:** First-occurrence-wins merging is a measured property of
 `aggregateSchemaOptions`, not a hypothesis, and `list_messages` wins both `flag_status`
-and `is_read` by registration order. The two descriptions are rewritten to cover both
-senses, and the check that grades it derives its cases from the registry rather than
-naming the two known instances, which is what closes the class rather than the instance.
+and `is_read` by registration order. Four descriptions are rewritten to cover both senses,
+and the check that grades it derives its cases from the registry rather than naming the
+instances this change happens to introduce, which is what closes the class rather than the
+instance. That the derived check finds two instances (`message_id` and `importance`) which
+predate this change is itself the evidence that an instance list would have been the wrong
+remedy: they had been published in their read sense only since the mail domain was built,
+and nothing surfaced them until a check took its cases from the registry.
 
 ### Risk 3: `destructiveHint: true` on a move is over-cautious
 
@@ -1099,7 +1197,19 @@ harness run afterwards is evidence about those four steps and not about the clas
   CR-0068, both completed.
 * Picks up two items CR-0058 deferred by name; CR-0058 is completed and nothing in it
   needs reopening.
-* Independent of every open change request.
+* No functional dependency on any open change request. There is, however, an **ordering
+  dependency on the absolute surface figures**. CR-0079 through CR-0083 were authored
+  after this one on the same branch, are all still `draft`, and each states its own
+  absolute surface counts against a baseline of 42 full verbs: CR-0079 adds a mail write
+  verb, CR-0080 and CR-0081 add calendar verbs, and CR-0082 and CR-0083 each add a new
+  top-level domain tool. The figures this change request states, mail at 17 `fullCount`
+  and 5 `defaultCount` with totals of 46 full and 33 default (FR-21, FR-26, AC-17), hold
+  only if this change lands **before** those five. If any of them lands first, the
+  regenerated `site/src/generated/surface.json` is still authoritative and this document's
+  numbers are amended to match it rather than the reverse; `make surface-manifest` and
+  `TestCommittedManifestMatchesRecord` decide the question, not this paragraph.
+  FR-1's "the registered tool count **MUST** remain four" is a statement about this change
+  in isolation and is not violated by a later change request that adds a fifth domain.
 
 ## Estimated Effort
 
@@ -1159,6 +1269,21 @@ overturn it rather than discover it in the diff.
 6. **Target version 0.10.0.** Assumed from the most recent change request's target of
    0.9.0. The released version at `2cce019` is 0.6.0, so the target is a placeholder to be
    reconciled at release-planning time rather than a commitment.
+7. **The shared-parameter check is scoped to the `mail` domain, and `account` is exempt.**
+   Assumed. The registry was enumerated rather than reasoned about: a domain-agnostic
+   check selects three further mail parameters (`message_id`, `importance`, `account`) and
+   ten calendar parameters, so the domain-agnostic reading turns a four-verb change into a
+   cross-domain description rewrite. Two of the three extra mail parameters are corrected
+   here because the check would otherwise fail on arrival; `account` is exempt because it
+   has no read or write sense to disambiguate. A reviewer who wants the check
+   domain-agnostic should expect the calendar rewrites as a separate change request rather
+   than folded into this one.
+8. **`message_id` and `importance` description rewrites are in scope.** Assumed, on the
+   ground above: they are pre-existing instances of the class this change closes, they
+   cost two lines, and excluding them would force the check to carry an exclusion list,
+   which is the instance-level remedy the project has recorded as not closing a class.
+   A reviewer who reads them as unrelated defects can move them to their own change
+   request, at the cost of the check no longer passing on arrival.
 
 ## Related Items
 
@@ -1188,3 +1313,132 @@ empty result an in-place update would return. A confirmation that omitted the ne
 identifier would leave the caller holding a handle to nothing, having been told the
 operation succeeded, which is the specific class of failure this project's error and
 confirmation rules exist to prevent.
+
+<!-- review-summary -->
+Reviewed 2026-09-01 against working tree `4367f74` on branch
+`docs/cr-implementation-set-0079-0083`. Every cited path, line number, symbol, test name,
+SDK signature, and measured figure was checked against the repository or the pinned module
+cache rather than accepted from the document.
+
+FINDINGS: 16 (drift 3, contradiction 6, ambiguity 4, scope/convention 3).
+FIXES APPLIED: 15. UNRESOLVED: 0.
+
+DRIFT (3)
+
+1. No source drift. The CR's `source-commit` `2cce019` and current `HEAD` `4367f74` differ
+   only by documentation: `git diff --stat 2cce019..HEAD` touches one explore-cache entry
+   and six CR files, no Go source, no manifest, no generated surface. Every cited location
+   still resolves with the cited shape: `internal/tools/list_messages.go:466` and `:478`,
+   `internal/graph/mail_serialize.go:82`, `internal/auth/auth.go:34` and `:56-65`,
+   `internal/tools/update_draft.go:218`, `internal/server/mail_verbs.go:95` and `:130`,
+   `internal/tools/dispatch_aggregate_schema.go:25`, `internal/tools/draft_helpers.go:84`,
+   `internal/server/server.go:174`, `internal/tools/description_quality_test.go:147`,
+   `internal/surface/build.go:58`, `internal/tools/test_helpers_test.go:30`,
+   `internal/tools/dispatch_test.go:267`, `extension/manifest.json:7` and `:60`. Every
+   named test file and test function exists. The pinned SDK surfaces were read from
+   `msgraph-sdk-go@v1.100.0` in the module cache: `ItemMessagesItemMoveRequestBuilder.Post`
+   returns `Messageable`, `ItemMessagesItemMovePostRequestBody.SetDestinationId` exists,
+   `ItemMessagesMessageItemRequestBuilder.Patch` returns `Messageable`,
+   `Message.SetFlag`, `Message.SetIsRead`, `OutlookItem.SetCategories`, and
+   `models.FollowupFlagStatus` whose three values are exactly `notFlagged`, `complete`,
+   `flagged`.
+2. Line-number drift in two harness citations. `scripts/crud-test.sh:114` is the *calendar*
+   accounting line; the `mcp__outlook-local-mcp__mail` pattern is at `:115`. The
+   maintenance comment spans `:100-109`, not `:100-108`. FIXED: both corrected in Affected
+   Components.
+3. Sibling-CR overlap. CR-0079 through CR-0083 were authored after this CR on the same
+   branch and are all still `draft`. Each states absolute surface counts against the same
+   42-verb baseline; CR-0079 adds a mail write verb, CR-0080 and CR-0081 add calendar
+   verbs, CR-0082 and CR-0083 each add a new top-level domain tool. This CR's figures
+   (mail 17 full, 5 default; totals 46 full, 33 default) are landing-order dependent.
+   FIXED: an ordering-dependency bullet added to Dependencies, naming the generated
+   manifest and `TestCommittedManifestMatchesRecord` as the authority over the document.
+
+CONTRADICTIONS (6)
+
+4. FR-16 contradicted In Scope, Technical Impact, and Phase 4 step 5. FR-16 was written
+   domain-agnostically ("both a read-only verb and a write verb of the same domain") while
+   every other section committed to exactly two `list_messages` rewrites. The registry was
+   enumerated rather than reasoned about: a domain-agnostic check selects `message_id`,
+   `importance`, and `account` in the mail domain and ten parameters in the calendar
+   domain, so the registry-derived check of Phase 4 step 6 would have failed on arrival.
+   FIXED: FR-16 scoped to the `mail` domain with `account` exempted and the assertion
+   relaxed from "each declaring write verb" to "at least one"; the rewrite count raised
+   from two to four (`flag_status`, `is_read`, `importance` on `list_messages`,
+   `message_id` on `get_message`); In Scope, Technical Impact, Affected Components,
+   Phase 4 steps 5 and 6, AC-13, Risk 2, and the flattened-schema section all reconciled;
+   a measured table of the pre-existing instances added; Open Questions 7 and 8 record the
+   scoping decision so a reviewer can overturn it.
+5. FR-7 claimed `validate.MaxCategoriesLen` is a bound "the calendar and draft verbs
+   already apply". Measured: its only two call sites are `internal/tools/create_event.go:219`
+   and `internal/tools/update_event.go:195`; no draft verb declares a `categories`
+   parameter at all. FIXED: both call sites named, the draft claim withdrawn.
+6. AC-12 asserted the `mail.<verb>` identity reaches the audit record and the telemetry
+   attributes, but its only test entry graded the read-only refusal text. FIXED: AC-12
+   split into two Given clauses and a `TestMailManagementVerbsCarryDotIdentity` row added.
+7. AC-24 asserted the correction reaches "the log record", but its test entry graded only
+   the tool result. FIXED: the test row now binds the handler's logger to a capture buffer
+   and asserts both channels.
+8. The Current State diagram named three draft verbs where the Current State table and the
+   registry name five. FIXED: all five named.
+9. Three cross-verb behavioural tests were filed in `mail_write_confirmation_test.go`, the
+   unit-test file for the formatter, while the equivalent cross-verb tests were filed in
+   `mail_write_verbs_test.go`. FIXED: retargeted to `mail_write_verbs_test.go`, and a
+   genuine formatter unit test added in its place.
+
+AMBIGUITY (4)
+
+10. FR-11 read "None of the four verbs **MUST** reject a message on the basis of its draft
+    state", which under RFC 2119 states no prohibition at all. FIXED: rewritten as
+    "Every one of the four verbs **MUST NOT** reject".
+11. NFR-6 read "No verb **MUST** perform a read-modify-write round trip", the same
+    defect. FIXED: rewritten as "Every one of the four verbs **MUST NOT** perform".
+12. The composed mail description was stated three times as "approximately 2 200
+    characters" inside a list headed "measured facts". Measured: **2 209** characters, and
+    the cold-start schema confirmed at **16 753** bytes and 77% reduction, both read from
+    the registry via a throwaway test that was deleted, leaving the tree clean. FIXED: all
+    three sites state the measured figure, and NFR-2 names the asserting test.
+13. Phase 1 left the unknown-value behaviour of `ParseFlagStatus` unstated. The helper it
+    mirrors silently defaults, and for a flag the silent default (`notFlagged`) *clears*
+    the flag rather than leaving it unchanged. FIXED: the default is stated, validation
+    before parsing is made mandatory, and the schema enum is named as the second gate.
+
+SCOPE AND CONVENTION (3)
+
+14. `internal/validate/validate.go` is edited by Phase 1 step 2 but was absent from
+    Affected Components. FIXED: added, with the neighbouring helpers' line numbers.
+15. `internal/server/mail_verbs_test.go`, `internal/server/manifest_sync_test.go` (new),
+    and `internal/tools/mail_write_verbs_test.go` (new) appeared in phase-level lists or
+    the test strategy but not in Affected Components. FIXED: added.
+16. `CLAUDE.md` states text formatters live in `internal/tools/text_format.go`, while the
+    CR places the new formatter in `internal/tools/mail_write_confirmation.go`. There is
+    precedent (`FormatDraftConfirmation` in `draft_helpers.go:84`) but the CR did not say
+    so, leaving the deviation reading as unconsidered. FIXED: the precedent is now stated
+    in Affected Components.
+
+VERIFIED, NO FIX REQUIRED
+
+* The extension manifest is in full sync at `2cce019`, checked mechanically rather than
+  read: all 42 registered verb names appear in their domain's manifest description, so the
+  derived check proposed in Phase 5 passes on arrival as the CR claims.
+* `TestWriteVerbsDeclareNoOutputParameter` passes on arrival: no existing verb whose
+  `readOnlyHint` is false declares an `output` parameter, across all four domains.
+* The annotation fold claim holds: `delete_draft` declares `destructiveHint: true` and
+  `create_draft` declares `idempotentHint: false`, so the folded mail annotation is
+  unchanged by the four new verbs, and the configuration-dependent table in
+  `docs/concepts.md#tool-annotation-semantics` stays correct as written.
+* The quoted skip instruction is verbatim: `docs/prompts/mcp-tool-crud-test.md:583` reads
+  "**skip** Steps 31 through 35".
+* `docs/concepts.md:65` reads "including draft management", so FR-24's premise holds.
+* Both `SeeDocs` anchors resolve: `## Mail gating` and `## Tool annotation semantics`.
+* `docs/bench/crud-runs.csv` has exactly 23 columns, per-domain, as the CR states.
+* Requirement-to-criterion coverage is complete: all 26 functional and 8 non-functional
+  requirements are exercised by at least one of the 25 acceptance criteria, and every
+  criterion now has at least one test entry or a named non-test gate.
+
+UNRESOLVED: none. Two items that would ordinarily go to the author, the FR-16 scoping and
+the inclusion of the two pre-existing description rewrites, were decided on the most
+conservative reading consistent with the registry as it stands and are recorded in
+`docs/backlog/cr-0078-0083.md` and in Open Questions 7 and 8, where a reviewer can overturn
+them on the record.
+<!-- /review-summary -->
