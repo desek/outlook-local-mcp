@@ -1005,3 +1005,52 @@ func TestMailIntroNamesEveryGatedWriteVerb(t *testing.T) {
 		}
 	}
 }
+
+// TestRegisterTools_CalendarSchedulingReads verifies that both calendar
+// scheduling reads appear in the calendar tool's published operation enum in
+// every configuration, and that publishing them adds no top-level tool.
+//
+// The calendar domain has no feature gate, so the claim being graded is that
+// neither verb acquired one by accident: the enum is read under the default
+// configuration and again under the configuration that turns every mail flag
+// on, and both must carry both verbs. The tool count is asserted alongside
+// because the surface rule is that a new verb joins an existing aggregate
+// rather than becoming a fifth tool.
+func TestRegisterTools_CalendarSchedulingReads(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	maximal := testConfig()
+	maximal.MailEnabled = true
+	maximal.MailManageEnabled = true
+
+	configurations := map[string]config.Config{
+		"default": testConfig(),
+		"maximal": maximal,
+	}
+
+	for label, cfg := range configurations {
+		s := mcpserver.NewMCPServer("test-server", "0.0.1",
+			mcpserver.WithToolCapabilities(false),
+			mcpserver.WithRecovery(),
+		)
+		RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
+
+		ops := registeredOperations(t, s, "calendar")
+		for _, name := range []string{"find_meeting_times", "get_schedule"} {
+			if !ops[name] {
+				t.Errorf("%s configuration: verb %q is absent from the calendar operation enum", label, name)
+			}
+		}
+
+		const expectedTotal = 4
+		if got := len(s.ListTools()); got != expectedTotal {
+			t.Errorf("%s configuration: expected %d aggregate tools, got %d", label, expectedTotal, got)
+		}
+	}
+}
