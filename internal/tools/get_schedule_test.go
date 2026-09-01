@@ -205,6 +205,15 @@ func TestGetSchedule_RejectsInvalidAddress(t *testing.T) {
 	if !strings.Contains(resultText(t, result), "not-an-email") {
 		t.Errorf("error does not name the invalid address: %s", resultText(t, result))
 	}
+	// The shared email validator names the offending value and stops there, so
+	// the refusal is required to name the parameter it came from and the
+	// correction to apply.
+	if !strings.Contains(resultText(t, result), "schedules") {
+		t.Errorf("error does not name the parameter the address came from: %s", resultText(t, result))
+	}
+	if !strings.Contains(resultText(t, result), getScheduleAddressFix) {
+		t.Errorf("error states no correction to apply: %s", resultText(t, result))
+	}
 	if got := recorder.calls.Load(); got != 0 {
 		t.Errorf("graph request count = %d, want 0", got)
 	}

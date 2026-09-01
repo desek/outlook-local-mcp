@@ -3,20 +3,24 @@
 Validated at `a53786c` on branch `docs/cr-implementation-set-0079-0083`.
 Diff base: `caebec3` (last CR-0079 commit), per the implementation sequence the CR records.
 Implementation commits: `8b9b481` (review), `e7e4337`, `54610eb`, `ea2ef12`, `b9690f2`, `a53786c` (finalize).
+Re-validated after the gap-fix pass, which closed GAP-1 and GAP-2. Line references in the
+GAP-1 evidence are against the post-fix tree; the rows the fix did not touch keep the
+references established at `a53786c`.
 
 ## Summary
 
-Requirements: 31/32 | Acceptance Criteria: 17/18 | Tests: 30/30 | Gaps: 2
+Requirements: 32/32 | Acceptance Criteria: 18/18 | Tests: 30/30 | Gaps: 0
 
-Functional Requirements 25/25 PASS. Non-Functional Requirements 6/7 PASS, 1 PARTIAL.
-Acceptance Criteria 17/18 PASS, 1 PARTIAL. Every Test-Strategy test exists, matches its
+Functional Requirements 25/25 PASS. Non-Functional Requirements 7/7 PASS.
+Acceptance Criteria 18/18 PASS. Every Test-Strategy test exists, matches its
 specified behaviour, and passes under `-race`. `make ci` exits 0 with a clean working tree.
 
-Two gaps, both against the same defect class: the shared Graph-failure and timeout helpers
-emit a diagnosis with no corrective action, so NFR-5's "every error carries a fix
-instruction" and AC-14's redaction clause are not met on the Graph-failure path. Neither
-is asserted by any test. A third item, the live-mailbox user scenario the CR's Verification
-Commands require, is deferred to the user and recorded as a GAP rather than a FAIL.
+**Gap fixing applied after the first pass.** Both gaps are closed. GAP-1 is FIXED: each
+verb now appends its own correction to the two shared-helper refusals and to the bare
+malformed-address refusal, on the tool result and on the log record alike, with assertions
+on both channels. GAP-2 is RESOLVED as far as this session can take it: the live-mailbox
+scenario is derived and persisted under `.agents/scenarios/`, marked `outcome: not-run`,
+with the run itself pending for the user and recorded as such in the backlog.
 
 ## Check Pipeline
 
@@ -26,7 +30,7 @@ Commands require, is deferred to the user and recorded as a GAP rather than a FA
 | `git status --porcelain` after `make ci` | PASS (clean) | `surface-check` regenerated `site/src/generated/surface.json` without moving the working tree, so AC-11's drift gate holds |
 | `go test -race ./internal/{tools,server,graph,surface}/ -run '<CR verification set>'` | PASS | 55 named tests, 0 failures (transcript in Test Strategy Verification below) |
 | `go test ./internal/auth/ -run 'TestScopes_'` | PASS | 5 scope tests pass, gating AC-9 |
-| `make crud-test` | NOT RUN | Paid harness; excluded by the orchestrator. Recorded as GAP-2 |
+| `make crud-test` | NOT RUN | Paid harness; excluded by the orchestrator, and by the gap-fix run. Pending for the user; see GAP-2 |
 
 Measured gates:
 
@@ -76,7 +80,7 @@ Measured gates:
 | NFR-2 | Exactly one Graph request on the success path; no read-modify-write, no fan-out | PASS | `internal/tools/find_meeting_times.go:185-189`; `internal/tools/get_schedule.go:136-140` (single `SetSchedules` list, no loop); `TestFindMeetingTimes_Success` and `TestGetSchedule_Success` both assert `graph request count = 1` |
 | NFR-3 | Composed calendar description below 4 000 characters | PASS | `TestDescriptionLengthBounded` PASS (`internal/tools/description_quality_test.go:147`, `maxLen = 4000`) |
 | NFR-4 | Cold-start schema reduction ≥ 60 % | PASS | `TestColdStartSchemaSize_Reduction` PASS: 20 152 bytes, **72 %** against a 60 % floor (`internal/server/schema_size_test.go:82-84`) |
-| NFR-5 | Every error carries a fix instruction naming what to supply or correct, and reaches the tool result; a failure path that logs carries the same report | **PARTIAL** | Handler-authored refusals do carry corrections and are graded: `find_meeting_times.go:93` ("supply a JSON array of…"), `:103` ("supply a value such as PT30M or PT1H30M"), `:123` ("provide both to bound the search window, or neither…"), `:141`, `:159`; `get_schedule.go:213` ("supply one or more mailbox SMTP addresses…"), `:228` ("split the list across several calls"), `:272` ("supply both start_datetime and end_datetime, or the date shorthand…"), `:114`. `TestSchedulingReadsRefusalsCarryFixInstruction` asserts the correction verb on 2 of them. **Not met on three delegated paths:** `graph.TimeoutErrorMessage` returns `"request timed out after %ds"` with no correction (`internal/graph/timeout.go:55`); `graph.RedactGraphError` returns Graph's own diagnosis with no correction (`internal/graph/errors.go:131-134`); `validate.ValidateEmail` returns `invalid email address: %q` with no correction and, on the `get_schedule` path, no parameter name (`internal/validate/validate.go:95-101`, returned bare at `get_schedule.go:232`). No test asserts a fix instruction on any of the three. See GAP-1 |
+| NFR-5 | Every error carries a fix instruction naming what to supply or correct, and reaches the tool result; a failure path that logs carries the same report | **PASS** (was PARTIAL, fixed) | Handler-authored refusals carry corrections and are graded by `TestSchedulingReadsRefusalsCarryFixInstruction`. The three delegated paths GAP-1 named are now wrapped verb-locally: the timeout refusal appends `findMeetingTimesTimeoutFix` / `getScheduleTimeoutFix` to `graph.TimeoutErrorMessage` and emits the same text on the log record's `fix` attribute (`internal/tools/find_meeting_times.go:204-209`, `internal/tools/get_schedule.go:156-161`); the Graph-failure refusal appends `findMeetingTimesGraphFix` / `getScheduleGraphFix` to `graph.RedactGraphError` and to the log record (`find_meeting_times.go:211-216`, `get_schedule.go:163-168`); the bare `validate.ValidateEmail` refusal is wrapped as `schedules: %w: <correction>` (`get_schedule.go:249`). Assertions: `TestSchedulingReadsHonourTimeoutAndRedaction` now checks the correction on the tool result **and** in the captured log record for both verbs on both paths; `TestGetSchedule_RejectsInvalidAddress` checks the parameter name and the correction. The shared helpers themselves are unchanged, by design — see the resolution note under GAP-1 |
 | NFR-6 | No third-party dependency added | PASS | `go.mod` and `go.sum` absent from `git diff caebec3...HEAD --name-only`; `make tidy` clean inside `make ci` |
 | NFR-7 | Deterministic projection in all three tiers, including ordering | PASS | `internal/tools/get_schedule.go:156-174` (preserves the requested order, no sort); `internal/tools/find_meeting_times.go:205-215` (preserves Graph's rank order); `TestSchedulingFormattersDeterministic` (2 verbs × 3 modes = 6 sub-tests, byte-comparison), `TestFindMeetingTimes_FormatterDeterministic` |
 
@@ -97,7 +101,7 @@ Measured gates:
 | AC-11 | Surface manifest regenerated; calendar 17/17; totals 49/35 | PASS | `site/src/generated/surface.json` diff shows exactly those figures; `make ci` `surface-check` left the tree clean (`git status --porcelain` empty); `TestCommittedManifestMatchesRecord`, `TestRecordCountsMatchBuiltVerbs`, `TestDefaultCountExcludesGatedVerbs`, `TestEveryVerbCarriesSummaryAndGate` PASS |
 | AC-12 | Verb inventory golden delta is exactly two added lines | PASS | `internal/tools/dispatch_registry_test.go` numstat `2 0` — two insertions, zero deletions; `TestVerbInventoryUnchangedAfterUpgrade` PASS |
 | AC-13 | Extension manifest names both verbs; four tools | PASS | `extension/manifest.json` numstat `1 1` (description line only); `TestManifestDescribesEveryRegisteredVerb` PASS (derives its cases from the registry) |
-| AC-14 | Timeout named on both channels; Graph error redacted **and carrying a fix instruction** | **PARTIAL** | Timeout half fully graded: `TestSchedulingReadsHonourTimeoutAndRedaction` asserts `"timed out"` on the tool result, `timeout_seconds` in the captured log record, and the literal `7s` for a non-default configured deadline. Redaction half: the test asserts `[email redacted]`, absence of the leaked address, and retention of `ErrorAccessDenied` — but **not** a fix instruction, and `graph.RedactGraphError` (`internal/graph/errors.go:131-134`) emits none. The clause "carries a fix instruction" is neither implemented nor asserted. See GAP-1 |
+| AC-14 | Timeout named on both channels; Graph error redacted **and carrying a fix instruction** | **PASS** (was PARTIAL, fixed) | Timeout half as before, plus the correction on both channels: `TestSchedulingReadsHonourTimeoutAndRedaction` asserts `"timed out"`, `timeout_seconds`, the literal `7s`, and now the verb's timeout correction on the tool result and in the captured log record. Redaction half: the same test asserts `[email redacted]`, absence of the leaked address, retention of `ErrorAccessDenied`, and now the verb's Graph correction on the tool result and in the log record. The clause is implemented (`find_meeting_times.go:211-216`, `get_schedule.go:163-168`) and asserted for both verbs |
 | AC-15 | File and helper conventions; one request per verb; no new dependency | PASS | See NFR-1, NFR-2, NFR-6 |
 | AC-16 | Registry metadata complete per verb | PASS | `TestEveryVerbHasSummary` (80-char bound), `TestEveryVerbHasDescription`, `TestEveryVerbHasClassification`, `TestSeeDocsAnchorsResolve`, `TestEveryVerbStatesRequiredParameters`, `TestEveryParameterHasDescription`, `TestDescriptionsListVerbsOnSeparateLines` all PASS; preference guidance at `internal/server/calendar_verbs.go:826`, `:888` |
 | AC-17 | Measured surface gates keep their margins | PASS | `TestDescriptionLengthBounded` PASS; `TestColdStartSchemaSize_Reduction` PASS at 72 % ≥ 60 % |
@@ -149,9 +153,9 @@ all PASS.
 | `internal/graph/scheduling_serialize_test.go` | `TestSerializeSummaryScheduleInformationSurfacesError` | no (added) | yes (`:275`) | additional FR-10 coverage — PASS |
 | `internal/graph/scheduling_serialize_test.go` | `TestSerializeSummaryScheduleInformationFlattensItems` | no (added) | yes (`:293`) | additional — PASS |
 | `internal/graph/scheduling_serialize_test.go` | `TestSerializeSummaryScheduleInformationOmitsAbsentWorkingHours` | no (added) | yes (`:323`) | additional — PASS |
-| `internal/tools/scheduling_read_verbs_test.go` | `TestSchedulingReadsHonourTimeoutAndRedaction` | yes | yes (`:91`) | partially — timeout on both channels and redaction asserted; the specified "carries a fix instruction" clause is not asserted (GAP-1) |
-| `internal/tools/scheduling_read_verbs_test.go` | `TestSchedulingFormattersDeterministic` | yes | yes (`:240`) | yes — PASS |
-| `internal/tools/scheduling_read_verbs_test.go` | `TestSchedulingReadsRefusalsCarryFixInstruction` | no (added) | yes (`:188`) | partial NFR-5 coverage: the missing-required-parameter refusal only — PASS |
+| `internal/tools/scheduling_read_verbs_test.go` | `TestSchedulingReadsHonourTimeoutAndRedaction` | yes | yes (`:100`) | yes — PASS. Timeout and redaction each asserted on the tool result and in the captured log record, and the "carries a fix instruction" clause now asserted on both channels for both verbs (GAP-1 fix) |
+| `internal/tools/scheduling_read_verbs_test.go` | `TestSchedulingFormattersDeterministic` | yes | yes (`:267`) | yes — PASS |
+| `internal/tools/scheduling_read_verbs_test.go` | `TestSchedulingReadsRefusalsCarryFixInstruction` | no (added) | yes (`:215`) | NFR-5 coverage for the missing-required-parameter refusal; the delegated refusals are covered by the row above — PASS |
 | `internal/tools/tool_annotations_test.go` | `TestSchedulingReadVerbAnnotations` | yes | yes (`:581`) | yes — PASS |
 | `internal/server/calendar_verbs_test.go` | `TestSchedulingReadsRegisteredAndReadOnly` | yes | yes (`:85`) | yes — PASS |
 | `internal/server/calendar_verbs_test.go` | `TestSchedulingReadsCarryDotIdentity` | yes | yes (`:124`) | yes — PASS |
@@ -188,6 +192,7 @@ Tests to Modify:
 | `internal/tools/tool_annotations_test.go` | +65/−0 | FR-13, AC-7 |
 | `docs/cr/CR-0080-calendar-scheduling-reads.md` | +633/−203 | The CR itself (review edits at `8b9b481`, finalization frontmatter at `a53786c`) |
 | `docs/backlog/cr-0078-0083.md` | +201/−2 | Governance decision ledger for CR-0080 |
+| `.agents/scenarios/2026-09-02-calendar-scheduling-reads-live-mailbox.md` | new | GAP-2 fix: the derived, not-yet-run live-mailbox scenario the CR's Verification Commands require |
 
 ### Unmapped changed files
 
@@ -197,6 +202,10 @@ Tests to Modify:
   `docs/backlog/cr-0078-0083.md`"), and the change is confined to the `## CR-0080` section
   (`+201/−2`, replacing the placeholder "Not yet reviewed"). Governance record, no source
   impact.
+* `.agents/scenarios/2026-09-02-calendar-scheduling-reads-live-mailbox.md` — **justified.**
+  Added by the gap-fix pass. Not in Affected Components, but the CR's Verification Commands
+  paragraph names `.agents/scenarios/` as the required home for it. Scenario artifact, no
+  source impact.
 * `docs/cr/CR-0080-calendar-scheduling-reads.md` — **justified.** The governed document
   itself, edited by the review commit and the finalization commit.
 
@@ -208,87 +217,75 @@ No stray source file changed. Every file the CR named as requiring no change is 
 
 ## Gaps
 
-### GAP-1 (PARTIAL) — NFR-5 and AC-14: the shared error helpers carry no fix instruction
+Both gaps are closed. The original findings are kept below, each followed by its
+resolution, so the record states what was wrong as well as what was done.
+
+### GAP-1 — FIXED — NFR-5 and AC-14: the shared error helpers carry no fix instruction
 
 **Requirement ref:** NFR-5; AC-14, second `Given` ("the returned error text is redacted by
 the shared helper **and carries a fix instruction**").
 
-**What's missing.** NFR-5 requires *every* error either verb raises to name what to supply
-or correct. Three refusal paths do not:
+**What was missing.** NFR-5 requires *every* error either verb raises to name what to
+supply or correct. Three refusal paths did not:
 
 1. `graph.TimeoutErrorMessage` (`internal/graph/timeout.go:55`) returns
-   `"request timed out after 7s"`. It reports the deadline and no correction. Reached from
-   `find_meeting_times.go:195` and `get_schedule.go:146`.
-2. `graph.RedactGraphError` (`internal/graph/errors.go:131-134`) returns
-   `"Graph API error [ErrorAccessDenied]: Access denied for [email redacted] on this
-   mailbox."` — Graph's own diagnosis, redacted, with no correction appended. Reached from
-   `find_meeting_times.go:200` and `get_schedule.go:151`. This is exactly the text AC-14's
+   `"request timed out after 7s"` — the deadline and no correction. Reached from both
+   handlers.
+2. `graph.RedactGraphError` (`internal/graph/errors.go:131-134`) returns Graph's own
+   diagnosis, redacted, with no correction appended. This is exactly the text AC-14's
    second `Given` grades.
 3. `validate.ValidateEmail` (`internal/validate/validate.go:95-101`) returns
-   `invalid email address: "not-an-email"`. On the `get_schedule` path it is returned bare
-   (`get_schedule.go:232`), so the refusal names neither the `schedules` parameter nor a
-   correction. `find_meeting_times` at least prefixes the attendee index
-   (`find_meeting_times.go:271`).
+   `invalid email address: "not-an-email"`. On the `get_schedule` path it was returned
+   bare, so the refusal named neither the `schedules` parameter nor a correction.
 
-No test asserts a fix instruction on any of the three.
-`TestSchedulingReadsHonourTimeoutAndRedaction` (`internal/tools/scheduling_read_verbs_test.go:154-180`)
-asserts redaction, the placeholder, and the retained Graph code, but stops short of the
-clause. `TestSchedulingReadsRefusalsCarryFixInstruction` covers only the
-missing-required-parameter refusal.
+No test asserted a fix instruction on any of the three.
 
-**Why this is not softened to PASS.** AC-14's clause is explicit and ungraded; the
-implementation does not satisfy it. It is a small gap and it is architecturally consistent
-with every other verb in the repository (FR-15 mandates the shared helpers, and those
-helpers have never carried a fix instruction), so the honest reading is a direct tension
-between FR-15 and NFR-5 that the CR did not resolve — not a defect the implementor
-introduced.
+**Resolution — the narrowest fix, applied verb-locally.** The shared helpers in
+`internal/graph` are **unchanged**, deliberately: every verb in the repository routes
+through them, so changing their text rewrites the whole error surface and moves assertions
+in tests this CR does not own. Instead each handler appends its own correction to the
+helper's output and emits the same correction on its log record, so the deadline, the Graph
+code, and the offending address all survive alongside an instruction to act on.
 
-**Suggested minimal fix**, in ascending order of blast radius:
+| Path | Correction source | Result channel | Log channel |
+|---|---|---|---|
+| timeout, `find_meeting_times` | `findMeetingTimesTimeoutFix` (`internal/tools/find_meeting_times.go:43`) | `find_meeting_times.go:208-209` | `:204-207` (`fix` attribute) |
+| timeout, `get_schedule` | `getScheduleTimeoutFix` (`internal/tools/get_schedule.go:43`) | `get_schedule.go:160-161` | `:156-159` (`fix` attribute) |
+| redacted Graph error, `find_meeting_times` | `findMeetingTimesGraphFix` (`find_meeting_times.go:44`) | `find_meeting_times.go:215-216` | `:211-214` (`fix` attribute) |
+| redacted Graph error, `get_schedule` | `getScheduleGraphFix` (`get_schedule.go:44`) | `get_schedule.go:167-168` | `:163-166` (`fix` attribute) |
+| invalid `schedules` address | `getScheduleAddressFix` (`get_schedule.go:45`) | `get_schedule.go:249` (`schedules: %w: <correction>`) | no log on this path; the refusal is raised before any request, so there is no second channel to carry |
 
-* *Narrowest, verb-local.* In both handlers, append a correction to the two shared-helper
-  results before returning them, e.g. wrap `graph.RedactGraphError(graphErr)` with a
-  sentence naming the troubleshooting anchor already written for this change
-  (`docs/troubleshooting.md#schedule-mailbox-error` for `get_schedule`) and, for the
-  timeout, "narrow the window or the mailbox list and retry". Add the assertion to
-  `TestSchedulingReadsHonourTimeoutAndRedaction`. Touches only files already in this CR's
-  Affected Components.
-* *For the bare `ValidateEmail` refusal.* Wrap it at `get_schedule.go:232` as
-  `fmt.Errorf("schedules: %w: supply comma-separated SMTP addresses", err)`, mirroring the
-  attendee-index wrap `find_meeting_times.go:271` already applies. Extend
-  `TestGetSchedule_RejectsInvalidAddress` to assert the parameter name and the correction.
-* *Out of scope here.* Changing `graph.TimeoutErrorMessage` or `graph.RedactGraphError`
-  themselves would alter every verb's error text and break existing assertions across the
-  suite; that belongs in its own CR.
+**Evidence.** `TestSchedulingReadsHonourTimeoutAndRedaction`
+(`internal/tools/scheduling_read_verbs_test.go`) carries the correction per verb on the
+`schedulingReadVerb` fixture and asserts it on the tool result *and* in the captured log
+record, in both the timeout sub-case and the redaction sub-case, for both verbs — four
+result assertions and four log assertions added. `TestGetSchedule_RejectsInvalidAddress`
+asserts the refusal names `schedules` and states the correction. All PASS under `-race`.
 
-### GAP-2 (GAP) — the live-mailbox user scenario is not run or persisted
+**Recorded, not done.** That `graph.TimeoutErrorMessage` and `graph.RedactGraphError` never
+carry a fix instruction, and that lifting this pattern into them is a separate change, is
+written under `## CR-0080` in `docs/backlog/cr-0078-0083.md` with its grounds.
+
+### GAP-2 — RESOLVED (scenario persisted; run pending for the user)
 
 **Requirement ref:** CR "Verification Commands" closing paragraph, and the project's
 scenario rule.
 
-**What's missing.** The CR states that acceptance additionally requires a user scenario
-driving the built server against a live mailbox: call `find_meeting_times` for a set of
-attendees and confirm the suggested slots, call `get_schedule` for two mailboxes and confirm
-the per-mailbox free/busy and working hours, then confirm `get_free_busy` still returns the
-own-calendar subject view unchanged, persisted under `.agents/scenarios/`. `.agents/scenarios/`
-holds only `2026-09-01-received-message-management-lifecycle.md` and
-`2026-09-02-draft-attachment-two-transfer-paths.md`; no CR-0080 scenario exists.
+**What was missing.** No scenario for this change existed under `.agents/scenarios/`.
 
-The CR also names `make crud-test` (Steps 42 and 43) in its Verification Commands. That
-harness is paid and was excluded from this validation run by the orchestrator.
+**Resolution.** `.agents/scenarios/2026-09-02-calendar-scheduling-reads-live-mailbox.md` is
+written in the format the two existing scenario files use, derived from the CR's
+Verification Commands paragraph: nine steps at the `calendar` aggregate tool over stdio
+against the built binary, covering `find_meeting_times` bounded and unbounded, the raw-tier
+comparison, `get_schedule` across two mailboxes, the per-mailbox error path against a
+mailbox the account may not read, the window, ceiling, and malformed-address refusals, and
+the `get_free_busy` regression check. It carries `outcome: not-run` and
+`runs: "0 of 0 attempted"`, and states plainly that nothing in it has been observed.
 
-**Deferred to the user.** Both items require a live mailbox and a paid harness run, neither
-of which this validation can perform. The unit suite issues no Graph call, so it cannot
-substitute. Before running the harness, rebuild the binary the harness drives and confirm
-the report's own `Server version` line matches `git rev-parse --short HEAD`, per the project
-rule.
-
-**Suggested minimal fix.** Run the two verification commands the CR already specifies:
-
-```bash
-go build -ldflags="-X main.commit=$(git rev-parse --short HEAD) -X main.buildDate=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-  -o ./outlook-local-mcp ./cmd/outlook-local-mcp
-make crud-test
-```
-
-then derive and persist the scenario under `.agents/scenarios/` per the `user-scenario`
-skill, recording the outcome and the attempt count.
+**Still pending for the user, and not performable here.** The run itself needs a live
+authenticated mailbox, a second readable mailbox in the same tenant, and one address the
+account may not read. `make crud-test` (Steps 42 and 43) is a paid harness and was excluded
+from this run by the orchestrator. Both are recorded as pending under `## CR-0080` in
+`docs/backlog/cr-0078-0083.md`. Before running the harness, rebuild the binary it drives and
+confirm the report's own `Server version` line matches `git rev-parse --short HEAD`, per the
+project rule.

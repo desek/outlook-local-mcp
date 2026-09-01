@@ -32,6 +32,19 @@ import (
 // that does not name it.
 const maxScheduleMailboxes = 20
 
+// Corrections appended to the refusals this verb delegates to a shared helper.
+// The timeout helper names the deadline, the redactor returns Graph's own
+// message with addresses removed, and the email validator names the malformed
+// value: each states a diagnosis and none states what to do next, because none
+// of them knows which parameter shaped the request. The correction is therefore
+// authored here, at the verb, and appended so the deadline, the Graph code, and
+// the offending address all survive.
+const (
+	getScheduleTimeoutFix = "narrow the window with start_datetime and end_datetime or the date shorthand, or name fewer mailboxes in schedules, then retry"
+	getScheduleGraphFix   = "check that every mailbox in schedules is one this account may read availability for, then retry; see docs/troubleshooting.md#schedule-mailbox-error"
+	getScheduleAddressFix = "supply schedules as a comma-separated list of mailbox SMTP addresses, such as a@example.com,b@example.com"
+)
+
 // Availability-view interval bounds, in minutes. The interval decides how
 // coarsely the availability string divides the window; the bounds are the
 // service's own, and the default keeps a day's view readable.
@@ -142,13 +155,17 @@ func NewHandleGetSchedule(retryCfg graph.RetryConfig, timeout time.Duration, def
 			if graph.IsTimeoutError(graphErr) {
 				logger.ErrorContext(ctx, "request timed out",
 					"timeout_seconds", int(timeout.Seconds()),
+					"fix", getScheduleTimeoutFix,
 					"error", graphErr.Error())
-				return mcp.NewToolResultError(graph.TimeoutErrorMessage(int(timeout.Seconds()))), nil
+				return mcp.NewToolResultError(fmt.Sprintf("%s: %s",
+					graph.TimeoutErrorMessage(int(timeout.Seconds())), getScheduleTimeoutFix)), nil
 			}
 			logger.Error("graph API call failed",
 				"error", graph.FormatGraphError(graphErr),
+				"fix", getScheduleGraphFix,
 				"duration", time.Since(start))
-			return mcp.NewToolResultError(graph.RedactGraphError(graphErr)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("%s: %s",
+				graph.RedactGraphError(graphErr), getScheduleGraphFix)), nil
 		}
 
 		logger.Debug("graph API response", "endpoint", "POST /me/calendar/getSchedule", "status", "ok")
@@ -229,7 +246,7 @@ func parseScheduleMailboxes(raw string) ([]string, error) {
 	}
 	for _, address := range mailboxes {
 		if err := validate.ValidateEmail(address); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("schedules: %w: %s", err, getScheduleAddressFix)
 		}
 	}
 	return mailboxes, nil

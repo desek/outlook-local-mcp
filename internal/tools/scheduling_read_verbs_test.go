@@ -33,6 +33,11 @@ type schedulingReadVerb struct {
 	newHandler func(graph.RetryConfig, time.Duration, string) func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)
 	args       map[string]any
 	response   string
+	// timeoutFix and graphFix are the corrections the verb appends to the
+	// shared helpers' diagnoses. They are named per verb because the
+	// correction refers to that verb's own parameters.
+	timeoutFix string
+	graphFix   string
 }
 
 // schedulingReadVerbs returns the family under test. A verb added to the
@@ -45,12 +50,16 @@ func schedulingReadVerbs() []schedulingReadVerb {
 			newHandler: NewHandleFindMeetingTimes,
 			args:       map[string]any{"attendees": `[{"email":"a@example.com"}]`},
 			response:   findMeetingTimesResponseJSON,
+			timeoutFix: findMeetingTimesTimeoutFix,
+			graphFix:   findMeetingTimesGraphFix,
 		},
 		{
 			name:       "get_schedule",
 			newHandler: NewHandleGetSchedule,
 			args:       withScheduleWindow(map[string]any{"schedules": "a@example.com,b@example.com"}),
 			response:   getScheduleResponseJSON,
+			timeoutFix: getScheduleTimeoutFix,
+			graphFix:   getScheduleGraphFix,
 		},
 	}
 }
@@ -125,6 +134,15 @@ func TestSchedulingReadsHonourTimeoutAndRedaction(t *testing.T) {
 			if !strings.Contains(logs.String(), "timeout_seconds") {
 				t.Errorf("the failure path emitted no record naming the configured deadline: %s", logs.String())
 			}
+			// Both channels: the refusal the caller reads and the record the
+			// operator reads must each state the correction, because the
+			// shared timeout helper states only the deadline.
+			if !strings.Contains(resultText(t, result), v.timeoutFix) {
+				t.Errorf("the timeout refusal states no correction to apply: %q", resultText(t, result))
+			}
+			if !strings.Contains(logs.String(), v.timeoutFix) {
+				t.Errorf("the timeout log record states no correction to apply: %s", logs.String())
+			}
 		})
 
 		t.Run(v.name+" names the configured deadline", func(t *testing.T) {
@@ -152,6 +170,7 @@ func TestSchedulingReadsHonourTimeoutAndRedaction(t *testing.T) {
 		})
 
 		t.Run(v.name+" redaction", func(t *testing.T) {
+			logs := captureLogs(t)
 			client, srv := newTestGraphClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
@@ -176,6 +195,14 @@ func TestSchedulingReadsHonourTimeoutAndRedaction(t *testing.T) {
 			}
 			if !strings.Contains(text, "ErrorAccessDenied") {
 				t.Errorf("the refusal drops the Graph code the caller would act on: %q", text)
+			}
+			// The redactor returns Graph's diagnosis and nothing else, so the
+			// correction is asserted on both channels here as well.
+			if !strings.Contains(text, v.graphFix) {
+				t.Errorf("the redacted refusal states no correction to apply: %q", text)
+			}
+			if !strings.Contains(logs.String(), v.graphFix) {
+				t.Errorf("the Graph failure log record states no correction to apply: %s", logs.String())
 			}
 		})
 	}

@@ -32,6 +32,18 @@ import (
 // picks silently.
 const defaultMeetingDurationISO = "PT30M"
 
+// Corrections appended to the two refusals this verb delegates to the shared
+// Graph helpers. Those helpers state a diagnosis and stop there: the timeout
+// message names the deadline, and the redactor returns Graph's own message with
+// addresses removed. Neither knows which parameters shaped the request, so the
+// correction is authored here, at the verb, where they are known. Appending
+// rather than replacing keeps the deadline and the Graph code the caller acts
+// on.
+const (
+	findMeetingTimesTimeoutFix = "narrow the search window with start_datetime and end_datetime, lower max_candidates, or shorten the attendees list, then retry"
+	findMeetingTimesGraphFix   = "check that every address in attendees is a mailbox this account may read availability for, then retry"
+)
+
 // Candidate-count bounds for find_meeting_times. The default mirrors the
 // max_results shape the calendar domain already publishes on its listings, and
 // the ceiling keeps one call from returning a result set no reader will use.
@@ -191,13 +203,17 @@ func NewHandleFindMeetingTimes(retryCfg graph.RetryConfig, timeout time.Duration
 			if graph.IsTimeoutError(graphErr) {
 				logger.ErrorContext(ctx, "request timed out",
 					"timeout_seconds", int(timeout.Seconds()),
+					"fix", findMeetingTimesTimeoutFix,
 					"error", graphErr.Error())
-				return mcp.NewToolResultError(graph.TimeoutErrorMessage(int(timeout.Seconds()))), nil
+				return mcp.NewToolResultError(fmt.Sprintf("%s: %s",
+					graph.TimeoutErrorMessage(int(timeout.Seconds())), findMeetingTimesTimeoutFix)), nil
 			}
 			logger.Error("graph API call failed",
 				"error", graph.FormatGraphError(graphErr),
+				"fix", findMeetingTimesGraphFix,
 				"duration", time.Since(start))
-			return mcp.NewToolResultError(graph.RedactGraphError(graphErr)), nil
+			return mcp.NewToolResultError(fmt.Sprintf("%s: %s",
+				graph.RedactGraphError(graphErr), findMeetingTimesGraphFix)), nil
 		}
 
 		logger.Debug("graph API response", "endpoint", "POST /me/findMeetingTimes", "status", "ok")
