@@ -580,7 +580,7 @@ Call `{tool: "mail", args: {operation: "list_messages", ...}}` four times with t
 
 ### Step 31 -- Create draft (skip if mail management disabled)
 
-If `config.features.mail_manage_enabled` from Step 0c is `false`, **skip** Steps 31 through 35 and record them as SKIP.
+If `config.features.mail_manage_enabled` from Step 0c is `false`, **skip** Steps 31 through 35 and Steps 37 through 40 (received-message management) and record them all as SKIP.
 
 Call `{tool: "mail", args: {operation: "create_draft", to_recipients: "<own UPN>", subject: "CRUD test draft", body: "Created by MCP CRUD lifecycle test.", importance: "normal"}}`.
 
@@ -635,6 +635,48 @@ Call `{tool: "mail", args: {operation: "list_attachments", message_id: "<message
 - **Verify:** Response is plain text with attachment metadata (name, size, content type).
 - **Verify:** If the attachment is within the configured size limit, content is returned (base64); otherwise an explanatory message is returned.
 - **Fail:** If the attachment cannot be retrieved for a valid ID.
+
+### Step 37 -- Mark read and restore (skip if mail management disabled)
+
+Steps 37 through 39 write properties on a real received message and **must restore the original value**. Call `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox", max_results: 1}}` and record the first message's ID as **triage message ID**. Then call `{tool: "mail", args: {operation: "get_message", message_id: "<triage message ID>", output: "raw"}}` and record its current `isRead`, `flag`, and `categories` values as the **restore values**. If the Inbox is empty, skip Steps 37 through 39.
+
+Call `{tool: "mail", args: {operation: "mark_read", message_id: "<triage message ID>", is_read: <the inverse of the recorded isRead>}}`, then call it a second time with the identical arguments.
+
+- **Verify:** Both calls return a plain text confirmation naming the subject, the message ID, and the resulting read state.
+- **Verify:** The two confirmations are identical, and a subsequent `get_message` shows the written state. The verb is declared idempotent, so a repeat must not change the outcome.
+- **Restore:** Call `mark_read` once more with the recorded `isRead` value.
+- **Fail:** If either call errors, if the state is not reflected, or if the repeat produces a different confirmation.
+
+### Step 38 -- Set follow-up flag and restore
+
+Call `{tool: "mail", args: {operation: "set_flag", message_id: "<triage message ID>", flag_status: "flagged"}}`, then call `{tool: "mail", args: {operation: "set_flag", message_id: "<triage message ID>", flag_status: "urgent"}}`.
+
+- **Verify:** The first call returns a plain text confirmation stating the resulting status is `flagged`, and `list_messages` with `flag_status: "flagged"` now includes the message.
+- **Verify:** The second call is **refused** with an error naming the three accepted values `notFlagged`, `flagged`, and `complete`. An unrecognised status must not silently clear the flag.
+- **Restore:** Call `set_flag` with the recorded original status (`notFlagged` if the message was unflagged).
+- **Fail:** If the invalid status is accepted, or if the confirmation does not state the resulting status.
+
+### Step 39 -- Set categories, clear, and restore
+
+Call `{tool: "mail", args: {operation: "set_categories", message_id: "<triage message ID>", categories: "MCP CRUD test"}}`, then call `{tool: "mail", args: {operation: "set_categories", message_id: "<triage message ID>", categories: "   "}}`.
+
+- **Verify:** The first confirmation lists the resulting category set, read back from the service rather than echoing the request.
+- **Verify:** The second call clears every category and its confirmation states that the message now carries no categories, rather than printing an empty list.
+- **Note:** Graph applies a category on a message whether or not it exists in the mailbox's master category list, so a category set here may render without a colour in Outlook. That is expected; these verbs do not create master categories.
+- **Restore:** Call `set_categories` with the recorded original categories as a comma-separated string, or with an empty string if there were none.
+- **Fail:** If the second call leaves categories in place, or if either confirmation reports the request rather than the response.
+
+### Step 40 -- Move a message and follow the new identifier
+
+Create a disposable subject rather than moving the user's mail: call `{tool: "mail", args: {operation: "create_draft", to_recipients: "<own UPN>", subject: "CRUD test move", body: "Created by MCP CRUD lifecycle test."}}` and record the ID as **move source ID**.
+
+Call `{tool: "mail", args: {operation: "list_folders"}}` and record the ID of the `Deleted Items` folder as **destination folder ID**. Then call `{tool: "mail", args: {operation: "move_message", message_id: "<move source ID>", destination_folder_id: "<destination folder ID>"}}`.
+
+- **Verify:** The confirmation names the destination folder, the original identifier, and a **new** message identifier, and states that the original identifier no longer resolves. Record the new ID as **moved message ID**.
+- **Verify:** `{tool: "mail", args: {operation: "get_message", message_id: "<move source ID>"}}` now errors, and `get_message` with the **moved message ID** succeeds.
+- **Verify (unresolvable destination):** Call `move_message` again with `destination_folder_id: "Archive"` (a folder *name*, not an identifier). The call must fail with an error naming `list_folders` as the way to obtain a destination identifier.
+- **Cleanup:** Call `{tool: "mail", args: {operation: "delete_draft", message_id: "<moved message ID>"}}`.
+- **Fail:** If the confirmation omits the new identifier, if the original identifier still resolves, or if the folder-name destination is accepted.
 
 ## Reporting
 
@@ -707,6 +749,10 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 34   | Delete drafts                     | PASS/FAIL/SKIP | e.g., "both drafts deleted, 404 on re-fetch"             |
 | 35   | Get conversation                  | PASS/FAIL/SKIP | e.g., "thread returned in chronological order"           |
 | 36   | Get attachment                    | PASS/FAIL/SKIP | e.g., "metadata + base64 under size limit"               |
+| 37   | Mark read (idempotent + restore)  | PASS/FAIL/SKIP | e.g., "state written, repeat identical, original restored" |
+| 38   | Set flag (+ invalid refused)      | PASS/FAIL/SKIP | e.g., "flagged written; 'urgent' refused naming 3 values" |
+| 39   | Set categories (+ clear)          | PASS/FAIL/SKIP | e.g., "set from response; empty value cleared all"       |
+| 40   | Move message (new ID follows)     | PASS/FAIL/SKIP | e.g., "new id returned; original 404s; name destination refused" |
 ```
 
 Then print the **environment** section using all values recorded in Steps 0c and 1:

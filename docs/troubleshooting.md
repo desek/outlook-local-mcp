@@ -203,9 +203,9 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 
 ## Mail management disabled
 
-**Symptom:** Draft operations (`create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, `delete_draft`) return `mail management is not enabled` or `unknown operation`.
+**Symptom:** Draft operations (`create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, `delete_draft`) or received-message writes (`move_message`, `set_flag`, `set_categories`, `mark_read`) return `mail management is not enabled` or `unknown operation`.
 
-**Cause:** `OUTLOOK_MCP_MAIL_MANAGE_ENABLED` is not set. Draft management is a separate opt-in that implies `MAIL_ENABLED`.
+**Cause:** `OUTLOOK_MCP_MAIL_MANAGE_ENABLED` is not set. Mail management is a separate opt-in that implies `MAIL_ENABLED`, and it gates both draft management and received-message management.
 
 **Remediation:**
 
@@ -214,6 +214,23 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 3. On first enable, a new OAuth consent for `Mail.ReadWrite` is required (supersedes `Mail.Read`). The authentication flow triggers automatically on the next tool call.
 
 **Note:** The server never requests `Mail.Send`. Drafts are created in the Outlook Drafts folder; the user sends them manually from Outlook.
+
+---
+
+## Move destination not found {#move-destination-not-found}
+
+**Symptom:** `{tool: "mail", args: {operation: "move_message", ...}}` fails with a Graph `ErrorItemNotFound` or `ErrorInvalidIdMalformed`, and the message has not moved.
+
+**Cause:** `destination_folder_id` does not resolve to a mail folder on the signed-in mailbox. The parameter takes a folder **identifier**, not a folder name, so a value such as `Archive` or `Deleted Items` is refused. The identifier is also mailbox-specific: one obtained under a different account will not resolve.
+
+The other cause of the same Graph error is a stale `message_id`. A move mints a new identifier for the moved message and the original stops resolving, so re-issuing a move with the identifier from before an earlier move fails here rather than at the destination.
+
+**Remediation:**
+
+1. Obtain a valid destination identifier with `{tool: "mail", args: {operation: "list_folders", output: "summary"}}` and pass the `id` of the target folder, not its display name.
+2. If the call names an `account`, list folders under that same account, because folder identifiers do not transfer between mailboxes.
+3. If the message was moved before, re-read it with `list_messages` or `search_messages` to obtain its current identifier; the confirmation from the previous move also carries it.
+4. Verify the outcome by listing the destination folder's messages, not by re-issuing the move: the move is not idempotent, and a second successful call moves the message again.
 
 ---
 

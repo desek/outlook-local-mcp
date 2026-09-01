@@ -177,9 +177,33 @@
           "summary": "permanently delete a draft message (irreversible; non-draft messages rejected)",
           "readOnly": false,
           "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "move_message",
+          "summary": "move a message to another folder; the move mints a new message ID",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "set_flag",
+          "summary": "set a message's follow-up flag: notFlagged, flagged, or complete",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "set_categories",
+          "summary": "replace a message's categories; an empty value clears every category",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "mark_read",
+          "summary": "mark a message read or unread; is_read is a required boolean",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
         }
       ],
-      "fullCount": 13,
+      "fullCount": 17,
       "defaultCount": 5
     },
     {
@@ -282,7 +306,7 @@
     }
   ],
   "totals": {
-    "fullCount": 42,
+    "fullCount": 46,
     "defaultCount": 33
   },
   "config": [
