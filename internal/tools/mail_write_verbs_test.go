@@ -9,6 +9,7 @@ import (
 
 	"github.com/desek/outlook-local-mcp/internal/auth"
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -145,6 +146,106 @@ func TestMailWriteVerbs_RequireMessageID(t *testing.T) {
 			}
 			if len(rec.methods) != 0 {
 				t.Errorf("expected no Graph request, got %v", rec.methods)
+			}
+		})
+	}
+}
+
+// TestMailWriteVerbs_MalformedMessageIDRejectedByEveryVerb drives a malformed
+// identifier, not a missing one, at every verb in the family. The distinction is
+// load-bearing: a deleted argument fails at RequireString and never reaches
+// validate.ValidateResourceID, so only an over-length value grades the
+// validation step this asserts happens before any Graph request.
+//
+// Over-length is the malformation used because emptiness and length are what
+// ValidateResourceID rejects; it does not bound the character set.
+func TestMailWriteVerbs_MalformedMessageIDRejectedByEveryVerb(t *testing.T) {
+	tooLong := strings.Repeat("a", validate.MaxResourceIDLen+1)
+	for _, v := range mailWriteVerbs() {
+		t.Run(v.name, func(t *testing.T) {
+			rec := &patchRecorder{response: v.response}
+			client, srv := newTestGraphClient(t, rec)
+			defer srv.Close()
+			ctx := auth.WithGraphClient(context.Background(), client)
+
+			result, err := v.newHandler(graph.RetryConfig{}, 30*time.Second)(
+				ctx, v.requestFor(map[string]any{"message_id": tooLong}))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !result.IsError {
+				t.Fatal("expected tool error for a malformed message_id")
+			}
+			if !strings.Contains(resultText(t, result), "message_id") {
+				t.Errorf("expected refusal to name message_id, got: %q", resultText(t, result))
+			}
+			if len(rec.methods) != 0 {
+				t.Errorf("expected no Graph request, got %v", rec.methods)
+			}
+		})
+	}
+}
+
+// TestMailWriteVerbs_TimeoutNamesConfiguredSeconds verifies that every verb
+// routes its Graph call through the shared timeout helper and surfaces the
+// configured deadline in the refusal. A configured value other than the common
+// 30s is used so the assertion fails on a hardcoded message rather than passing
+// by coincidence.
+func TestMailWriteVerbs_TimeoutNamesConfiguredSeconds(t *testing.T) {
+	const configured = 7 * time.Second
+	for _, v := range mailWriteVerbs() {
+		t.Run(v.name, func(t *testing.T) {
+			expired, cancel := context.WithTimeout(context.Background(), 0)
+			defer cancel()
+
+			rec := &patchRecorder{response: v.response}
+			client, srv := newTestGraphClient(t, rec)
+			defer srv.Close()
+			ctx := auth.WithGraphClient(expired, client)
+
+			result, err := v.newHandler(graph.RetryConfig{}, configured)(ctx, v.requestFor(nil))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !result.IsError {
+				t.Fatal("expected tool error for a timed-out request")
+			}
+			if !strings.Contains(resultText(t, result), "7s") {
+				t.Errorf("expected the refusal to name the configured deadline, got: %q", resultText(t, result))
+			}
+		})
+	}
+}
+
+// TestMailWriteVerbs_GraphErrorIsRedacted verifies that every verb passes the
+// Graph failure through the redaction helper rather than returning the raw
+// service message. The canned error carries an address, which is what the
+// redactor removes, so a verb formatting the error itself would leak it here.
+func TestMailWriteVerbs_GraphErrorIsRedacted(t *testing.T) {
+	const leaked = "mailbox-owner@contoso.com"
+	for _, v := range mailWriteVerbs() {
+		t.Run(v.name, func(t *testing.T) {
+			client, srv := newTestGraphClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"error":{"code":"ErrorAccessDenied","message":"Access denied for ` + leaked + ` on this mailbox."}}`))
+			}))
+			defer srv.Close()
+			ctx := auth.WithGraphClient(context.Background(), client)
+
+			result, err := v.newHandler(graph.RetryConfig{}, 30*time.Second)(ctx, v.requestFor(nil))
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if !result.IsError {
+				t.Fatal("expected tool error for a failed Graph call")
+			}
+			text := resultText(t, result)
+			if strings.Contains(text, leaked) {
+				t.Errorf("the Graph error reached the caller unredacted: %q", text)
+			}
+			if !strings.Contains(text, "[email redacted]") {
+				t.Errorf("expected the redaction placeholder in the refusal, got: %q", text)
 			}
 		})
 	}

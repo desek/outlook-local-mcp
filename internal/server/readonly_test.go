@@ -6,8 +6,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/desek/outlook-local-mcp/internal/audit"
+	"github.com/desek/outlook-local-mcp/internal/observability"
+	"github.com/desek/outlook-local-mcp/internal/tools"
 	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 // dummyHandler is a test helper that returns a fixed tool result. It is used
@@ -128,4 +133,68 @@ func TestReadOnlyGuard_Disabled_NoOverhead(t *testing.T) {
 // comparison purposes.
 func funcAddr(f mcpserver.ToolHandlerFunc) string {
 	return fmt.Sprintf("%p", f)
+}
+
+// TestReadOnlyBlocksMailManagementVerbs invokes each received-message write
+// verb through its own registered middleware chain with read-only mode enabled,
+// and asserts the refusal names the mail.<verb> identity.
+//
+// The guard is asserted here rather than at ReadOnlyGuard alone because the
+// chain is where a verb can be missed: a write verb wired through the read
+// wrapper would still pass every ReadOnlyGuard unit test in this file while
+// executing in read-only mode. Invoking the built verb is what grades the
+// wiring.
+//
+// The handlers are invoked with no Graph client bound, so a verb that was not
+// guarded would fail at account resolution with a different message; only a
+// guarded verb produces the refusal named below.
+func TestReadOnlyBlocksMailManagementVerbs(t *testing.T) {
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	audit.InitAuditLog(false, "")
+
+	identity := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+	verbs, _ := buildMailVerbs(mailVerbsConfig{
+		cfg:               maximalMailConfig(),
+		m:                 m,
+		tracer:            tracenoop.NewTracerProvider().Tracer("test"),
+		authMW:            identity,
+		accountResolverMW: identity,
+		readOnly:          true,
+	})
+
+	byName := make(map[string]tools.Verb, len(verbs))
+	for _, v := range verbs {
+		byName[v.Name] = v
+	}
+
+	for _, name := range mailManagementVerbs() {
+		v, ok := byName[name]
+		if !ok {
+			t.Errorf("verb %q is not registered under the maximal configuration", name)
+			continue
+		}
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{"message_id": "msg-1"}
+		result, err := v.Handler(context.Background(), req)
+		if err != nil {
+			t.Fatalf("%s handler returned a transport error: %v", name, err)
+		}
+		if !result.IsError {
+			t.Errorf("verb %q was not blocked in read-only mode", name)
+			continue
+		}
+		tc, ok := result.Content[0].(mcp.TextContent)
+		if !ok {
+			t.Fatalf("%s: expected TextContent, got %T", name, result.Content[0])
+		}
+		if !strings.Contains(tc.Text, "read-only") {
+			t.Errorf("verb %q refusal %q does not name read-only mode", name, tc.Text)
+		}
+		if !strings.Contains(tc.Text, "mail."+name) {
+			t.Errorf("verb %q refusal %q does not carry the mail.<verb> identity", name, tc.Text)
+		}
+	}
 }

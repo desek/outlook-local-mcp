@@ -1,7 +1,9 @@
 package tools
 
 import (
+	"bytes"
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -199,11 +201,22 @@ func TestMoveMessage_AcceptsNonDraftMessage(t *testing.T) {
 	}
 }
 
-// TestMoveMessage_UnresolvableDestinationCarriesFix verifies NFR-4 for the
-// failure a move actually hits: a destination that does not resolve returns a
-// redacted Graph error carrying the instruction naming where a destination
-// identifier comes from.
+// TestMoveMessage_UnresolvableDestinationCarriesFix verifies the correction
+// reaches both channels for the failure a move actually hits: a destination that
+// does not resolve returns a redacted Graph error carrying the instruction
+// naming where a destination identifier comes from, and the same instruction
+// appears on the emitted log record.
+//
+// Both halves are asserted because the log record is the only channel a headless
+// caller reading a persisted log has. Grading the tool result alone would leave
+// the channel that exists for that caller ungraded, which is the whole point of
+// attaching the fix to the record.
 func TestMoveMessage_UnresolvableDestinationCarriesFix(t *testing.T) {
+	var logged bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	defer slog.SetDefault(restore)
+
 	client, srv := newTestGraphClient(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusNotFound)
@@ -222,5 +235,8 @@ func TestMoveMessage_UnresolvableDestinationCarriesFix(t *testing.T) {
 	}
 	if !strings.Contains(resultText(t, result), "list_folders") {
 		t.Errorf("expected the failure to name where a destination comes from, got: %q", resultText(t, result))
+	}
+	if !strings.Contains(logged.String(), moveFixInstruction) {
+		t.Errorf("expected the log record to carry the same correction as the tool result, got: %q", logged.String())
 	}
 }

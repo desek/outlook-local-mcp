@@ -339,3 +339,74 @@ func headingToAnchor(heading string) string {
 	}
 	return b.String()
 }
+
+// TestWriteVerbsDeclareNoOutputParameter asserts the project's tiering rule as a
+// derived check over the whole registry rather than as a list of known verbs:
+// a verb whose readOnlyHint is false returns a text confirmation
+// unconditionally, so it MUST NOT publish an output parameter.
+//
+// The cases come from the live verb sets built under the maximal configuration,
+// so a write verb added later is covered without anyone remembering to extend a
+// list here. The schema is read the way the aggregate builder reads it, by
+// materialising the verb's own Schema options onto a throwaway tool, so the
+// property inspected is the one the verb declares rather than the union the
+// aggregate publishes.
+func TestWriteVerbsDeclareNoOutputParameter(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "auth_code",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	checked := 0
+	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+		for _, v := range verbSets[domain] {
+			if verbIsReadOnly(v.Annotations) {
+				continue
+			}
+			checked++
+			if _, declared := verbSchemaProperties(v.Schema)["output"]; declared {
+				t.Errorf("domain %q verb %q declares an output parameter; a write verb returns a text confirmation unconditionally and must not offer a tier", domain, v.Name)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Error("the check selected no write verbs; the derivation is broken, not the registry")
+	}
+}
+
+// verbIsReadOnly materialises the verb's annotation options and reports the
+// declared readOnlyHint, read from the verb itself rather than inferred from
+// its name.
+func verbIsReadOnly(opts []mcp.ToolOption) bool {
+	var mt mcp.Tool
+	for _, opt := range opts {
+		opt(&mt)
+	}
+	return mt.Annotations.ReadOnlyHint != nil && *mt.Annotations.ReadOnlyHint
+}
+
+// verbSchemaProperties materialises the verb's schema options onto a throwaway
+// tool and returns the property names it declares.
+func verbSchemaProperties(opts []mcp.ToolOption) map[string]any {
+	if len(opts) == 0 {
+		return map[string]any{}
+	}
+	mt := mcp.NewTool("_introspect", opts...)
+	return mt.InputSchema.Properties
+}

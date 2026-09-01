@@ -200,3 +200,36 @@ func TestSetFlag_InvalidMessageIDRejectedBeforeCall(t *testing.T) {
 		t.Errorf("expected no Graph request, got %v", rec.methods)
 	}
 }
+
+// TestSetFlag_ConfirmationStatesResponseNotRequest drives a service response
+// that disagrees with the request, which is the only shape that can distinguish
+// a confirmation reading the Graph response from one echoing the arguments.
+// Every other case in this file sends a response agreeing with the request, so
+// it would pass either way.
+func TestSetFlag_ConfirmationStatesResponseNotRequest(t *testing.T) {
+	rec := &patchRecorder{response: `{"id":"msg-1","subject":"Quarterly report","flag":{"flagStatus":"complete"}}`}
+	client, srv := newTestGraphClient(t, rec)
+	defer srv.Close()
+	ctx := auth.WithGraphClient(context.Background(), client)
+
+	handler := NewHandleSetFlag(graph.RetryConfig{}, 30*time.Second)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"message_id":  "msg-1",
+		"flag_status": "flagged",
+	}
+	result, err := handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %s", resultText(t, result))
+	}
+	text := resultText(t, result)
+	if !strings.Contains(text, "Flag status: complete") {
+		t.Errorf("expected the confirmation to state the status the service stored, got: %q", text)
+	}
+	if strings.Contains(text, "Flag status: flagged") {
+		t.Errorf("the confirmation echoed the requested status rather than the stored one: %q", text)
+	}
+}

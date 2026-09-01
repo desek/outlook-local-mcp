@@ -150,3 +150,36 @@ func TestMarkRead_AcceptsNonDraftMessage(t *testing.T) {
 		t.Errorf("expected exactly one PATCH and no verification GET, got %v", rec.methods)
 	}
 }
+
+// TestMarkRead_ConfirmationStatesResponseNotRequest drives a service response
+// that disagrees with the request, which is the only shape that can distinguish
+// a confirmation reading the Graph response from one echoing the arguments.
+// Every other case in this file sends a response agreeing with the request, so
+// it would pass either way.
+func TestMarkRead_ConfirmationStatesResponseNotRequest(t *testing.T) {
+	rec := &patchRecorder{response: `{"id":"msg-1","subject":"Report","isRead":false}`}
+	client, srv := newTestGraphClient(t, rec)
+	defer srv.Close()
+	ctx := auth.WithGraphClient(context.Background(), client)
+
+	handler := NewHandleMarkRead(graph.RetryConfig{}, 30*time.Second)
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"message_id": "msg-1",
+		"is_read":    true,
+	}
+	result, err := handler(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("unexpected tool error: %s", resultText(t, result))
+	}
+	text := resultText(t, result)
+	if !strings.Contains(text, "Read state: unread") {
+		t.Errorf("expected the confirmation to state the state the service stored, got: %q", text)
+	}
+	if strings.Contains(text, "Read state: read") {
+		t.Errorf("the confirmation echoed the requested state rather than the stored one: %q", text)
+	}
+}

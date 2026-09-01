@@ -785,6 +785,17 @@ func TestRegisterTools_MailEnabled(t *testing.T) {
 	if got := len(registered); got != expectedTotal {
 		t.Errorf("expected %d tools with mail enabled, got %d", expectedTotal, got)
 	}
+
+	// MailEnabled alone grants read scope only, so the received-message write
+	// verbs must stay out of the published enum. This is the negative half of
+	// the gate: without it, a verb accidentally registered on the read flag
+	// would still pass every positive assertion above.
+	ops := registeredOperations(t, s, "mail")
+	for _, name := range mailManagementVerbs() {
+		if ops[name] {
+			t.Errorf("verb %q is published with MailEnabled alone; it is gated on MailManageEnabled", name)
+		}
+	}
 }
 
 // TestRegisterTools_MailAggregate_HelpVerb verifies that the mail aggregate
@@ -832,5 +843,80 @@ func TestRegisterTools_MailAggregate_HelpVerb(t *testing.T) {
 	}
 	if !strings.Contains(tc.Text, "list_folders") {
 		t.Errorf("mail help output should mention 'list_folders', got: %q", tc.Text)
+	}
+}
+
+// registeredOperations returns the set of operation names published in the
+// enum of an aggregate domain tool's operation parameter. The enum is what a
+// client reads to learn which verbs the running configuration hosts, so it is
+// the surface a gating assertion belongs on.
+func registeredOperations(t *testing.T, s *mcpserver.MCPServer, domain string) map[string]bool {
+	t.Helper()
+
+	tool, ok := s.ListTools()[domain]
+	if !ok {
+		t.Fatalf("aggregate %q tool is not registered", domain)
+	}
+	raw, ok := tool.Tool.InputSchema.Properties["operation"]
+	if !ok {
+		t.Fatalf("aggregate %q tool publishes no operation parameter", domain)
+	}
+	schema, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("aggregate %q operation schema is %T, want map[string]any", domain, raw)
+	}
+	values, ok := schema["enum"].([]string)
+	if !ok {
+		t.Fatalf("aggregate %q operation schema carries no string enum, got %T", domain, schema["enum"])
+	}
+	out := make(map[string]bool, len(values))
+	for _, v := range values {
+		out[v] = true
+	}
+	return out
+}
+
+// mailManagementVerbs names the received-message write verbs whose registration
+// is gated on MailManageEnabled. Both the positive and the negative test read
+// this list, so the pair cannot drift apart.
+func mailManagementVerbs() []string {
+	return []string{"move_message", "set_flag", "set_categories", "mark_read"}
+}
+
+// TestRegisterTools_MailManage_RegistersManagementVerbs verifies that with
+// MailManageEnabled set, the received-message write verbs appear in the mail
+// tool's published operation enum and no new top-level tool is registered
+// alongside them: the surface grows by verbs, not by tools.
+func TestRegisterTools_MailManage_RegistersManagementVerbs(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+
+	audit.InitAuditLog(false, "")
+
+	cfg := testConfig()
+	cfg.MailEnabled = true
+	cfg.MailManageEnabled = true
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
+
+	ops := registeredOperations(t, s, "mail")
+	for _, name := range mailManagementVerbs() {
+		if !ops[name] {
+			t.Errorf("verb %q is absent from the mail operation enum with MailManageEnabled=true", name)
+		}
+	}
+
+	const expectedTotal = 4
+	if got := len(s.ListTools()); got != expectedTotal {
+		t.Errorf("expected %d aggregate tools, got %d; new verbs must not add a top-level tool", expectedTotal, got)
 	}
 }

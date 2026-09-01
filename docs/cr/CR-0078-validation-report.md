@@ -7,13 +7,23 @@ checkpoint `c8544d1`.
 
 ## Summary
 
-Requirements: 29/34 | Acceptance Criteria: 20/25 | Tests: 27/36 | Gaps: 9
+Requirements: 34/34 | Acceptance Criteria: 25/25 | Tests: 36/36 | Gaps: 0 open, 1 deferred
 
-No FAIL. Every functional and non-functional requirement is implemented and maps to a
-changed file with a specific hunk. Five requirements and five acceptance criteria are
-downgraded to PARTIAL because the behaviour they assert is implemented but has no test
-grading it, and in every one of those five cases the CR's Test Strategy named a test that
-was not written.
+**Gap fix pass, 2026-09-01.** Every gap this report opened has been closed by adding the
+test the CR's Test Strategy named, except G9, which needs a live mailbox and a paid harness
+run and is therefore deferred to the user on the record. No production code changed in the
+fix pass: each of the eight closed gaps was a missing assertion over behaviour that was
+already implemented, which is why the pass adds tests only. The rows below carry their
+post-fix status; the Gaps section records what each fix was.
+
+No FAIL, at the audit or after the fix pass. Every functional and non-functional
+requirement is implemented and maps to a changed file with a specific hunk.
+
+The audit downgraded five requirements and five acceptance criteria to PARTIAL: the
+behaviour they assert was implemented but had no test grading it, and in every one of those
+ten cases the CR's Test Strategy named a test that was not written. All ten now carry the
+named test and read PASS. The one thing the suite still cannot show is that any of the four
+verbs has issued a real Microsoft Graph call, which is G9 and is deferred to the user.
 
 ### Check pipeline
 
@@ -24,7 +34,9 @@ was not written.
 | `go test -race ./internal/tools/ ./internal/server/ ./internal/graph/ ./internal/validate/ -run 'MoveMessage\|SetFlag\|SetCategories\|MarkRead\|Confirmation\|SharedParameters\|Manifest\|VerbInventory'` (CR Verification Commands) | **pass**, 47 tests, 0 failures |
 | `go test -race ./internal/docs/ ./internal/surface/ -run 'MailGatingRow\|CommittedManifest\|RecordCounts\|DefaultCount\|EveryVerbCarries'` | **pass**, 4 tests |
 | `go test -race ./internal/tools/ ./internal/server/ -run 'MailAnnotations\|AggregateAnnotations\|EveryVerbHas\|SeeDocs\|DescriptionLengthBounded\|ColdStart\|RegisterTools_Mail\|ReadOnlyGuard'` | **pass**, 30 tests |
-| `make crud-test` | **not run** (drives a live mailbox and costs a paid agent run; out of scope for a documentation-only audit) |
+| `make crud-test` | **not run**, in the audit or in the gap-fix pass (drives a live mailbox and costs a paid agent run). Recorded as pending for the user; see G9. |
+| `make ci`, gap-fix pass | **pass**, exit 0; working tree clean after the surface manifest regenerated |
+| `go test -race ./internal/tools/ ./internal/server/`, gap-fix pass | **pass** |
 
 ### Measured gates
 
@@ -68,10 +80,10 @@ absent.
 | FR-7 | Validate with `ValidateStringLength` against `MaxCategoriesLen`; split on commas, trim, drop empties | PASS | `internal/tools/set_categories.go:66-71`; `TestSetCategories_OverLengthRejected` (`set_categories_test.go:105`), `TestSetCategories_ReplacesFullSet` |
 | FR-8 | Empty or whitespace-only `categories` clears every category, confirmation says so | PASS | `internal/tools/set_categories.go:71-76`, `:134-136`; `TestSetCategories_EmptyValueClears` (`set_categories_test.go:76`) asserts `"categories":[]` in the PATCH body and the no-categories sentence |
 | FR-9 | `mark_read` requires `message_id` and a boolean `is_read`, written by PATCH | PASS | `internal/tools/mark_read.go:57-73`; `TestMarkRead_SetsRead` (`mark_read_test.go:16`), `TestMarkRead_SetsUnread` (`:49`), `TestMarkRead_RequiresIsRead` (`:78`), `TestMarkRead_RejectsNonBooleanIsRead` (`:104`) |
-| FR-10 | All four validate `message_id` with `ValidateResourceID` before any Graph request | PARTIAL | Implemented in all four: `move_message.go:67`, `set_flag.go:53`, `set_categories.go:56`, `mark_read.go:53`. Graded for two only: `TestMoveMessage_InvalidIdentifiersRejectedBeforeCall` (`move_message_test.go:146`), `TestSetFlag_InvalidMessageIDRejectedBeforeCall` (`set_flag_test.go:180`). The cross-verb test `TestMailWriteVerbs_RequireMessageID` (`mail_write_verbs_test.go:124`) omits `message_id` rather than malforming it, so `set_categories` and `mark_read` have no malformed-identifier evidence. See G1. |
+| FR-10 | All four validate `message_id` with `ValidateResourceID` before any Graph request | PASS | Implemented in all four: `move_message.go:67`, `set_flag.go:53`, `set_categories.go:56`, `mark_read.go:53`. Graded for all four by `TestMailWriteVerbs_MalformedMessageIDRejectedByEveryVerb` (`mail_write_verbs_test.go:162`), which drives an over-length identifier at each row of `mailWriteVerbs()` and asserts the refusal with `len(rec.methods) == 0`; plus the two per-handler tests `TestMoveMessage_InvalidIdentifiersRejectedBeforeCall` (`:146`) and `TestSetFlag_InvalidMessageIDRejectedBeforeCall` (`set_flag_test.go:180`). G1 fixed. |
 | FR-11 | None of the four applies the `isDraft` guard | PASS | No `verifyIsDraft` call in any of the four handlers; `TestMoveMessage_AcceptsNonDraftMessage` (`:180`), `TestSetFlag_AcceptsNonDraftMessage` (`set_flag_test.go:148`), `TestSetCategories_AcceptsNonDraftMessage` (`set_categories_test.go:161`), `TestMarkRead_AcceptsNonDraftMessage` (`mark_read_test.go:130`); `TestMailWriteVerbs_SingleGraphRequestOnSuccess` (`mail_write_verbs_test.go:97`) proves no preceding GET |
-| FR-12 | Unconditional text confirmation; no `output` parameter declared | PARTIAL | No `output` in any of the four `Schema` blocks (`mail_verbs.go:632-646`, `:667-681`, `:701-715`, `:735-749`); every handler returns `mcp.NewToolResultText` on success. The derived cross-domain check the CR specified, `TestWriteVerbsDeclareNoOutputParameter`, is absent from `internal/tools/verb_metadata_test.go`. See G5. |
-| FR-13 | Confirmations built from the Graph response, not the request arguments | PARTIAL | Implemented in all four (`move_message.go:107-121`, `set_flag.go:102-109` via `responseFlagStatus:128`, `set_categories.go:105-113` via `responseCategories:133`, `mark_read.go:94-101` via `responseReadState:119`). Falsifiable evidence exists for two: `TestSetCategories_ConfirmationListsResult` asserts the request value `"Ignored"` is absent from the output; `TestMoveMessage_ConfirmationNamesAllThreeIdentifiers` uses a response ID differing from the request. `set_flag` and `mark_read` canned responses echo the request, so the "not the arguments" half is untestable there. See G4. |
+| FR-12 | Unconditional text confirmation; no `output` parameter declared | PASS | No `output` in any of the four `Schema` blocks (`mail_verbs.go:632-646`, `:667-681`, `:701-715`, `:735-749`); every handler returns `mcp.NewToolResultText` on success. The derived cross-domain check is now present: `TestWriteVerbsDeclareNoOutputParameter` (`verb_metadata_test.go:354`) iterates every domain's verbs under the maximal configuration and fails when a verb declaring `readOnlyHint: false` publishes an `output` property. G5 fixed. |
+| FR-13 | Confirmations built from the Graph response, not the request arguments | PASS | Implemented in all four (`move_message.go:107-121`, `set_flag.go:102-109` via `responseFlagStatus:128`, `set_categories.go:105-113` via `responseCategories:133`, `mark_read.go:94-101` via `responseReadState:119`). Falsifiable evidence now exists for all four: `TestSetCategories_ConfirmationListsResult`, `TestMoveMessage_ConfirmationNamesAllThreeIdentifiers`, and the two added disagreeing-response cases `TestSetFlag_ConfirmationStatesResponseNotRequest` (`set_flag_test.go:209`, request `flagged` / response `complete`) and `TestMarkRead_ConfirmationStatesResponseNotRequest` (`mark_read_test.go:159`, request `is_read: true` / response `isRead: false`). G4 fixed. |
 | FR-14 | All four annotation hints declared explicitly, per the matrix | PASS | `mail_verbs.go:626-631` (`move_message`: false/true/false/true), `:660-665`, `:694-699`, `:728-733` (the other three: false/false/true/true); `verbInventoryGolden` (`dispatch_registry_test.go:73-77`) asserts the values, graded by `TestVerbInventoryUnchangedAfterUpgrade`; `TestEveryVerbHasClassification` |
 | FR-15 | Wrapped by the write middleware chain under the `mail.<verb>` identity | PASS | `mail_verbs.go:139-142` via `wrapWrite` (`:107-108`, chaining auth, account resolution, observability, `ReadOnlyGuard`, `AuditWrap`); `TestMailManagementVerbsCarryDotIdentity` (`mail_verbs_test.go:259`) asserts the audit record's `tool_name` reads `mail.<verb>` with `operation_type` `write`; live read-only refusal names `mail.move_message` and the other three |
 | FR-16 | Shared read/write parameter descriptions name a declaring write verb (four rewrites) | PASS | `mail_verbs.go:214` (`is_read`), `:223` (`importance`), `:227` (`flag_status`), `:269` (`message_id`); `TestSharedParametersNameTheirWriteVerbs` (`mail_verbs_test.go:161`) derives its cases from the registry and exempts `account` inline; live `tools/list` confirms the published text |
@@ -93,28 +105,28 @@ absent.
 | NFR-1 | Each handler in its own file under `internal/tools/`, named for the verb | PASS | `internal/tools/move_message.go`, `set_flag.go`, `set_categories.go`, `mark_read.go`, each 127-138 lines, one constructor apiece |
 | NFR-2 | Composed `mail` description stays below 4 000 characters | PASS | Measured 2 737 characters from the live `tools/list`; `TestDescriptionLengthBounded` (`description_quality_test.go:147`) passes |
 | NFR-3 | Cold-start schema reduction stays >= 60 % | PASS | 18 151 bytes, 75 % reduction, logged by `schema_size_test.go:82-84`; `TestColdStartSchemaSize_Reduction` passes |
-| NFR-4 | Every error carries a fix instruction reaching both the tool result and the log record | PARTIAL | Both channels implemented: `move_message.go:99-104` (result text plus `"fix", moveFixInstruction` on the log record), `set_flag.go:91-96`, `set_categories.go:94-99`, `mark_read.go:83-88`. Only the tool-result channel is graded: `TestMailWriteVerbs_GraphFailureCarriesFix` (`mail_write_verbs_test.go:224`), `TestMoveMessage_UnresolvableDestinationCarriesFix` (`move_message_test.go:206`). No test binds a logger to a capture buffer. See G3. |
+| NFR-4 | Every error carries a fix instruction reaching both the tool result and the log record | PASS | Both channels implemented: `move_message.go:99-104` (result text plus `"fix", moveFixInstruction` on the log record), `set_flag.go:91-96`, `set_categories.go:94-99`, `mark_read.go:83-88`. Both channels graded: the tool result by `TestMailWriteVerbs_GraphFailureCarriesFix` (`mail_write_verbs_test.go:317`), and the log record by `TestMoveMessage_UnresolvableDestinationCarriesFix` (`move_message_test.go:214`), which now swaps `slog.Default()` for a buffer-backed handler and asserts the captured output carries `moveFixInstruction`. G3 fixed. |
 | NFR-5 | No third-party dependency added | PASS | `git diff 2cce019..HEAD -- go.mod go.sum` is empty; `go mod tidy` in `make ci` leaves the tree clean |
 | NFR-6 | Exactly one Graph request per success path; no read-modify-write | PASS | `TestMailWriteVerbs_SingleGraphRequestOnSuccess` (`mail_write_verbs_test.go:97`) asserts exactly one request of the expected method for each of the four |
-| NFR-7 | Route through `RetryGraphCall` and `WithTimeout`; redact Graph errors with the existing helpers | PARTIAL | Wiring present and identical across the four: `move_message.go:83-105`, `set_flag.go:75-97`, `set_categories.go:78-100`, `mark_read.go:67-89` each call `graph.WithTimeout`, `graph.RetryGraphCall`, `graph.IsTimeoutError`, `graph.TimeoutErrorMessage`, `graph.RedactGraphError`. No test exercises the timeout path or asserts redaction of a token-like string for any of the four. See G2. |
+| NFR-7 | Route through `RetryGraphCall` and `WithTimeout`; redact Graph errors with the existing helpers | PASS | Wiring present and identical across the four: `move_message.go:83-105`, `set_flag.go:75-97`, `set_categories.go:78-100`, `mark_read.go:67-89` each call `graph.WithTimeout`, `graph.RetryGraphCall`, `graph.IsTimeoutError`, `graph.TimeoutErrorMessage`, `graph.RedactGraphError`. Both paths now graded across all four: `TestMailWriteVerbs_TimeoutNamesConfiguredSeconds` (`mail_write_verbs_test.go:194`) configures a 7s deadline, so the assertion fails on a hardcoded 30s message rather than passing by coincidence; `TestMailWriteVerbs_GraphErrorIsRedacted` (`:224`) serves a Graph error carrying an address and asserts it is absent from the result and replaced by the redaction placeholder. G2 fixed. |
 | NFR-8 | The three property writes are deterministic and idempotent | PASS | `TestMailWriteVerbs_PropertyWritesAreIdempotent` (`mail_write_verbs_test.go:253`) asserts identical request bodies and identical confirmation text on repeat, for the three, excluding `move_message` |
 
 ## Acceptance Criteria Verification
 
 | AC # | Description | Status | Evidence |
 |---|---|---|---|
-| AC-1 | The four register, and only behind the manage gate | PASS | Live `tools/list`: under `MAIL_MANAGE_ENABLED` the enum holds all four and exactly 4 tools are registered; under `MAIL_ENABLED`-only none is present. `TestEveryVerbCarriesSummaryAndGate`, `TestDefaultCountExcludesGatedVerbs`, `TestManifestDescribesEveryRegisteredVerb`, `TestAggregateAnnotations_FourToolsRegistered`. The two CR-named tests for this criterion are absent; see G7. |
+| AC-1 | The four register, and only behind the manage gate | PASS | Live `tools/list`: under `MAIL_MANAGE_ENABLED` the enum holds all four and exactly 4 tools are registered; under `MAIL_ENABLED`-only none is present. `TestEveryVerbCarriesSummaryAndGate`, `TestDefaultCountExcludesGatedVerbs`, `TestManifestDescribesEveryRegisteredVerb`, `TestAggregateAnnotations_FourToolsRegistered`. Both CR-named tests now exist: `TestRegisterTools_MailManage_RegistersManagementVerbs` (`internal/server/server_test.go:890`) asserts all four are in the published operation enum with the tool count still 4, and `TestRegisterTools_MailEnabled` (`:793`) carries the complementary negative. G7 fixed. |
 | AC-2 | A move surfaces the identifier the caller cannot otherwise see | PASS | `TestMoveMessage_Success` (`move_message_test.go:33`), `TestMoveMessage_ConfirmationNamesAllThreeIdentifiers` (`:63`); `move_message.go:113-121` renders the new ID, the destination, and the sentence that the original no longer resolves |
 | AC-3 | The follow-up flag is written, and only with an accepted status | PASS | `TestSetFlag_Success` (`set_flag_test.go:55`) asserts `"flagStatus":"flagged"` in the PATCH body and the status in the confirmation; `TestSetFlag_RejectsUnknownStatus` (`:90`) asserts refusal naming the three values with no request issued; `TestValidateFlagStatus` (`validate_test.go:438`), `TestParseFlagStatus` (`enums_test.go:105`) |
 | AC-4 | Categories are replaced as a set, and the result is stated | PASS | `TestSetCategories_ReplacesFullSet` (`set_categories_test.go:18`), `TestSetCategories_ConfirmationListsResult` (`:47`), `TestSetCategories_OverLengthRejected` (`:105`) |
 | AC-5 | An empty categories value clears every category | PASS | `TestSetCategories_EmptyValueClears` (`set_categories_test.go:76`) |
 | AC-6 | The read state is written in both directions | PASS | `TestMarkRead_SetsRead` (`mark_read_test.go:16`), `TestMarkRead_SetsUnread` (`:49`), `TestMarkRead_RequiresIsRead` (`:78`) |
-| AC-7 | An invalid message identifier never reaches Microsoft Graph | PARTIAL | Graded for `move_message` and `set_flag` only. `TestMailWriteVerbs_RequireMessageID` covers all four but tests a *missing* identifier, not a *malformed* one, so it does not exercise `ValidateResourceID`. `set_categories` and `mark_read` have no malformed-identifier test. See G1. |
+| AC-7 | An invalid message identifier never reaches Microsoft Graph | PASS | `TestMailWriteVerbs_MalformedMessageIDRejectedByEveryVerb` (`mail_write_verbs_test.go:162`) drives a *malformed* identifier at all four, which is what reaches `ValidateResourceID`; `TestMailWriteVerbs_RequireMessageID` (`:212`) covers the *missing* case separately. G1 fixed. |
 | AC-8 | A received message is not refused for being a non-draft | PASS | Four per-handler tests: `TestMoveMessage_AcceptsNonDraftMessage`, `TestSetFlag_AcceptsNonDraftMessage`, `TestSetCategories_AcceptsNonDraftMessage`, `TestMarkRead_AcceptsNonDraftMessage`; plus `TestMailWriteVerbs_SingleGraphRequestOnSuccess` proving no draft-check GET precedes the write |
-| AC-9 | Each verb is a write verb by the project's tiering rule | PARTIAL | The text-confirmation half is graded for all four by `TestMailWriteVerbs_ConfirmationNamesSubjectAndIdentifier` (`mail_write_verbs_test.go:176`). The derived half, "every verb whose read-only hint is false declares no output parameter", has no test: `TestWriteVerbsDeclareNoOutputParameter` was never written. Registry evidence only. See G5. |
-| AC-10 | Confirmations report the service, not the request | PARTIAL | Proven with a differing response for two of four: `TestSetCategories_ConfirmationListsResult` (asserts the request value `"Ignored"` is absent) and `TestMoveMessage_ConfirmationNamesAllThreeIdentifiers`. For `set_flag` and `mark_read` every canned response echoes the request, so the criterion cannot fail there. See G4. |
-| AC-11 | Every hint is declared, and matches the matrix | PASS | `verbInventoryGolden` (`dispatch_registry_test.go:73-77`) asserts all four hints per verb against the matrix; live folded `mail` annotations are `false/true/false/true` under manage and `true/false/true/true` under read-only, unchanged from before this change (`TestMailAnnotationsManageEnabled`, `TestMailAnnotationsGatedReadOnly`). The CR-named `TestMailManagementVerbAnnotations` is absent; see G6. |
-| AC-12 | Read-only mode blocks all four, and the identity is consistent | PASS | Second clause graded by `TestMailManagementVerbsCarryDotIdentity` (`mail_verbs_test.go:259`), which reads the emitted audit record and asserts `tool_name` is `mail.<verb>` with `operation_type` `write`. First clause verified behaviourally: driving the built binary with `OUTLOOK_MCP_READ_ONLY=true` returns `operation blocked: mail.<verb> is not allowed in read-only mode` for each of the four. The CR-named `TestReadOnlyBlocksMailManagementVerbs` is absent; see G8. |
+| AC-9 | Each verb is a write verb by the project's tiering rule | PASS | The text-confirmation half is graded for all four by `TestMailWriteVerbs_ConfirmationNamesSubjectAndIdentifier` (`mail_write_verbs_test.go:269`). The derived half is graded by `TestWriteVerbsDeclareNoOutputParameter` (`verb_metadata_test.go:354`), whose cases come from the live verb sets rather than a list, so a write verb added later is covered without anyone extending it. Instrument validated by inversion: run against read-only verbs instead, it reports 18 verbs declaring `output`, so it detects the property it looks for. G5 fixed. |
+| AC-10 | Confirmations report the service, not the request | PASS | Proven with a differing response for all four: `TestSetCategories_ConfirmationListsResult`, `TestMoveMessage_ConfirmationNamesAllThreeIdentifiers`, `TestSetFlag_ConfirmationStatesResponseNotRequest` (`set_flag_test.go:209`), `TestMarkRead_ConfirmationStatesResponseNotRequest` (`mark_read_test.go:159`). The two added cases each assert both halves: the response value is stated and the requested value is absent. G4 fixed. |
+| AC-11 | Every hint is declared, and matches the matrix | PASS | `verbInventoryGolden` (`dispatch_registry_test.go:73-77`) asserts all four hints per verb against the matrix; live folded `mail` annotations are `false/true/false/true` under manage and `true/false/true/true` under read-only, unchanged from before this change (`TestMailAnnotationsManageEnabled`, `TestMailAnnotationsGatedReadOnly`). The CR-named `TestMailManagementVerbAnnotations` now exists (`internal/tools/tool_annotations_test.go:450`) and asserts the four per-verb hint values directly, which the aggregate fold cannot: three of the four declare `destructiveHint: false`, invisible in an aggregate folding to true. G6 fixed. |
+| AC-12 | Read-only mode blocks all four, and the identity is consistent | PASS | Second clause graded by `TestMailManagementVerbsCarryDotIdentity` (`mail_verbs_test.go:259`), which reads the emitted audit record and asserts `tool_name` is `mail.<verb>` with `operation_type` `write`. First clause verified behaviourally: driving the built binary with `OUTLOOK_MCP_READ_ONLY=true` returns `operation blocked: mail.<verb> is not allowed in read-only mode` for each of the four. That observation is now reproducible in CI: `TestReadOnlyBlocksMailManagementVerbs` (`internal/server/readonly_test.go:151`) builds the mail verbs with `readOnly: true` and invokes each of the four through its own middleware chain, asserting the refusal names both read-only mode and the `mail.<verb>` identity. G8 fixed. |
 | AC-13 | A shared parameter's published description covers its write sense | PASS | `TestSharedParametersNameTheirWriteVerbs` (`mail_verbs_test.go:161`) derives its cases from the registry, exempts `account` inline, and fails when the selection is empty; live `tools/list` confirms all four published strings name a write verb |
 | AC-14 | Scoping and destination stay distinct | PASS | `TestDestinationFolderIDIsNotFolderID` (`mail_verbs_test.go:224`); live schema publishes `folder_id` ("Mail folder ID to list messages from") and `destination_folder_id` ("...This names where the message is moved to; folder_id scopes a read instead") separately |
 | AC-15 | Registry metadata is complete for every new verb | PASS | `TestEveryVerbHasSummary`, `TestEveryVerbHasDescription`, `TestEveryVerbHasClassification`, `TestSeeDocsAnchorsResolve`, `TestEveryVerbStatesRequiredParameters`, all passing over the maximal configuration |
@@ -126,8 +138,8 @@ absent.
 | AC-21 | The consent surface is unchanged | PASS | `internal/auth/**` zero diff; the five scope tests pass unchanged in `make ci` |
 | AC-22 | The measured surface gates keep their margins | PASS | Description 2 737 < 4 000; cold-start 18 151 bytes at 75 % >= 60 %; `go.mod`/`go.sum` diff empty; `TestMailWriteVerbs_SingleGraphRequestOnSuccess` proves one Graph request per success path |
 | AC-23 | The three property writes are idempotent | PASS | `TestMailWriteVerbs_PropertyWritesAreIdempotent` (`mail_write_verbs_test.go:253`) asserts identical request body and identical confirmation on the second call |
-| AC-24 | A failure carries its correction on both channels | PARTIAL | Tool-result channel graded: `TestMoveMessage_UnresolvableDestinationCarriesFix` (`move_message_test.go:206`) asserts the result names `list_folders`. Log channel implemented (`move_message.go:101-103`) but **not** graded: the test does not bind the handler's logger to a capture buffer, which the CR's Test Strategy row for this criterion explicitly required. See G3. |
-| AC-25 | The implementation follows the project's file and helper conventions | PARTIAL | The file-layout clause PASSES: four handlers, four files, named for the verbs. The error-handling clause is ungraded: no test causes a timeout to assert the message names the configured seconds, and no test asserts `RedactGraphError` removed a token-like string. Code evidence only. See G2. |
+| AC-24 | A failure carries its correction on both channels | PASS | Both channels graded by `TestMoveMessage_UnresolvableDestinationCarriesFix` (`move_message_test.go:214`): the tool result names `list_folders`, and the test now installs a buffer-backed `slog` default for the call and asserts the captured record carries `moveFixInstruction`. The log channel is the one that matters here, because it is the only channel a headless caller reading a persisted log has. G3 fixed. |
+| AC-25 | The implementation follows the project's file and helper conventions | PASS | The file-layout clause: four handlers, four files, named for the verbs. The error-handling clause is now graded by `TestMailWriteVerbs_TimeoutNamesConfiguredSeconds` (`mail_write_verbs_test.go:194`), which asserts the refusal names the configured 7s rather than a hardcoded value, and `TestMailWriteVerbs_GraphErrorIsRedacted` (`:224`), which asserts an address in the Graph error is replaced by the redaction placeholder. Both run over every row of `mailWriteVerbs()`. G2 fixed. |
 
 ## Test Strategy Verification
 
@@ -139,10 +151,10 @@ absent.
 | `internal/tools/move_message_test.go` | `TestMoveMessage_ConfirmationNamesNewID` | yes | renamed to `TestMoveMessage_ConfirmationNamesAllThreeIdentifiers` (`:63`) | yes |
 | `internal/tools/move_message_test.go` | `TestMoveMessage_RequiresDestination` | yes | renamed to `TestMoveMessage_RequiresDestinationFolderID` (`:89`) | yes |
 | `internal/tools/move_message_test.go` | `TestMoveMessage_InvalidMessageIDRejectedBeforeCall` | yes | renamed to `TestMoveMessage_InvalidIdentifiersRejectedBeforeCall` (`:146`) | yes, and broader (covers both identifiers) |
-| `internal/tools/mail_write_verbs_test.go` | `TestInvalidMessageIDRejectedByEveryWriteVerb` | yes | **no** | **no** — `TestMailWriteVerbs_RequireMessageID` (`:124`) omits the identifier rather than malforming it, so `ValidateResourceID` is never reached for `set_categories` or `mark_read` (G1) |
+| `internal/tools/mail_write_verbs_test.go` | `TestInvalidMessageIDRejectedByEveryWriteVerb` | yes | added as `TestMailWriteVerbs_MalformedMessageIDRejectedByEveryVerb` (`:162`) | yes — drives an over-length identifier at every row of `mailWriteVerbs()`; `TestMailWriteVerbs_RequireMessageID` (`:212`) keeps the missing-identifier case (G1 fixed) |
 | `internal/tools/mail_write_verbs_test.go` | `TestNoDraftGuardOnReceivedMessageWrites` | yes | as four per-handler `*_AcceptsNonDraftMessage` tests | yes |
-| `internal/tools/mail_write_verbs_test.go` | `TestWriteVerbsHonourTimeoutAndRedaction` | yes | **no** | **no** — no equivalent anywhere; the timeout and redaction paths are ungraded for all four (G2) |
-| `internal/tools/move_message_test.go` | `TestMoveMessage_UnresolvableDestinationCarriesFix` | yes | yes (`:206`) | **no** — asserts the tool result only; the specified logger capture buffer and log-record assertion are absent (G3) |
+| `internal/tools/mail_write_verbs_test.go` | `TestWriteVerbsHonourTimeoutAndRedaction` | yes | added as two tests, `TestMailWriteVerbs_TimeoutNamesConfiguredSeconds` (`:194`) and `TestMailWriteVerbs_GraphErrorIsRedacted` (`:224`) | yes — split so a timeout failure and a redaction failure are distinguishable rather than reported as one red test (G2 fixed) |
+| `internal/tools/move_message_test.go` | `TestMoveMessage_UnresolvableDestinationCarriesFix` | yes | yes (`:214`) | yes — now installs a buffer-backed `slog` default for the call and asserts the captured record carries `moveFixInstruction`, alongside the tool-result assertion (G3 fixed) |
 | `internal/tools/set_flag_test.go` | `TestSetFlag_Success` | yes | yes (`:55`) | yes |
 | `internal/tools/set_flag_test.go` | `TestSetFlag_RejectsUnknownStatus` | yes | yes (`:90`) | yes |
 | `internal/tools/set_flag_test.go` | `TestSetFlag_AcceptsNonDraftMessage` | yes | yes (`:148`) | yes |
@@ -154,16 +166,16 @@ absent.
 | `internal/tools/mark_read_test.go` | `TestMarkRead_SetsUnread` | yes | yes (`:49`) | yes |
 | `internal/tools/mark_read_test.go` | `TestMarkRead_RequiresIsRead` | yes | yes (`:78`) | yes |
 | `internal/tools/mail_write_confirmation_test.go` | `TestFormatMailWriteConfirmationFields` | yes | yes (`:16`) | yes |
-| `internal/tools/mail_write_verbs_test.go` | `TestConfirmationsUseGraphResponseNotArguments` | yes | **no** | **partial** — `TestSetCategories_ConfirmationListsResult` and `TestMoveMessage_ConfirmationNamesAllThreeIdentifiers` cover two of four; `set_flag` and `mark_read` have no differing-value case (G4) |
+| `internal/tools/mail_write_verbs_test.go` | `TestConfirmationsUseGraphResponseNotArguments` | yes | added per handler: `TestSetFlag_ConfirmationStatesResponseNotRequest` (`set_flag_test.go:209`) and `TestMarkRead_ConfirmationStatesResponseNotRequest` (`mark_read_test.go:159`), joining the two existing cases | yes — placed per handler rather than in the cross-verb table because the disagreeing response differs per verb and the shared table carries one canned response per row (G4 fixed) |
 | `internal/tools/mail_write_verbs_test.go` | `TestStateSetVerbsAreIdempotent` | yes | renamed to `TestMailWriteVerbs_PropertyWritesAreIdempotent` (`:253`) | yes |
 | `internal/tools/mail_write_verbs_test.go` | `TestSingleGraphRequestPerWrite` | yes | renamed to `TestMailWriteVerbs_SingleGraphRequestOnSuccess` (`:97`) | yes |
-| `internal/tools/tool_annotations_test.go` | `TestMailManagementVerbAnnotations` | yes | **no** — `tool_annotations_test.go` has zero diff | **partial** — the values are asserted by `verbInventoryGolden` instead (G6) |
-| `internal/tools/verb_metadata_test.go` | `TestWriteVerbsDeclareNoOutputParameter` | yes | **no** — `verb_metadata_test.go` has zero diff | **no** (G5) |
+| `internal/tools/tool_annotations_test.go` | `TestMailManagementVerbAnnotations` | yes | yes (`:450`) | yes — asserts all four hints per verb against the matrix, alongside the aggregate fold tests (G6 fixed) |
+| `internal/tools/verb_metadata_test.go` | `TestWriteVerbsDeclareNoOutputParameter` | yes | yes (`:354`) | yes — cases derived from the live verb sets under the maximal configuration, with a guard failing when the selection is empty (G5 fixed) |
 | `internal/server/mail_verbs_test.go` | `TestSharedParametersNameTheirWriteVerbs` | yes | yes (`:161`) | yes, cases derived from the registry as specified |
 | `internal/server/mail_verbs_test.go` | `TestDestinationFolderIDIsNotFolderID` | yes | yes (`:224`) | yes |
 | `internal/server/manifest_sync_test.go` | `TestManifestDescribesEveryRegisteredVerb` | yes | yes (`:84`) | yes |
-| `internal/server/server_test.go` | `TestRegisterTools_MailManage_RegistersManagementVerbs` | yes | **no** — `server_test.go` has zero diff | **no** (G7) |
-| `internal/server/readonly_test.go` | `TestReadOnlyBlocksMailManagementVerbs` | yes | **no** — `readonly_test.go` has zero diff | **no** (G8) |
+| `internal/server/server_test.go` | `TestRegisterTools_MailManage_RegistersManagementVerbs` | yes | yes (`:890`) | yes — reads the published operation enum via the added `registeredOperations` helper and re-asserts the tool count stays 4 (G7 fixed) |
+| `internal/server/readonly_test.go` | `TestReadOnlyBlocksMailManagementVerbs` | yes | yes (`:151`) | yes — invokes each verb through its own middleware chain with `readOnly: true` and asserts the refusal names read-only mode and the `mail.<verb>` identity (G8 fixed) |
 | `internal/server/mail_verbs_test.go` | `TestMailManagementVerbsCarryDotIdentity` | yes | yes (`:259`) | yes |
 | `internal/docs/catalog_test.go` | `TestMailGatingRowNamesMessageManagement` | yes | yes (`:56`) | yes |
 
@@ -172,7 +184,7 @@ absent.
 | Test File | Test Name | Specified | Exists | Matches Spec |
 |---|---|---|---|---|
 | `internal/tools/dispatch_registry_test.go` | `TestVerbInventoryUnchangedAfterUpgrade` | golden 42 -> 46, four added lines | yes (`:73-77`) | yes, exactly the four specified strings |
-| `internal/server/server_test.go` | `TestRegisterTools_MailEnabled` | add a negative assertion that none of the four is present | **not modified** (`:756`, zero diff) | **no** (G7) |
+| `internal/server/server_test.go` | `TestRegisterTools_MailEnabled` | add a negative assertion that none of the four is present | modified (`:793`) | yes — the negative reads the same `mailManagementVerbs()` list as the positive test, so the pair cannot drift apart (G7 fixed) |
 | `internal/tools/tool_annotations_test.go` | `TestMailAnnotationsManageEnabled` | unchanged expectations re-asserted against the larger verb set | yes (`:239`), unchanged and passing | yes |
 | `internal/tools/tool_annotations_test.go` | `TestMailAnnotationsGatedReadOnly` | unchanged expectation re-asserted | yes (`:220`), unchanged and passing | yes |
 | `docs/prompts/mcp-tool-crud-test.md` | Lifecycle prompt steps | four new steps and a widened skip range | yes (`:583`, `:639-678`, `:752-755`) | yes |
@@ -221,6 +233,19 @@ Diff computed as `git diff $(git merge-base origin/main HEAD)...HEAD`, base `2cc
 | `internal/validate/validate_test.go` | +24/-0 | FR-5 |
 | `internal/docs/catalog_test.go` | +41/-0 | FR-24, AC-20 |
 
+Added in the gap-fix pass, tests only:
+
+| File | Mapped Gap |
+|---|---|
+| `internal/tools/mail_write_verbs_test.go` | G1, G2 |
+| `internal/tools/move_message_test.go` | G3 |
+| `internal/tools/set_flag_test.go`, `internal/tools/mark_read_test.go` | G4 |
+| `internal/tools/verb_metadata_test.go` | G5 |
+| `internal/tools/tool_annotations_test.go` | G6 |
+| `internal/server/server_test.go` | G7 |
+| `internal/server/readonly_test.go` | G8 |
+| `.agents/scenarios/2026-09-01-received-message-management-lifecycle.md`, `docs/backlog/cr-0078-0083.md` | G9 (deferred; the artefact and the pending-run record) |
+
 ### Unmapped changed files
 
 Seven files in the branch diff carry no CR-0078 requirement. Six are the pre-existing
@@ -252,118 +277,116 @@ script's own accounting (`:115`, keying on the tool name, not the verb) and the 
 
 ## Gaps
 
-Nine gaps. None is a FAIL: every requirement is implemented and mapped to a hunk. Eight are
-missing or under-specified tests where the CR's Test Strategy named a test that was not
-written, which leaves the corresponding behaviour ungraded; the ninth is a missing
-acceptance artefact the CR requires by name.
+Nine gaps were opened by the audit. Eight are now **FIXED**; one, G9, is **DEFERRED** to
+the user because it needs a live mailbox and a paid harness run. None was ever a FAIL:
+every requirement was implemented and mapped to a hunk, and eight of the nine were missing
+assertions over behaviour that already worked. The fix pass therefore changed no production
+code, only tests, plus the persisted scenario and the backlog entry for G9.
 
-**G1 — FR-10 / AC-7: malformed `message_id` is untested for `set_categories` and `mark_read`.**
-The CR specified `TestInvalidMessageIDRejectedByEveryWriteVerb` in
-`internal/tools/mail_write_verbs_test.go`, driving a *malformed* identifier at each of the
-four. The written substitute, `TestMailWriteVerbs_RequireMessageID` (`:124`), deletes
-`message_id` instead, so `validate.ValidateResourceID` is never reached; only
-`TestMoveMessage_InvalidIdentifiersRejectedBeforeCall` and
-`TestSetFlag_InvalidMessageIDRejectedBeforeCall` exercise it.
-*Minimal fix:* add a table-driven test in `mail_write_verbs_test.go` that overrides
-`message_id` with `strings.Repeat("a", validate.MaxResourceIDLen+1)` for each row of
-`mailWriteVerbs()` and asserts `result.IsError` with `len(rec.methods) == 0`. The existing
-`mailWriteVerb.requestFor(overrides)` helper already supports this in about fifteen lines.
+The fix pass re-ran `make ci` (exit 0, `golangci-lint` 0 issues, surface manifest
+regenerated with the working tree left clean) and `go test -race ./internal/tools/
+./internal/server/` (pass).
 
-**G2 — NFR-7 / AC-25: the timeout and redaction paths are ungraded for all four verbs.**
-`TestWriteVerbsHonourTimeoutAndRedaction` was specified and does not exist. Nothing asserts
-that the timeout message names the configured seconds, and nothing asserts
-`RedactGraphError` strips a token-like string from any of the four. AC-25's first Given is
-therefore ungraded, though the wiring is present and identical in all four handlers.
-*Minimal fix:* add two table-driven tests over `mailWriteVerbs()`: one against an
-`httptest` server that blocks past a short configured timeout, asserting the result contains
-the seconds value; one against a server returning a Graph error carrying a bearer-token-like
-string, asserting the token is absent from the result text. `delete_event_test.go:135` and
-`cancel_meeting_test.go:197` already carry the timeout pattern to copy.
+**G1 — FIXED. FR-10 / AC-7: malformed `message_id` was untested for `set_categories` and `mark_read`.**
+The written substitute deleted the argument instead of malforming it, so
+`validate.ValidateResourceID` was never reached.
+*Fix:* `TestMailWriteVerbs_MalformedMessageIDRejectedByEveryVerb`
+(`internal/tools/mail_write_verbs_test.go:162`) overrides `message_id` with
+`strings.Repeat("a", validate.MaxResourceIDLen+1)` for every row of `mailWriteVerbs()` and
+asserts the refusal names the parameter with `len(rec.methods) == 0`. Over-length is the
+malformation used because emptiness and length are what `ValidateResourceID` rejects; it
+does not bound the character set. The missing-argument test is retained beside it, since
+the two failures take different paths.
 
-**G3 — NFR-4 / AC-24: the log channel of the move fix instruction is not asserted.**
-`TestMoveMessage_UnresolvableDestinationCarriesFix` (`move_message_test.go:206`) checks only
-the tool result. The CR's Test Strategy row for this test explicitly required "the handler's
-logger bound to a capture buffer" and "the captured log record carries the same correction",
-and the CR's review summary recorded this as contradiction 7, fixed in the document. The
-implementation logs the fix (`move_message.go:101-103`), so only the assertion is missing.
-This is the criterion whose entire purpose is that a headless caller cannot read the
-interactive surface, so the untested channel is the one that matters.
-*Minimal fix:* bind a `slog` handler writing to a `bytes.Buffer` into the context with
-`logging.WithLogger` before invoking the handler, and assert the captured output contains
-`moveFixInstruction`.
+**G2 — FIXED. NFR-7 / AC-25: the timeout and redaction paths were ungraded for all four verbs.**
+*Fix:* two table-driven tests over `mailWriteVerbs()`, split rather than combined so a
+timeout regression and a redaction regression are distinguishable.
+`TestMailWriteVerbs_TimeoutNamesConfiguredSeconds` (`:194`) configures a **7s** deadline,
+not the 30s every other test uses, so the assertion fails on a hardcoded message rather
+than passing by coincidence. `TestMailWriteVerbs_GraphErrorIsRedacted` (`:224`) serves a
+Graph error carrying an address and asserts it is absent from the result and replaced by
+`[email redacted]`. The redaction assertion is written against an address rather than a
+bearer token because `graph.RedactGraphError` (`internal/graph/errors.go:131`) redacts
+addresses only; a token assertion would have failed while reporting nothing about the
+helper the requirement names.
 
-**G4 — FR-13 / AC-10: `set_flag` and `mark_read` cannot fail the "response, not arguments" criterion.**
-`TestConfirmationsUseGraphResponseNotArguments` was specified and does not exist. The two
-tests that do carry differing-value evidence cover `set_categories` and `move_message`. The
-canned responses for `set_flag` and `mark_read` echo the request values, so those two
-confirmations would pass whether they read the response or the arguments.
-*Minimal fix:* in `set_flag_test.go` and `mark_read_test.go`, add a case whose canned
-response reports a value the request did not ask for (request `flagged`, response
-`complete`; request `is_read: true`, response `"isRead": false`) and assert the confirmation
-states the response value.
+**G3 — FIXED. NFR-4 / AC-24: the log channel of the move fix instruction was not asserted.**
+*Fix:* `TestMoveMessage_UnresolvableDestinationCarriesFix` (`internal/tools/move_message_test.go:214`)
+now installs a `slog` handler writing to a `bytes.Buffer` as the default for the duration
+of the call and asserts the captured output contains `moveFixInstruction`, alongside the
+existing tool-result assertion. The handler reads its logger through `logging.Logger(ctx)`,
+which derives from `slog.Default()`; there is no `WithLogger` injection point, so swapping
+the default and restoring it is the available capture. No test in `internal/tools` calls
+`t.Parallel`, and the package passes under `-race`.
 
-**G5 — FR-12 / AC-9: no derived check that write verbs declare no `output` parameter.**
-`TestWriteVerbsDeclareNoOutputParameter` was specified for
-`internal/tools/verb_metadata_test.go`, which has zero diff. The CR's own review summary
-listed this test under "VERIFIED, NO FIX REQUIRED" as passing on arrival, which was a claim
-about a test that does not exist. AC-9's first clause therefore rests on reading the four
-`Schema` blocks. This is the derived-check shape the project's own instructions prefer over
-instance lists, and it is the one the CR asked for and did not get.
-*Minimal fix:* add to `verb_metadata_test.go` a test iterating every domain's verbs under
-the maximal configuration, materialising each verb's `Schema` into a throwaway
-`mcp.NewTool`, and failing when a verb with `readOnlyHint: false` publishes an `output`
-property. `mailVerbParams`/`mailVerbIsReadOnly` in `mail_verbs_test.go:117-141` are the
-pattern.
+**G4 — FIXED. FR-13 / AC-10: `set_flag` and `mark_read` could not fail the "response, not arguments" criterion.**
+*Fix:* a disagreeing-response case per handler.
+`TestSetFlag_ConfirmationStatesResponseNotRequest` (`set_flag_test.go:209`) requests
+`flagged` against a response reporting `complete`;
+`TestMarkRead_ConfirmationStatesResponseNotRequest` (`mark_read_test.go:159`) requests
+`is_read: true` against a response reporting `isRead: false`. Each asserts both halves: the
+response value is stated and the requested value is absent. They sit per handler rather
+than in `mail_write_verbs_test.go` because the shared table carries one canned response per
+row, and the disagreement has to differ per verb.
 
-**G6 — FR-14 / AC-11: no per-verb annotation assertion alongside the existing annotation tests.**
-`TestMailManagementVerbAnnotations` was specified for
-`internal/tools/tool_annotations_test.go`, which has zero diff. The project's standing rule
-in `CLAUDE.md` reads "New verbs **MUST** add a value assertion alongside the existing
-annotation tests in `internal/tools/`". The four hint values *are* asserted, by
-`verbInventoryGolden` in `internal/tools/dispatch_registry_test.go:73-77`, which is in the
-same package, so the rule is arguably met and AC-11 is graded. The gap is that the CR named
-a specific test in a specific file and it is absent.
-*Minimal fix:* either add the four-verb value assertion to `tool_annotations_test.go`, or
-amend the CR's Test Strategy to record the golden as the grading instrument. The first is
-about twenty lines; the second is a documentation change.
+**G5 — FIXED. FR-12 / AC-9: no derived check that write verbs declare no `output` parameter.**
+*Fix:* `TestWriteVerbsDeclareNoOutputParameter` (`internal/tools/verb_metadata_test.go:354`)
+iterates every domain's verbs from `server.BuildDomainVerbSets` under the maximal
+configuration, materialises each verb's own `Schema` onto a throwaway `mcp.NewTool`, and
+fails when a verb declaring `readOnlyHint: false` publishes an `output` property. A guard
+fails the test when the selection is empty, so a broken derivation cannot pass as a clean
+run. This is the derived-check shape the project's instructions prefer over instance lists.
+*Instrument validated:* inverted to select read-only verbs instead, it reports **18**
+verbs declaring `output`, so it detects the property it looks for rather than passing
+because it finds nothing.
 
-**G7 — FR-1 / FR-2 / AC-1: neither the positive nor the negative registration test was written.**
-`TestRegisterTools_MailManage_RegistersManagementVerbs` was specified as a new test in
-`internal/server/server_test.go`, and `TestRegisterTools_MailEnabled` was specified for
-modification to add the negative assertion. `server_test.go` has zero diff, so neither
-happened. AC-1 is nonetheless graded, by the derived gate probe in `internal/surface/`
-(which attributes all four to `OUTLOOK_MCP_MAIL_MANAGE_ENABLED` only because they are absent
-under the `MailEnabled` probe) and by this report's live `tools/list` observation under both
-configurations.
-*Minimal fix:* add `TestRegisterTools_MailManage_RegistersManagementVerbs` asserting the
-four appear in the mail tool's operation enum with `len(registered) == 4`, and extend
-`TestRegisterTools_MailEnabled` (`:756`) with the complementary negative. The existing
-`getRegisteredTool` helper supplies the enum.
+**G6 — FIXED. FR-14 / AC-11: no per-verb annotation assertion alongside the existing annotation tests.**
+*Fix:* `TestMailManagementVerbAnnotations` (`internal/tools/tool_annotations_test.go:450`)
+asserts all four hints for each of the four verbs against the matrix. It earns its place
+beside the aggregate fold tests rather than duplicating `verbInventoryGolden`, because a
+fold is lossy: three of these four declare `destructiveHint: false`, and that value is
+invisible in an aggregate folding to true because of `move_message`.
 
-**G8 — AC-12: no test invokes the four under read-only mode.**
-`TestReadOnlyBlocksMailManagementVerbs` was specified for `internal/server/readonly_test.go`,
-which has zero diff. The behaviour is correct and was verified for this report by driving
-the built binary with `OUTLOOK_MCP_READ_ONLY=true`, which returned
-`operation blocked: mail.<verb> is not allowed in read-only mode` for each of the four. That
-observation is not reproducible in CI.
-*Minimal fix:* add a test to `readonly_test.go` building the mail verbs with
-`readOnly: true` and asserting each of the four handlers returns the refusal naming its
-`mail.<verb>` identity. `TestMailManagementVerbsCarryDotIdentity` (`mail_verbs_test.go:259`)
-already builds the verbs this way and is nine lines from being the test.
+**G7 — FIXED. FR-1 / FR-2 / AC-1: neither the positive nor the negative registration test was written.**
+*Fix:* `TestRegisterTools_MailManage_RegistersManagementVerbs`
+(`internal/server/server_test.go:890`) asserts all four appear in the mail tool's published
+operation enum and that the tool count is still 4, so the surface grows by verbs and not by
+tools. `TestRegisterTools_MailEnabled` (`:793`) gains the complementary negative. Both read
+the verb names from one `mailManagementVerbs()` helper and the enum through one
+`registeredOperations()` helper, so the positive and negative halves of the gate cannot
+drift apart.
 
-**G9 — CR acceptance: no user scenario is persisted.**
-The CR's Verification Commands section states that "Acceptance additionally requires a user
-scenario driving the built server against a live mailbox: flag a message, label it, mark it
-read, move it, then confirm through `get_message` that the new identifier resolves and the
-original does not. Persist the scenario under `.agents/scenarios/`". The directory
-`.agents/scenarios/` does not exist in the repository. `make crud-test` was also not run for
-this change, so no evidence exists that any of the four verbs has issued a real Graph call.
-Every passing test in this report uses an `httptest` server and canned JSON.
-*Minimal fix:* run the `user-scenario` skill against the four verbs per the CR's wording and
-persist the artefact under `.agents/scenarios/`, or amend the CR to withdraw the requirement
-on the record. Note the harness caveat in `CLAUDE.md`: rebuild the binary at the path
-`.mcp.json` names and check the report's own `Server version` line against
-`git rev-parse --short HEAD` before trusting any row of it.
+**G8 — FIXED. AC-12: no test invoked the four under read-only mode.**
+*Fix:* `TestReadOnlyBlocksMailManagementVerbs` (`internal/server/readonly_test.go:151`)
+builds the mail verbs with `readOnly: true` and invokes each of the four through its own
+registered middleware chain, asserting the refusal names read-only mode and the
+`mail.<verb>` identity. Asserting at the chain rather than at `ReadOnlyGuard` alone is the
+point: a write verb wired through the read wrapper would pass every existing
+`ReadOnlyGuard` unit test in that file while executing in read-only mode.
+
+**G9 — DEFERRED, and named as pending for the user. CR acceptance: no live-mailbox run.**
+The CR requires a user scenario driving the built server against a live mailbox, plus a
+`make crud-test` run. Both need an authenticated mailbox and a paid harness run, so neither
+was performed and neither may be reported as performed.
+
+What was done instead, so the run costs only its own price when it happens:
+
+* The scenario is derived and persisted at
+  `.agents/scenarios/2026-09-01-received-message-management-lifecycle.md`, carrying the
+  goal, preconditions, the ten steps at the MCP surface, the success condition, and the
+  restoration procedure. Its frontmatter reads `outcome: not-run` and
+  `runs: "0 of 0 attempted"`, and a Status section states plainly that nothing in it has
+  been observed. Whoever performs the first run rewrites those fields and appends the run
+  log.
+* The pending run is recorded as a bullet under the CR-0078 heading in
+  `docs/backlog/cr-0078-0083.md`, with the harness caveats it has to be run under: rebuild
+  the binary at the path `.mcp.json` names, and check the report's own server version line
+  against `git rev-parse --short HEAD` before trusting a row of it.
+
+The standing consequence, stated so it is not lost: **no evidence yet exists that any of
+the four verbs has issued a real Microsoft Graph call.** Every passing test in this report
+drives an `httptest` server with canned JSON. That is a limit on what this report proves,
+not a defect in the implementation.
 
 ### Not gaps, recorded so they are not rediscovered
 
@@ -371,9 +394,11 @@ on the record. Note the harness caveat in `CLAUDE.md`: rebuild the binary at the
   is the union of the read verbs' declarations, not a violation of FR-12, which constrains
   the four write verbs' own `Schema` blocks. Verified: none of the four declares it.
 * `internal/tools/tool_annotations_test.go`, `internal/tools/verb_metadata_test.go`,
-  `internal/server/server_test.go`, and `internal/server/readonly_test.go` all have zero diff
-  on this branch. Four of the nine gaps above are exactly that fact, seen from four
-  different criteria.
+  `internal/server/server_test.go`, and `internal/server/readonly_test.go` all had zero diff
+  when the audit ran, and four of the nine gaps were exactly that fact seen from four
+  different criteria. All four now carry the tests the CR named. Recorded because the shape
+  is worth recognising next time: four separate criteria reading as ungraded is one missing
+  edit, not four.
 * The CR's stale-`long_description` note in `extension/manifest.json:7` (naming `Mail.Read`
   where `Mail.ReadWrite` is requested) is explicitly out of scope and is correctly still
   present. Not a gap against this CR.

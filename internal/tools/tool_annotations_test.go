@@ -418,3 +418,85 @@ func TestPerVerbAnnotations_DocumentedInHelp(t *testing.T) {
 		})
 	}
 }
+
+// verbHints materialises a verb's annotation options onto a throwaway tool and
+// returns the four hint values. A nil pointer is reported as false alongside a
+// false ok, so an undeclared hint is distinguishable from a declared false.
+func verbHints(opts []mcp.ToolOption) (readOnly, destructive, idempotent, openWorld bool, ok bool) {
+	var mt mcp.Tool
+	for _, opt := range opts {
+		opt(&mt)
+	}
+	a := mt.Annotations
+	if a.ReadOnlyHint == nil || a.DestructiveHint == nil || a.IdempotentHint == nil || a.OpenWorldHint == nil {
+		return false, false, false, false, false
+	}
+	return *a.ReadOnlyHint, *a.DestructiveHint, *a.IdempotentHint, *a.OpenWorldHint, true
+}
+
+// TestMailManagementVerbAnnotations asserts the four hint values each
+// received-message write verb declares, per the project's classification matrix.
+//
+// It sits alongside the aggregate annotation tests because those assert only the
+// folded result, and a fold is lossy: three of these four verbs declare
+// destructiveHint false, and that value is invisible in an aggregate that folds
+// to true because of a sibling verb. The per-verb values are what the domain's
+// help output publishes and what a caller reasons about, so they are asserted
+// directly.
+//
+// move_message is the one that differs: it removes the message from its source
+// folder and mints a new identifier, so it is destructive and not idempotent,
+// while the three property writes set a value that repeats to the same state.
+func TestMailManagementVerbAnnotations(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "browser",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	byName := make(map[string][]mcp.ToolOption)
+	for _, v := range verbSets["mail"] {
+		byName[v.Name] = v.Annotations
+	}
+
+	want := map[string]aggregateAnnotationExpectation{
+		"move_message":   {readOnly: false, destructive: true, idempotent: false, openWorld: true},
+		"set_flag":       {readOnly: false, destructive: false, idempotent: true, openWorld: true},
+		"set_categories": {readOnly: false, destructive: false, idempotent: true, openWorld: true},
+		"mark_read":      {readOnly: false, destructive: false, idempotent: true, openWorld: true},
+	}
+
+	for name, exp := range want {
+		opts, present := byName[name]
+		if !present {
+			t.Errorf("verb %q is not registered under the maximal mail configuration", name)
+			continue
+		}
+		readOnly, destructive, idempotent, openWorld, declared := verbHints(opts)
+		if !declared {
+			t.Errorf("verb %q leaves at least one of the four hints undeclared", name)
+			continue
+		}
+		if readOnly != exp.readOnly || destructive != exp.destructive ||
+			idempotent != exp.idempotent || openWorld != exp.openWorld {
+			t.Errorf("verb %q hints = readOnly:%t destructive:%t idempotent:%t openWorld:%t, want readOnly:%t destructive:%t idempotent:%t openWorld:%t",
+				name, readOnly, destructive, idempotent, openWorld,
+				exp.readOnly, exp.destructive, exp.idempotent, exp.openWorld)
+		}
+	}
+}
