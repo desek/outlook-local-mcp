@@ -34,6 +34,11 @@ type attachmentRecorder struct {
 	isDraft   bool
 	subject   string
 	returnsID string
+
+	// upload serves the chunked path when a test exercises it, and is nil for
+	// the direct-path tests, whose fixture must answer an upload request with a
+	// failure rather than a canned success.
+	upload *uploadServer
 }
 
 // handler serves the isDraft verification GET and the attachment POST, and
@@ -49,12 +54,18 @@ func (r *attachmentRecorder) handler() http.Handler {
 			})
 			_, _ = w.Write(body)
 		case http.MethodPost:
+			if strings.HasSuffix(req.URL.Path, "/createUploadSession") {
+				r.upload.serveSession(w)
+				return
+			}
 			r.posts++
 			raw, _ := io.ReadAll(req.Body)
 			r.lastPost = map[string]any{}
 			_ = json.Unmarshal(raw, &r.lastPost)
 			_, _ = w.Write([]byte(`{"@odata.type":"#microsoft.graph.fileAttachment","id":"` +
 				r.returnsID + `","name":"report.pdf","contentType":"application/pdf","size":5}`))
+		case http.MethodPut:
+			r.upload.serveChunk(w, req)
 		default:
 			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
 		}
@@ -67,6 +78,12 @@ func newAddAttachmentFixture(t *testing.T, rec *attachmentRecorder, maxSize int6
 	t.Helper()
 	client, srv := newTestGraphClient(t, rec.handler())
 	t.Cleanup(srv.Close)
+	if rec.upload != nil {
+		// The upload URL is only knowable once the test server is listening,
+		// and it carries a query string because the real one carries an access
+		// token there, which the redaction tests must be able to look for.
+		rec.upload.url = srv.URL + "/upload/session-1?token=upload-secret"
+	}
 	ctx := auth.WithGraphClient(context.Background(), client)
 	return ctx, NewHandleAddAttachment(graph.RetryConfig{}, 30*time.Second, maxSize)
 }
@@ -268,7 +285,10 @@ func TestAddAttachment_RoutingBoundary(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			rec := &attachmentRecorder{isDraft: true, subject: "Notes", returnsID: "att-1"}
+			rec := &attachmentRecorder{
+				isDraft: true, subject: "Notes", returnsID: "att-1",
+				upload: &uploadServer{locationID: "att-large"},
+			}
 			ctx, handler := newAddAttachmentFixture(t, rec, 0)
 
 			callAddAttachment(t, ctx, handler, map[string]any{

@@ -69,8 +69,10 @@ const attachmentFixInstruction = "supply a message_id for a draft from mail.list
 //
 // Returns a handler function compatible with the MCP server AddTool signature.
 //
-// Side effects: calls GET /me/messages/{id} and, on the direct path,
-// POST /me/messages/{id}/attachments on the Microsoft Graph API.
+// Side effects: calls GET /me/messages/{id} and then, on the direct path,
+// POST /me/messages/{id}/attachments, or on the chunked path
+// POST /me/messages/{id}/attachments/createUploadSession followed by the chunk
+// PUTs the session's upload URL accepts.
 func NewHandleAddAttachment(retryCfg graph.RetryConfig, timeout time.Duration, maxSize int64) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := logging.Logger(ctx)
@@ -129,12 +131,36 @@ func NewHandleAddAttachment(retryCfg graph.RetryConfig, timeout time.Duration, m
 
 		if size >= inlineAttachmentThresholdBytes {
 			// The chunked upload session is the only transfer the service
-			// accepts at this size. Until it lands, refusing is the honest
-			// outcome: a POST of these bytes is rejected by Graph, and routing
-			// there would report the service's error as the caller's mistake.
-			return mcp.NewToolResultError(fmt.Sprintf(
-				"attachment size %d bytes is at or above the %d-byte inline limit and requires a chunked upload session, which this build does not perform; supply a smaller file",
-				size, inlineAttachmentThresholdBytes)), nil
+			// accepts at this size: a direct POST of these bytes is rejected.
+			attachmentID, err := uploadAttachmentSession(ctx, client, retryCfg, timeout, messageID, name, mimeType, decoded)
+			if err != nil {
+				if graph.IsTimeoutError(err) {
+					logger.ErrorContext(ctx, "request timed out",
+						"timeout_seconds", int(timeout.Seconds()),
+						"error", err.Error())
+					return mcp.NewToolResultError(graph.TimeoutErrorMessage(int(timeout.Seconds()))), nil
+				}
+				logger.ErrorContext(ctx, "attachment upload session failed",
+					"message_id", messageID,
+					"size", size,
+					"error", graph.FormatGraphError(err),
+					"fix", attachmentFixInstruction)
+				msg := graph.RedactGraphError(err) + "\nThe attachment was not added. Retry the upload, " +
+					"or supply a message_id for a draft from mail.list_messages."
+				return mcp.NewToolResultError(msg), nil
+			}
+
+			logger.InfoContext(ctx, "attachment added",
+				"message_id", messageID,
+				"attachment_id", attachmentID,
+				"size", size,
+				"transfer", TransferUploadSession)
+
+			response := FormatAttachmentConfirmation(name, subject, messageID, attachmentID, size, TransferUploadSession)
+			if line := AccountInfoLine(ctx); line != "" {
+				response += "\n" + line
+			}
+			return mcp.NewToolResultText(response), nil
 		}
 
 		attachment := models.NewFileAttachment()
