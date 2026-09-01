@@ -112,10 +112,20 @@ Parameters: `event_id` (required), `timezone`.
 
 Parameters: `query`, `start_datetime`, `end_datetime`, `importance`, `sensitivity`, `is_all_day`, `show_as`, `is_cancelled`, `categories`, `max_results`, `timezone`. All optional; defaults to next 30 days.
 
-**Free/busy** availability:
+**Free/busy** availability on your own calendar, with the subject of each busy period:
 > "When am I free next Monday?"
 
 Parameters: `start_datetime` (required), `end_datetime` (required), `timezone`.
+
+**Schedule** -- free/busy blocks and working hours for one or more mailboxes you are permitted to view:
+> "Is Alice free tomorrow afternoon, and when does she work?"
+
+Parameters: `schedules` (required, comma-separated SMTP addresses, at most 20 per call), a resolvable window supplied either as `date` or as `start_datetime` and `end_datetime` (the explicit datetimes take precedence), `availability_view_interval`, `timezone`. A mailbox you may not view is reported as an error against that mailbox while the others still return their blocks -- see [A mailbox reports an error inside a schedule reply](troubleshooting#schedule-mailbox-error).
+
+**Find meeting times** -- candidate slots for a set of attendees, ranked by confidence:
+> "Find a 30-minute slot next week for alice@example.com and bob@example.com"
+
+Parameters: `attendees` (required, JSON array), `meeting_duration` (ISO 8601, defaults to `PT30M`), `start_datetime` and `end_datetime` (supply both to bound the search, or omit both to let Graph choose the window), `max_candidates`, `minimum_attendee_percentage`, `is_organizer_optional`, `timezone`. This verb only suggests; booking a suggested slot is a separate `create_meeting` call.
 
 ### Write
 

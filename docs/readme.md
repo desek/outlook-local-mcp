@@ -23,6 +23,7 @@ For full setup instructions including Claude Desktop and Claude Code configurati
 ## Features
 
 - **Calendar management** -- list, search, create, update, delete, and respond to events; create and cancel meetings with attendee confirmation
+- **Scheduling and availability** -- read your own busy periods with their subjects, read free/busy blocks and working hours for up to twenty mailboxes you are permitted to view, and ask Graph to propose candidate meeting slots for a set of attendees ranked by confidence. All three are reads; booking stays with the meeting verbs
 - **Multi-account support** -- manage multiple Microsoft accounts simultaneously with per-account token isolation and lifecycle control (`add`, `remove`, `login`, `logout`, `refresh`)
 - **Lazy authentication** -- authenticates on first tool call; device code, browser, and authorization code flows supported
 - **Persistent token cache** -- OS-native secure storage (macOS Keychain, Linux libsecret, Windows DPAPI) with AES-256-GCM file fallback
