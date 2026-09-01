@@ -1,20 +1,36 @@
-// Package server — this file holds the description-derived test that binds the
-// caller-facing search_messages documentation to the runtime normalisation, so
-// a documented example Graph would reject fails the build rather than shipping.
+// Package server — this file holds the registry-derived tests over the mail
+// domain's published surface: the search_messages documentation check, the
+// shared-parameter description check, the destination-versus-scope assertion,
+// and the audit identity assertion for the received-message write verbs.
 //
-// The test lives in the server package, not tools, because the examples it reads
-// are owned by buildSearchMessagesVerb here, and server imports tools (not the
-// reverse), so it can call the tools-package normalisation while a tools-package
-// test could not reach the verb registry.
+// These tests live in the server package, not tools, because the verbs they
+// read are owned by the build*Verb constructors here, and server imports tools
+// (not the reverse), so they can reach both the registry and the tools-package
+// helpers while a tools-package test could not reach the registry.
+//
+// @agents-index: registry-derived tests over the mail domain's published verb
+// surface, parameter descriptions, and audit identity.
 package server
 
 import (
+	"bufio"
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
+	"github.com/desek/outlook-local-mcp/internal/audit"
+	"github.com/desek/outlook-local-mcp/internal/config"
 	"github.com/desek/outlook-local-mcp/internal/graph"
+	"github.com/desek/outlook-local-mcp/internal/observability"
 	"github.com/desek/outlook-local-mcp/internal/tools"
+	"github.com/mark3labs/mcp-go/mcp"
 	mcpserver "github.com/mark3labs/mcp-go/server"
+	"go.opentelemetry.io/otel/metric/noop"
+	tracenoop "go.opentelemetry.io/otel/trace/noop"
 )
 
 // forbiddenPropertyPhrase matches the double-quoted property phrase form
@@ -82,5 +98,230 @@ func TestDocumentedExamplesAreCanonical(t *testing.T) {
 
 	if forbiddenPropertyPhrase.MatchString(verb.Description) {
 		t.Errorf("verb description documents the double-quoted property phrase form Graph rejects; write a multi-word property value in parentheses, for example subject:(Design Review)")
+	}
+}
+
+// maximalMailConfig returns the configuration under which every mail verb is
+// registered, so a registry-derived check sees the whole domain rather than the
+// default subset.
+func maximalMailConfig() config.Config {
+	c := testConfig()
+	c.MailEnabled = true
+	c.MailManageEnabled = true
+	return c
+}
+
+// mailVerbParams returns, for one verb, its declared parameter names mapped to
+// the description that verb declares. It reads the schema the way the aggregate
+// builder does, by materialising the verb's Schema options into a throwaway tool
+// and reading the resulting properties, so the test cannot drift from the
+// publication path it is checking.
+func mailVerbParams(v tools.Verb) map[string]string {
+	out := make(map[string]string)
+	if len(v.Schema) == 0 {
+		return out
+	}
+	t := mcp.NewTool("_introspect", v.Schema...)
+	for name, raw := range t.InputSchema.Properties {
+		if name == "operation" {
+			continue
+		}
+		schema, _ := raw.(map[string]any)
+		desc, _ := schema["description"].(string)
+		out[name] = desc
+	}
+	return out
+}
+
+// mailVerbIsReadOnly reports the verb's declared readOnlyHint, read back from
+// its own Annotations rather than inferred from its name.
+func mailVerbIsReadOnly(v tools.Verb) bool {
+	t := mcp.NewTool("_introspect", v.Annotations...)
+	return t.Annotations.ReadOnlyHint != nil && *t.Annotations.ReadOnlyHint
+}
+
+// TestSharedParametersNameTheirWriteVerbs asserts CR-0078 FR-16: every parameter
+// name the mail domain declares on both a read-only verb and a write verb has a
+// published description naming at least one of the declaring write verbs.
+//
+// The aggregate tool publishes the union of every verb's parameters and merges
+// duplicate names first-occurrence-wins (aggregateSchemaOptions). Because the
+// read verbs are registered first, a shared name is published with its read
+// description, which would tell a caller that flag_status is a filter while
+// set_flag requires it as the value to write.
+//
+// The cases are derived from the registry rather than listed, so a future shared
+// mail parameter is covered without anyone remembering to add it here. That is
+// deliberate: correcting named instances is the instance-level remedy this
+// project has already recorded as failing to close a class.
+//
+// account is the single exemption. It is declared with identical text by every
+// verb of every domain and carries no read or write sense, so naming its
+// declaring write verbs would inflate the published schema for no gain.
+func TestSharedParametersNameTheirWriteVerbs(t *testing.T) {
+	verbs := BuildVerbsForInspection(maximalMailConfig())["mail"]
+	if len(verbs) == 0 {
+		t.Fatal("mail domain built no verbs under the maximal configuration")
+	}
+
+	// published mirrors the first-occurrence-wins merge the aggregate schema
+	// performs, so the string under test is the one callers actually see.
+	published := make(map[string]string)
+	readDeclarers := make(map[string][]string)
+	writeDeclarers := make(map[string][]string)
+
+	for _, v := range verbs {
+		readOnly := mailVerbIsReadOnly(v)
+		for name, desc := range mailVerbParams(v) {
+			if _, ok := published[name]; !ok {
+				published[name] = desc
+			}
+			if readOnly {
+				readDeclarers[name] = append(readDeclarers[name], v.Name)
+			} else {
+				writeDeclarers[name] = append(writeDeclarers[name], v.Name)
+			}
+		}
+	}
+
+	checked := 0
+	for name, writers := range writeDeclarers {
+		if name == "account" {
+			continue
+		}
+		if len(readDeclarers[name]) == 0 {
+			continue
+		}
+		checked++
+
+		desc := published[name]
+		named := false
+		for _, w := range writers {
+			if strings.Contains(desc, w) {
+				named = true
+				break
+			}
+		}
+		if !named {
+			t.Errorf("parameter %q is declared by read verb(s) %v and write verb(s) %v, but the published description %q names none of the write verbs; rewrite it so the flattened schema states both senses",
+				name, readDeclarers[name], writers, desc)
+		}
+	}
+
+	if checked == 0 {
+		t.Error("the check selected no shared mail parameters; the derivation is broken, not the domain")
+	}
+}
+
+// TestDestinationFolderIDIsNotFolderID asserts CR-0078 FR-17: the move
+// destination is published under its own name with its own description, and is
+// not merged into folder_id.
+//
+// folder_id scopes a read to a folder; destination_folder_id names where a
+// message is moved to. Conflating them in the flattened schema is exactly the
+// ambiguity the shared-description rule above exists to prevent, so the
+// separation is asserted rather than left to the reader of the constructors.
+func TestDestinationFolderIDIsNotFolderID(t *testing.T) {
+	verbs := BuildVerbsForInspection(maximalMailConfig())["mail"]
+
+	published := make(map[string]string)
+	for _, v := range verbs {
+		for name, desc := range mailVerbParams(v) {
+			if _, ok := published[name]; !ok {
+				published[name] = desc
+			}
+		}
+	}
+
+	scope, ok := published["folder_id"]
+	if !ok {
+		t.Fatal("the mail domain publishes no folder_id parameter")
+	}
+	destination, ok := published["destination_folder_id"]
+	if !ok {
+		t.Fatal("the mail domain publishes no destination_folder_id parameter; move_message must not reuse folder_id")
+	}
+	if scope == destination {
+		t.Errorf("folder_id and destination_folder_id publish the same description %q; the scoping parameter and the move destination are different concepts and must read differently", scope)
+	}
+}
+
+// TestMailManagementVerbsCarryDotIdentity asserts CR-0078 AC-12: the audit
+// record emitted for each received-message write verb carries the same
+// mail.<verb> identity that is passed to the middleware chain.
+//
+// The identity is what surfaces in the audit log, in the OpenTelemetry
+// attributes, and in the read-only refusal, so a verb registered under a
+// mismatched string would be invisible in exactly the record an operator
+// consults after the fact. The handlers are invoked with no Graph client bound,
+// so each fails at account resolution and issues no network call; AuditWrap
+// still emits the record, which is the surface under test.
+func TestMailManagementVerbsCarryDotIdentity(t *testing.T) {
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+
+	logPath := filepath.Join(t.TempDir(), "audit.log")
+	audit.InitAuditLog(true, logPath)
+	// Every other test in this package runs with auditing off; restore that.
+	defer audit.InitAuditLog(false, "")
+
+	identity := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+	verbs, _ := buildMailVerbs(mailVerbsConfig{
+		cfg:               maximalMailConfig(),
+		m:                 m,
+		tracer:            tracenoop.NewTracerProvider().Tracer("test"),
+		authMW:            identity,
+		accountResolverMW: identity,
+	})
+
+	byName := make(map[string]tools.Verb, len(verbs))
+	for _, v := range verbs {
+		byName[v.Name] = v
+	}
+
+	want := []string{"move_message", "set_flag", "set_categories", "mark_read"}
+	for _, name := range want {
+		v, ok := byName[name]
+		if !ok {
+			t.Fatalf("verb %q is not registered under the maximal configuration", name)
+		}
+		req := mcp.CallToolRequest{}
+		req.Params.Arguments = map[string]any{"message_id": "msg-1"}
+		if _, err := v.Handler(context.Background(), req); err != nil {
+			t.Fatalf("%s handler returned a transport error: %v", name, err)
+		}
+	}
+
+	f, err := os.Open(logPath) //nolint:gosec // path is the test's own TempDir
+	if err != nil {
+		t.Fatalf("audit log was not written: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	seen := make(map[string]bool)
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		var entry struct {
+			ToolName      string `json:"tool_name"`
+			OperationType string `json:"operation_type"`
+		}
+		if err := json.Unmarshal(scanner.Bytes(), &entry); err != nil {
+			t.Fatalf("audit line is not JSON: %v", err)
+		}
+		seen[entry.ToolName] = true
+		if strings.HasPrefix(entry.ToolName, "mail.") && entry.OperationType != "write" {
+			t.Errorf("audit record for %s carries operation_type %q, want \"write\"", entry.ToolName, entry.OperationType)
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("reading the audit log: %v", err)
+	}
+
+	for _, name := range want {
+		if !seen["mail."+name] {
+			t.Errorf("no audit record carries the identity %q; the middleware chain was wrapped under a different string", "mail."+name)
+		}
 	}
 }

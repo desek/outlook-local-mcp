@@ -9,7 +9,8 @@
 //     get_message, search_messages.
 //   - Gated by MailEnabled: get_conversation, list_attachments, get_attachment.
 //   - Gated by MailManageEnabled: create_draft, create_reply_draft,
-//     create_forward_draft, update_draft, delete_draft.
+//     create_forward_draft, update_draft, delete_draft, move_message, set_flag,
+//     set_categories, mark_read.
 //
 // The aggregate "mail" tool is registered unconditionally (FR-1). The operation
 // enum only includes verbs whose feature flag is enabled at server start (FR-2).
@@ -73,8 +74,9 @@ type mailVerbsConfig struct {
 //   - MailEnabled-gated: get_conversation, list_attachments, get_attachment
 //     (require Mail.Read scope provided by MailEnabled).
 //   - MailManageEnabled-gated: create_draft, create_reply_draft,
-//     create_forward_draft, update_draft, delete_draft (require
-//     Mail.ReadWrite scope provided by MailManageEnabled).
+//     create_forward_draft, update_draft, delete_draft, move_message,
+//     set_flag, set_categories, mark_read (require Mail.ReadWrite scope
+//     provided by MailManageEnabled).
 //
 // Each verb's Handler is pre-wrapped with authMW, accountResolverMW,
 // observability, and audit middleware using the fully-qualified identity
@@ -134,6 +136,10 @@ func buildMailVerbs(c mailVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 			buildCreateForwardDraftVerb(c, rc, wrapWrite),
 			buildUpdateDraftVerb(c, rc, wrapWrite),
 			buildDeleteDraftVerb(c, rc, wrapWrite),
+			buildMoveMessageVerb(c, rc, wrapWrite),
+			buildSetFlagVerb(c, rc, wrapWrite),
+			buildSetCategoriesVerb(c, rc, wrapWrite),
+			buildMarkReadVerb(c, rc, wrapWrite),
 		)
 	}
 
@@ -205,7 +211,7 @@ func buildListMessagesVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(st
 				mcp.Description("Conversation ID to retrieve all messages in a thread."),
 			),
 			mcp.WithBoolean("is_read",
-				mcp.Description("Filter by read/unread state. Omit to include both."),
+				mcp.Description("Read/unread state. On list_messages it filters results (omit to include both); on mark_read it is the required state to write to the message."),
 			),
 			mcp.WithBoolean("is_draft",
 				mcp.Description("Filter by draft state. Omit to include both."),
@@ -214,11 +220,11 @@ func buildListMessagesVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(st
 				mcp.Description("Filter by attachment presence. Omit to include both."),
 			),
 			mcp.WithString("importance",
-				mcp.Description("Filter by message importance."),
+				mcp.Description("Message importance. On list_messages it filters results; on create_draft and update_draft it is the importance to write to the draft."),
 				mcp.Enum("low", "normal", "high"),
 			),
 			mcp.WithString("flag_status",
-				mcp.Description("Filter by follow-up flag status."),
+				mcp.Description("Follow-up flag status. On list_messages it filters results; on set_flag it is the required status to write to the message."),
 				mcp.Enum("notFlagged", "flagged", "complete"),
 			),
 			mcp.WithBoolean("provenance",
@@ -260,7 +266,7 @@ func buildGetMessageVerb(c mailVerbsConfig, rc graph.RetryConfig, wrap func(stri
 		Schema: []mcp.ToolOption{
 			mcp.WithString("message_id",
 				mcp.Required(),
-				mcp.Description("The unique identifier of the message to retrieve."),
+				mcp.Description("The unique identifier of a message. On get_message it names the message to retrieve; on write verbs such as update_draft, mark_read, set_flag, set_categories, and move_message it names the message to modify."),
 			),
 			mcp.WithString("account",
 				mcp.Description("Account label or UPN to use. Omit to auto-select the default account."),
@@ -593,6 +599,147 @@ func buildDeleteDraftVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite fun
 			mcp.WithString("message_id",
 				mcp.Required(),
 				mcp.Description("The unique identifier of the draft message to delete."),
+			),
+			mcp.WithString("account",
+				mcp.Description("Account label or UPN to use. Omit to auto-select the default account."),
+			),
+		},
+	}
+}
+
+// buildMoveMessageVerb constructs the move_message Verb (MailManageEnabled-gated).
+//
+// It is the only one of the four received-message write verbs classified
+// destructive and non-idempotent, because the move removes the message from its
+// source folder and mints a new identifier, leaving the caller's original
+// identifier unusable (CR-0078 FR-14).
+func buildMoveMessageVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
+	return tools.Verb{
+		Name:        "move_message",
+		Summary:     "move a message to another folder; the move mints a new message ID",
+		Description: "Moves an existing message to a different mail folder. Requires message_id and destination_folder_id; obtain a destination identifier from list_folders. The move mints a NEW message identifier, so the confirmation names the new identifier alongside the original, which stops resolving once the move succeeds. Annotated destructive and non-idempotent for that reason: the message leaves its source folder and the identifier the caller was holding becomes unusable, and repeating the call with the original identifier fails. Moving to Deleted Items is the reversible alternative to deletion. Returns a text confirmation and takes no output parameter. Requires MAIL_MANAGE_ENABLED=true.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"message_id": "AAMkAGI2...", "destination_folder_id": "AQMkADAwAT..."}, Comment: "file a message into a folder obtained from list_folders"},
+		},
+		SeeDocs: []string{"concepts#mail-gating", "concepts#tool-annotation-semantics"},
+		Handler: wrapWrite("mail.move_message", "write", tools.NewHandleMoveMessage(rc, c.timeout)),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(true),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(true),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("message_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the message to move."),
+			),
+			mcp.WithString("destination_folder_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the destination mail folder, obtained from list_folders. This names where the message is moved to; folder_id scopes a read instead."),
+			),
+			mcp.WithString("account",
+				mcp.Description("Account label or UPN to use. Omit to auto-select the default account."),
+			),
+		},
+	}
+}
+
+// buildSetFlagVerb constructs the set_flag Verb (MailManageEnabled-gated).
+func buildSetFlagVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
+	return tools.Verb{
+		Name:        "set_flag",
+		Summary:     "set a message's follow-up flag: notFlagged, flagged, or complete",
+		Description: "Sets the follow-up flag on an existing message. Requires message_id and flag_status, which must be one of notFlagged, flagged, or complete. It applies to received messages as well as drafts and imposes no draft guard. Annotated non-destructive and idempotent: the flag value is replaced in place, so repeating the call leaves the same state and returns the same confirmation. The confirmation reports the status Graph stored, not the requested one. Returns a text confirmation and takes no output parameter. Requires MAIL_MANAGE_ENABLED=true.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"message_id": "AAMkAGI2...", "flag_status": "flagged"}, Comment: "flag a message for follow-up"},
+			{Args: map[string]any{"message_id": "AAMkAGI2...", "flag_status": "complete"}, Comment: "mark an existing follow-up flag complete"},
+		},
+		SeeDocs: []string{"concepts#mail-gating"},
+		Handler: wrapWrite("mail.set_flag", "write", tools.NewHandleSetFlag(rc, c.timeout)),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(true),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("message_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the message to flag."),
+			),
+			mcp.WithString("flag_status",
+				mcp.Required(),
+				mcp.Description("Follow-up flag status to write: notFlagged, flagged, or complete."),
+				mcp.Enum("notFlagged", "flagged", "complete"),
+			),
+			mcp.WithString("account",
+				mcp.Description("Account label or UPN to use. Omit to auto-select the default account."),
+			),
+		},
+	}
+}
+
+// buildSetCategoriesVerb constructs the set_categories Verb (MailManageEnabled-gated).
+func buildSetCategoriesVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
+	return tools.Verb{
+		Name:        "set_categories",
+		Summary:     "replace a message's categories; an empty value clears every category",
+		Description: "Replaces the category list on an existing message. Requires message_id and categories, a comma-separated list that REPLACES the existing set rather than appending to it; surrounding whitespace is trimmed and empty entries are dropped. An empty or whitespace-only value clears every category, and the confirmation then states that the message carries none. Categories are written as supplied and no master category is created in the mailbox. Annotated non-destructive and idempotent: the list is replaced in place, so repeating the call leaves the same state. The confirmation lists the categories Graph stored. Returns a text confirmation and takes no output parameter. Requires MAIL_MANAGE_ENABLED=true.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"message_id": "AAMkAGI2...", "categories": "Project Apollo, Urgent"}, Comment: "label a message with two categories"},
+			{Args: map[string]any{"message_id": "AAMkAGI2...", "categories": ""}, Comment: "clear every category from a message"},
+		},
+		SeeDocs: []string{"concepts#mail-gating"},
+		Handler: wrapWrite("mail.set_categories", "write", tools.NewHandleSetCategories(rc, c.timeout)),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(true),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("message_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the message to categorise."),
+			),
+			mcp.WithString("categories",
+				mcp.Required(),
+				mcp.Description("Comma-separated category list replacing the existing set. Supply an empty string to clear every category."),
+			),
+			mcp.WithString("account",
+				mcp.Description("Account label or UPN to use. Omit to auto-select the default account."),
+			),
+		},
+	}
+}
+
+// buildMarkReadVerb constructs the mark_read Verb (MailManageEnabled-gated).
+func buildMarkReadVerb(c mailVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
+	return tools.Verb{
+		Name:        "mark_read",
+		Summary:     "mark a message read or unread; is_read is a required boolean",
+		Description: "Writes the read state of an existing message. Requires message_id and the boolean is_read: true marks the message read, false marks it unread. It writes in both directions, so is_read is required rather than assumed. Annotated non-destructive and idempotent: the state is set, not toggled, so repeating the call leaves the same state and returns the same confirmation. The confirmation reports the state Graph stored. Returns a text confirmation and takes no output parameter. Requires MAIL_MANAGE_ENABLED=true.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"message_id": "AAMkAGI2...", "is_read": true}, Comment: "mark a message read"},
+			{Args: map[string]any{"message_id": "AAMkAGI2...", "is_read": false}, Comment: "mark a message unread again"},
+		},
+		SeeDocs: []string{"concepts#mail-gating"},
+		Handler: wrapWrite("mail.mark_read", "write", tools.NewHandleMarkRead(rc, c.timeout)),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(true),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("message_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the message whose read state is written."),
+			),
+			mcp.WithBoolean("is_read",
+				mcp.Required(),
+				mcp.Description("True to mark the message read, false to mark it unread. Required: the verb writes in both directions."),
 			),
 			mcp.WithString("account",
 				mcp.Description("Account label or UPN to use. Omit to auto-select the default account."),
