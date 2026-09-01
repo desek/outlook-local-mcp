@@ -8,10 +8,12 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -39,6 +41,31 @@ type attachmentRecorder struct {
 	// the direct-path tests, whose fixture must answer an upload request with a
 	// failure rather than a canned success.
 	upload *uploadServer
+
+	// stallPost holds the attachment POST open for this long, so a test can
+	// drive the handler past its own request timeout. The stall is abandoned as
+	// soon as the client gives up, so the test costs the timeout rather than
+	// the stall.
+	stallPost time.Duration
+
+	// failPostStatus, when non-zero, answers the attachment POST with that
+	// status and a Graph error body, which is the failure the direct path
+	// reports through the shared redactor.
+	failPostStatus int
+}
+
+// stall blocks until the duration elapses or the caller abandons the request,
+// whichever comes first.
+func stall(req *http.Request, d time.Duration) {
+	if d <= 0 {
+		return
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-timer.C:
+	case <-req.Context().Done():
+	}
 }
 
 // handler serves the isDraft verification GET and the attachment POST, and
@@ -60,6 +87,15 @@ func (r *attachmentRecorder) handler() http.Handler {
 			}
 			r.posts++
 			raw, _ := io.ReadAll(req.Body)
+			// The body is drained before stalling so the server can notice the
+			// client abandoning the request; otherwise the fixture waits out its
+			// own stall after the handler has already given up.
+			stall(req, r.stallPost)
+			if r.failPostStatus != 0 {
+				w.WriteHeader(r.failPostStatus)
+				_, _ = w.Write([]byte(`{"error":{"code":"ErrorAccessDenied","message":"Access is denied."}}`))
+				return
+			}
 			r.lastPost = map[string]any{}
 			_ = json.Unmarshal(raw, &r.lastPost)
 			_, _ = w.Write([]byte(`{"@odata.type":"#microsoft.graph.fileAttachment","id":"` +
@@ -76,6 +112,14 @@ func (r *attachmentRecorder) handler() http.Handler {
 // and returns the handler under test alongside the recorder.
 func newAddAttachmentFixture(t *testing.T, rec *attachmentRecorder, maxSize int64) (context.Context, func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)) {
 	t.Helper()
+	return newAddAttachmentFixtureWithTimeout(t, rec, maxSize, 30*time.Second)
+}
+
+// newAddAttachmentFixtureWithTimeout is newAddAttachmentFixture with the
+// per-call Graph timeout under the test's control, which is what a stalled
+// request needs in order to be abandoned rather than waited out.
+func newAddAttachmentFixtureWithTimeout(t *testing.T, rec *attachmentRecorder, maxSize int64, timeout time.Duration) (context.Context, func(context.Context, mcp.CallToolRequest) (*mcp.CallToolResult, error)) {
+	t.Helper()
 	client, srv := newTestGraphClient(t, rec.handler())
 	t.Cleanup(srv.Close)
 	if rec.upload != nil {
@@ -85,7 +129,7 @@ func newAddAttachmentFixture(t *testing.T, rec *attachmentRecorder, maxSize int6
 		rec.upload.url = srv.URL + "/upload/session-1?token=upload-secret"
 	}
 	ctx := auth.WithGraphClient(context.Background(), client)
-	return ctx, NewHandleAddAttachment(graph.RetryConfig{}, 30*time.Second, maxSize)
+	return ctx, NewHandleAddAttachment(graph.RetryConfig{}, timeout, maxSize)
 }
 
 // callAddAttachment invokes the handler with the given arguments.
@@ -267,6 +311,85 @@ func TestAddAttachment_OversizeRefusedBeforeUpload(t *testing.T) {
 	}
 	if rec.gets != 0 || rec.posts != 0 {
 		t.Errorf("expected no Graph request, got %d GET and %d POST", rec.gets, rec.posts)
+	}
+}
+
+// TestAddAttachment_StalledTransferIsBounded verifies that neither transfer path
+// can outlast the configured request timeout: a service that never answers is
+// abandoned and reported, rather than holding the handler open indefinitely.
+//
+// The two paths are asserted separately because they are bounded by different
+// code: the direct POST by the SDK call's timeout context, and the chunked path
+// by the per-chunk bound the PUT carries, which the SDK never sees.
+func TestAddAttachment_StalledTransferIsBounded(t *testing.T) {
+	const bound = 50 * time.Millisecond
+	const stallFor = 10 * time.Second
+
+	t.Run("a stalled direct post reports the timeout and its bound", func(t *testing.T) {
+		rec := &attachmentRecorder{isDraft: true, subject: "Notes", returnsID: "att-1", stallPost: stallFor}
+		ctx, handler := newAddAttachmentFixtureWithTimeout(t, rec, 0, bound)
+
+		result := callAddAttachment(t, ctx, handler, map[string]any{
+			"message_id":    "draft-1",
+			"name":          "notes.txt",
+			"content_bytes": base64.StdEncoding.EncodeToString([]byte("hello")),
+		})
+		if !result.IsError {
+			t.Fatalf("a stalled upload was confirmed as added: %s", resultText(t, result))
+		}
+		if want := graph.TimeoutErrorMessage(int(bound.Seconds())); !strings.Contains(resultText(t, result), want) {
+			t.Errorf("expected the timeout message %q, got: %s", want, resultText(t, result))
+		}
+	})
+
+	t.Run("a stalled chunk fails the transfer without leaking the upload URL", func(t *testing.T) {
+		up := &uploadServer{locationID: "att-large", stallChunk: stallFor}
+		rec := &attachmentRecorder{isDraft: true, subject: "Notes", upload: up}
+		ctx, handler := newAddAttachmentFixtureWithTimeout(t, rec, 0, bound)
+
+		result := callAddAttachment(t, ctx, handler, largeAttachmentArgs(inlineAttachmentThresholdBytes))
+		if !result.IsError {
+			t.Fatalf("a stalled chunk was confirmed as added: %s", resultText(t, result))
+		}
+		text := resultText(t, result)
+		if !strings.Contains(text, "not added") {
+			t.Errorf("the error does not state the attachment was not added: %s", text)
+		}
+		if strings.Contains(text, up.url) || strings.Contains(text, "upload-secret") {
+			t.Errorf("the upload URL survived an abandoned chunk: %s", text)
+		}
+	})
+}
+
+// TestAddAttachment_GraphFailureCarriesFixOnBothChannels verifies that a refused
+// direct POST returns the redacted service error with the correction appended,
+// and that the same correction appears on the emitted log record.
+//
+// Both halves are asserted because the log record is the only channel a headless
+// caller reading a persisted log has; grading the tool result alone leaves the
+// channel the fix instruction exists for ungraded.
+func TestAddAttachment_GraphFailureCarriesFixOnBothChannels(t *testing.T) {
+	var logged bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	defer slog.SetDefault(restore)
+
+	rec := &attachmentRecorder{isDraft: true, subject: "Notes", failPostStatus: http.StatusForbidden}
+	ctx, handler := newAddAttachmentFixture(t, rec, 0)
+
+	result := callAddAttachment(t, ctx, handler, map[string]any{
+		"message_id":    "draft-1",
+		"name":          "notes.txt",
+		"content_bytes": base64.StdEncoding.EncodeToString([]byte("hello")),
+	})
+	if !result.IsError {
+		t.Fatalf("a refused upload was confirmed as added: %s", resultText(t, result))
+	}
+	if !strings.Contains(resultText(t, result), "content_bytes") {
+		t.Errorf("the failure does not name what to correct, got: %s", resultText(t, result))
+	}
+	if !strings.Contains(logged.String(), attachmentFixInstruction) {
+		t.Errorf("expected the log record to carry the same correction as the tool result, got: %q", logged.String())
 	}
 }
 

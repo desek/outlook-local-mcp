@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -30,6 +31,49 @@ func updateDraftHandler(isDraft bool) http.Handler {
 			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
 		}
 	})
+}
+
+// TestVerifyIsDraftReturnsSubject verifies that the shared draft guard asks for
+// the subject in its projection and hands the fetched message back to its
+// caller.
+//
+// The projection is the load-bearing half: a caller that names the draft in its
+// confirmation reads the subject from this one GET rather than paying a second.
+// Dropping subject from the $select would leave every such confirmation reading
+// the no-subject placeholder against a real mailbox, and no handler-level test
+// can detect that, because a fixture answers with the subject whether or not it
+// was asked for.
+func TestVerifyIsDraftReturnsSubject(t *testing.T) {
+	var selects []string
+	gets := 0
+	client, srv := newTestGraphClient(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			http.Error(w, "unexpected method", http.StatusMethodNotAllowed)
+			return
+		}
+		gets++
+		selects = append(selects, r.URL.Query().Get("$select"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"draft-1","isDraft":true,"subject":"Quarterly report"}`))
+	}))
+	defer srv.Close()
+
+	msg, errResult := verifyIsDraft(context.Background(), client, graph.RetryConfig{}, 30*time.Second, "draft-1", slog.Default())
+	if errResult != nil {
+		t.Fatalf("unexpected refusal: %s", errResult.Content[0].(mcp.TextContent).Text)
+	}
+	if gets != 1 {
+		t.Errorf("verification GETs = %d, want 1", gets)
+	}
+	if len(selects) != 1 || !strings.Contains(selects[0], "subject") {
+		t.Errorf("projection = %v, want one containing subject", selects)
+	}
+	if msg == nil {
+		t.Fatal("the guard returned no message, so its caller cannot read the subject from it")
+	}
+	if got := graph.SafeStr(msg.GetSubject()); got != "Quarterly report" {
+		t.Errorf("subject = %q, want %q", got, "Quarterly report")
+	}
 }
 
 // TestUpdateDraft_Success verifies that the handler verifies isDraft=true

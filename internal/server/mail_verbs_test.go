@@ -341,7 +341,7 @@ func TestMimeTypeIsNotBodyContentType(t *testing.T) {
 }
 
 // TestMailManagementVerbsCarryDotIdentity asserts that the audit
-// record emitted for each received-message write verb carries the same
+// record emitted for each manage-gated write verb carries the same
 // mail.<verb> identity that is passed to the middleware chain.
 //
 // The identity is what surfaces in the audit log, in the OpenTelemetry
@@ -350,6 +350,12 @@ func TestMimeTypeIsNotBodyContentType(t *testing.T) {
 // consults after the fact. The handlers are invoked with no Graph client bound,
 // so each fails at account resolution and issues no network call; AuditWrap
 // still emits the record, which is the surface under test.
+//
+// The verbs are derived by diffing the registry built with the manage gate off
+// against the one built with it on, rather than listed here. A hand-written list
+// grades only the instances someone remembered to add, which is how a later
+// gated verb ships with an unasserted audit identity; the diff makes the omission
+// fail the build instead.
 func TestMailManagementVerbsCarryDotIdentity(t *testing.T) {
 	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
 	if err != nil {
@@ -370,17 +376,34 @@ func TestMailManagementVerbsCarryDotIdentity(t *testing.T) {
 		accountResolverMW: identity,
 	})
 
-	byName := make(map[string]tools.Verb, len(verbs))
-	for _, v := range verbs {
-		byName[v.Name] = v
+	ungatedCfg := testConfig()
+	ungatedCfg.MailEnabled = true
+	ungated, _ := buildMailVerbs(mailVerbsConfig{
+		cfg:               ungatedCfg,
+		m:                 m,
+		tracer:            tracenoop.NewTracerProvider().Tracer("test"),
+		authMW:            identity,
+		accountResolverMW: identity,
+	})
+	present := make(map[string]bool, len(ungated))
+	for _, v := range ungated {
+		present[v.Name] = true
 	}
 
-	want := []string{"move_message", "set_flag", "set_categories", "mark_read"}
-	for _, name := range want {
-		v, ok := byName[name]
-		if !ok {
-			t.Fatalf("verb %q is not registered under the maximal configuration", name)
+	byName := make(map[string]tools.Verb, len(verbs))
+	var want []string
+	for _, v := range verbs {
+		byName[v.Name] = v
+		if !present[v.Name] {
+			want = append(want, v.Name)
 		}
+	}
+	if len(want) == 0 {
+		t.Fatal("the manage gate registered no additional verbs, so this test grades nothing")
+	}
+
+	for _, name := range want {
+		v := byName[name]
 		req := mcp.CallToolRequest{}
 		req.Params.Arguments = map[string]any{"message_id": "msg-1"}
 		if _, err := v.Handler(context.Background(), req); err != nil {
@@ -405,8 +428,13 @@ func TestMailManagementVerbsCarryDotIdentity(t *testing.T) {
 			t.Fatalf("audit line is not JSON: %v", err)
 		}
 		seen[entry.ToolName] = true
-		if strings.HasPrefix(entry.ToolName, "mail.") && entry.OperationType != "write" {
-			t.Errorf("audit record for %s carries operation_type %q, want \"write\"", entry.ToolName, entry.OperationType)
+		// Every gated verb mutates the mailbox, so its record must classify as a
+		// mutation. A deletion records its own type rather than the generic one,
+		// which is why the check admits the pair instead of the single value: an
+		// operator filtering an audit log for mutations reads both.
+		if strings.HasPrefix(entry.ToolName, "mail.") &&
+			entry.OperationType != "write" && entry.OperationType != "delete" {
+			t.Errorf("audit record for %s carries operation_type %q, want a mutating type", entry.ToolName, entry.OperationType)
 		}
 	}
 	if err := scanner.Err(); err != nil {

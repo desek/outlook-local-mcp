@@ -1,6 +1,8 @@
 # CR-0079 Validation Report
 
-Validated at `b270559` on branch `docs/cr-implementation-set-0079-0083`.
+Validated at `b270559` on branch `docs/cr-implementation-set-0079-0083`. Gaps closed and
+re-verified at the gap-fix commit on the same branch; every row this report grades is
+current as of that commit.
 
 The CR-scoped diff is `ee23a77..HEAD` (CR-0078 landed at `ee23a77`), covering the review
 commit `0bcf168` and the six implementation commits `7b28959`, `a170a01`, `1fc6f57`,
@@ -10,14 +12,18 @@ CR-0080 through CR-0083 documents, which are out of this report's scope.
 
 ## Summary
 
-Requirements: 31/33 | Acceptance Criteria: 15/19 | Tests: 27/29 | Gaps: 7
+Requirements: 33/33 | Acceptance Criteria: 19/19 | Tests: 29/29 | Gaps: 0 open
 
-**FAIL: 0 | PARTIAL: 6 | GAP: 7**
+**FAIL: 0 | PARTIAL: 0 | GAP: 0** (7 gaps recorded, all closed: 5 FIXED, 1 by CR amendment,
+1 closed as superseded.)
 
 Every requirement and criterion maps to at least one changed file with a specific hunk.
-No stray changed files. The four PARTIAL criteria and two PARTIAL requirements are all the
-same shape: the behaviour is implemented and structurally sound, but the specific assertion
-the CR names is absent, so the evidence is source-reading rather than a passing test.
+No stray changed files. The six rows that were PARTIAL are now graded by a passing test
+rather than by source-reading, except FR-15, which is graded against its amended text. One
+verification remains outside this report's reach and is recorded as such: the live-mailbox
+scenario at `.agents/scenarios/2026-09-02-draft-attachment-two-transfer-paths.md` is
+derived but not run, and `make crud-test` is unrun. Both are the user's to schedule; the
+backlog names them.
 
 ### Check pipeline
 
@@ -26,7 +32,7 @@ the CR names is absent, so the evidence is source-reading rather than a passing 
 | `make ci` | **exit 0**. Includes build, vet, tidy, `golangci-lint` (0 issues), full `go test`, docs-bundle regeneration, surface-manifest regeneration, `goreleaser check`, `mcpb validate`. |
 | `git status --porcelain` after `make ci` | **empty**. The surface drift check regenerated `site/src/generated/surface.json` and the working tree did not move, which is the AC-11 clause. |
 | CR Test Strategy race command (`go test -race ./internal/tools/ ./internal/server/ ./internal/validate/ ./internal/docs/ ./internal/config/ ./internal/surface/ -run '…'`) | **all pass**, 45 top-level tests, 6 packages ok. No race reports. |
-| `make crud-test` | **not run** (paid harness, excluded by instruction). Recorded as GAP-2. |
+| `make crud-test` | **not run** (paid harness, excluded by instruction). Recorded as GAP-2, closed by deriving and persisting the scenario rather than by running it. |
 
 ## Requirement Verification
 
@@ -48,7 +54,7 @@ the CR names is absent, so the evidence is source-reading rather than a passing 
 | FR-12 | All four hints declared explicitly, matching the matrix | PASS | `internal/server/mail_verbs.go:773-778`; `TestAddAttachmentAnnotations` |
 | FR-13 | Wrapped by the write middleware chain under `mail.add_attachment` / audit `write` | PASS | `internal/server/mail_verbs.go:772` (`wrapWrite("mail.add_attachment", "write", …)`); the single `name` argument feeds observability, `ReadOnlyGuard`, and `AuditWrap` at `internal/server/mail_verbs.go:107`; `TestReadOnlyBlocksAddAttachment` proves the string reaches the chain |
 | FR-14 | Upper bound enforced before upload; actionable error naming size, bound, env var; reuse `config.MaxAttachmentSizeBytes`; no second variable | PASS | `internal/tools/add_attachment.go:114-119`; bound threaded at `internal/server/mail_verbs.go:772` (`c.cfg.MaxAttachmentSizeBytes`); `TestAddAttachment_OversizeRefusedBeforeUpload` (asserts `16 bytes`, `8 bytes`, `OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES`, and zero Graph requests); `TestEveryEnvLiteralIsEnumerated`, `TestInventoryEntriesAreComplete` |
-| FR-15 | Every error carries a fix instruction reaching both the tool result and the log record; chunk-PUT errors redacted of the upload URL | **PARTIAL** | Redaction: `internal/tools/attachment_upload_session.go:171`, `:272-282`; `TestUploadSession_ErrorRedactsUploadURL`. Graph-path fix instruction on both channels: `internal/tools/add_attachment.go:143-150`, `:187-192` (`"fix", attachmentFixInstruction`). **But** the validation errors at `internal/tools/add_attachment.go:87-111` emit no log record at all, and the oversize log record at `:115` omits the environment variable its tool result names. This matches the established pattern in `internal/tools/move_message.go:65-77`, but not the literal "MUST reach both" wording. See GAP-6. |
+| FR-15 | Every error carries a fix instruction in its tool result, and on the log record wherever the verb emits one; chunk-PUT errors redacted of the upload URL | PASS (against the amended text) | Redaction: `internal/tools/attachment_upload_session.go:171`, `:272-282`; `TestUploadSession_ErrorRedactsUploadURL` (now asserts both channels). Graph-path fix instruction on both channels: `internal/tools/add_attachment.go:143-150`, `:187-192`; `TestAddAttachment_GraphFailureCarriesFixOnBothChannels`. Tool-result fix instruction on the argument refusals: `TestAddAttachment_RejectsBadInputBeforeAnyRequest`, `TestAddAttachment_OversizeRefusedBeforeUpload`. FR-15 was amended under GAP-6 to scope the log-record clause to failures that emit a record, which is the convention all nine sibling mail write verbs follow. |
 | FR-16 | Non-empty `Summary` ≤ 80 chars, `Description`, ≥1 `Examples`, ≥1 resolving `SeeDocs` | PASS | `internal/server/mail_verbs.go:765` (Summary, 74 chars), `:766` (Description), `:767-770` (two examples), `:771` (`concepts#mail-gating`); `TestEveryVerbHasSummary`, `TestEveryVerbHasDescription`, `TestEveryVerbHasClassification`, `TestSeeDocsAnchorsResolve`, `TestEveryVerbStatesRequiredParameters` |
 | FR-17 | Mail domain `Intro` names `add_attachment` | PASS | `internal/server/server.go:179`; `TestMailIntroNamesEveryGatedWriteVerb` (cases derived by diffing the gated against the ungated registry) |
 | FR-18 | `extension/manifest.json` mail entry enumerates `add_attachment`; `tools` array stays at four | PASS | `extension/manifest.json` mail description (single-line hunk, +1/-1); `TestManifestDescribesEveryRegisteredVerb`; `mcpb validate extension/manifest.json` passes in `make ci` |
@@ -68,7 +74,7 @@ the CR names is absent, so the evidence is source-reading rather than a passing 
 | NFR-2 | Mail description < 4 000 chars; cold-start schema reduction ≥ 60% | PASS | `TestDescriptionLengthBounded`, `TestColdStartSchemaSize_Reduction` — both pass under `-race` |
 | NFR-3 | No third-party dependency; standard library HTTP for the chunked PUT | PASS (negative) | `go.mod` and `go.sum` absent from the entire `ee23a77..HEAD` diff; `internal/tools/attachment_upload_session.go:30` imports `net/http` and `:23-33` imports nothing outside stdlib plus the already-pinned SDK |
 | NFR-4 | Graph SDK calls route through `RetryGraphCall` inside `WithTimeout` and redact with the shared helpers | PASS | `internal/tools/add_attachment.go:171-179` (small path), `internal/tools/attachment_upload_session.go:129-138` (session creation), `internal/tools/update_draft.go:225-238` (guard); redaction at `internal/tools/add_attachment.go:148`, `:190` |
-| NFR-5 | Per-chunk timeout; transfer failure surfaces as an actionable redacted error, never a partial success | **PARTIAL** | No-partial-success is fully covered: `internal/tools/attachment_upload_session.go:170-181`; `TestUploadSession_TransferFailureIsNotPartialSuccess`, `TestUploadSession_AttachmentIDFromLocationHeader/a_completion_naming_no_attachment_is_an_error`. **But** the per-chunk timeout bound at `internal/tools/attachment_upload_session.go:201` (`graph.WithTimeout(ctx, timeout)` inside `putAttachmentChunk`) has no test that exercises a stalled chunk, so that clause is source-reading only. See GAP-5 |
+| NFR-5 | Per-chunk timeout; transfer failure surfaces as an actionable redacted error, never a partial success | PASS | No-partial-success: `internal/tools/attachment_upload_session.go:170-181`; `TestUploadSession_TransferFailureIsNotPartialSuccess`, `TestUploadSession_AttachmentIDFromLocationHeader/a_completion_naming_no_attachment_is_an_error`. Per-chunk bound at `internal/tools/attachment_upload_session.go:201` now exercised by `TestAddAttachment_StalledTransferIsBounded/a_stalled_chunk_fails_the_transfer_without_leaking_the_upload_URL`, which stalls every chunk past the bound and asserts the transfer fails, states the attachment was not added, and leaks neither the upload URL nor its query credential (GAP-5 fixed) |
 | NFR-6 | Upper bound is the existing `MaxAttachmentSizeBytes`; default not raised | PASS | `internal/tools/add_attachment.go:114-119` takes `maxSize` as a parameter; `internal/server/mail_verbs.go:772` supplies `c.cfg.MaxAttachmentSizeBytes`; `internal/config/inventory.go:92` default `10485760` unchanged; `TestAddAttachment_OversizeRefusedBeforeUpload` |
 | NFR-7 | Small path: exactly one GET and one POST. Large path: one GET, one createUploadSession, minimum chunk PUTs, no re-read | PASS | `TestAddAttachment_DirectPath` asserts `rec.gets == 1 && rec.posts == 1`; `TestUploadSession_LargeFileChunks` asserts `up.sessions == 1`, `rec.posts == 0`, exactly 3 chunks for `2*chunk+12345` bytes, and `up.received == size` |
 | NFR-8 | Name bound, inline threshold, chunk size each a named constant; upper bound from configuration | PASS | `internal/validate/validate.go:40` (`MaxAttachmentNameLen`), `internal/tools/add_attachment.go:38` (`inlineAttachmentThresholdBytes`), `internal/tools/attachment_upload_session.go:47` (`uploadChunkSizeBytes`); bound from config, not a literal, at `internal/server/mail_verbs.go:772`; `TestMaxAttachmentNameLenBoundsAName` |
@@ -84,7 +90,7 @@ the CR names is absent, so the evidence is source-reading rather than a passing 
 | AC-5 | Non-draft message refused, no attachment request sent | PASS | `TestAddAttachment_NonDraftRefused` (asserts the established refusal string and `rec.posts == 0`) |
 | AC-6 | Required and well-formed inputs enforced before any call; no `output` parameter | PASS | `TestAddAttachment_RejectsBadInputBeforeAnyRequest` (8 subcases, each asserting zero GETs and zero POSTs and that the error names the parameter); `TestWriteVerbsDeclareNoOutputParameter` |
 | AC-7 | Oversize refused before any upload; no second env variable | PASS | `TestAddAttachment_OversizeRefusedBeforeUpload`; `TestEveryEnvLiteralIsEnumerated`, `TestInventoryEntriesAreComplete` |
-| AC-8 | Transfer failure is a failure and never leaks the upload URL, on either channel | **PARTIAL** | Tool-result half fully covered: `TestUploadSession_TransferFailureIsNotPartialSuccess`, `TestUploadSession_ErrorRedactsUploadURL` (asserts the URL, the `upload-secret` query value, and the presence of the redaction marker). Log-record half is safe by construction — the error is redacted at `internal/tools/attachment_upload_session.go:171` *before* it reaches `logger.ErrorContext` at `internal/tools/add_attachment.go:143-147` — but **no test reads the log record**. See GAP-3 |
+| AC-8 | Transfer failure is a failure and never leaks the upload URL, on either channel | PASS | `TestUploadSession_TransferFailureIsNotPartialSuccess`; `TestUploadSession_ErrorRedactsUploadURL` now installs a buffer-backed `slog` text handler as the default and asserts, on the log record as well as the tool result, that neither `up.url` nor the `upload-secret` query value appears and that the record carries `attachmentFixInstruction` (GAP-3 fixed). The ordering invariant at `internal/tools/attachment_upload_session.go:171` is now guarded rather than merely true |
 | AC-9 | Registry metadata complete | PASS | `TestEveryVerbHasSummary`, `TestEveryVerbHasDescription`, `TestEveryVerbHasClassification`, `TestSeeDocsAnchorsResolve` (all registry-derived, all pass under `-race`) |
 | AC-10 | Description and confirmation name the base64 contract | PASS | `internal/server/mail_verbs.go:766` ("content_bytes carries the file content as a standard base64-encoded string"); `TestEveryVerbStatesRequiredParameters`; confirmation half by `TestAttachmentConfirmationLineOrder` and `TestAddAttachment_DirectPath` (name, `Size: 5 bytes`, `Transfer: direct upload`) |
 | AC-11 | Every generated and hand-written description of the surface names the new verb | PASS | `TestMailIntroNamesEveryGatedWriteVerb`; `TestVerbInventoryUnchangedAfterUpgrade` (golden delta is exactly one line, `internal/tools/dispatch_registry_test.go:62`); `TestCommittedManifestMatchesRecord`; `TestManifestDescribesEveryRegisteredVerb`; `make ci` exit 0 with `git status --porcelain` empty after the surface regeneration; figures 18/5 and 47/33 at `site/src/generated/surface.json:212-213`, `:315-316`; widened config descriptions at `:442`, `:447` |
@@ -92,9 +98,9 @@ the CR names is absent, so the evidence is source-reading rather than a passing 
 | AC-13 | Consent surface unchanged | PASS | `TestScopes_MailManage`, `TestScopes_NoMailSend` pass in `make ci`; no hunk in `internal/auth/` |
 | AC-14 | MIME parameter distinct from the body content type | PASS | `TestMimeTypeIsNotBodyContentType` (asserts `content_type` keeps exactly the `text`/`html` enum and that `mime_type` is a separate free string with no enum) |
 | AC-15 | Annotation hints declared and matching the matrix; fold unchanged | PASS | `TestAddAttachmentAnnotations`; `TestMailAnnotationsManageEnabled`, `TestMailAnnotationsGatedReadOnly` (both unchanged and passing) |
-| AC-16 | Read-only mode blocks the verb; the same identity reaches the audit record and telemetry | **PARTIAL** | Read-only half fully covered: `TestReadOnlyBlocksAddAttachment` (`internal/server/readonly_test.go:250-260`) asserts the refusal names `mail.add_attachment`. Identity is single-source by construction — `wrapWrite` at `internal/server/mail_verbs.go:107` passes one `name` to `WithObservability`, `ReadOnlyGuard`, and `AuditWrap`. **But** `TestMailManagementVerbsCarryDotIdentity` enumerates its verbs by hand at `internal/server/mail_verbs_test.go:378` (`{"move_message","set_flag","set_categories","mark_read"}`) and does not include `add_attachment`, so no test reads the audit record for this verb. See GAP-4 |
-| AC-17 | Implementation follows the file and helper conventions; timeout and error text carry the fix instruction | **PARTIAL** | Second clause PASS from source: three separate files (`add_attachment.go`, `attachment_upload_session.go`, `attachment_confirmation.go`), and three named constants (`internal/tools/add_attachment.go:38`, `internal/tools/attachment_upload_session.go:47`, `internal/validate/validate.go:40`). **First clause is source-reading only**: `internal/tools/add_attachment.go:137-141` and `:181-186` build the timeout message from `graph.TimeoutErrorMessage(int(timeout.Seconds()))` and `:148`/`:190` redact via `graph.RedactGraphError`, but no test exercises a timeout or a Graph error on this verb. See GAP-5 |
-| AC-18 | Draft guard widened once; existing callers unchanged in behaviour | **PARTIAL** | Second clause fully covered: `TestUpdateDraft_NotDraft`, `TestDeleteDraft_NotDraft` pass unmodified (neither test file was touched, because neither called `verifyIsDraft` directly). One-GET-and-subject outcome covered indirectly by `TestAddAttachment_DirectPath` (`rec.gets == 1` and `Message: "Quarterly report"` in the confirmation). **But** the `$select` naming `subject` is evidenced only at `internal/tools/update_draft.go:230`, and the Test Strategy's `TestVerifyIsDraftReturnsSubject` was never written. See GAP-1 |
+| AC-16 | Read-only mode blocks the verb; the same identity reaches the audit record and telemetry | PASS | `TestReadOnlyBlocksAddAttachment` (`internal/server/readonly_test.go:250-260`) asserts the refusal names `mail.add_attachment`. `TestMailManagementVerbsCarryDotIdentity` no longer enumerates verbs by hand: it derives them by diffing the registry built with `MailManageEnabled` off against the one built with it on, invokes each, and asserts an audit record carries `mail.<verb>` with a mutating `operation_type`. `add_attachment` is covered by that derivation, and a future gated verb cannot be omitted from it (GAP-4 fixed) |
+| AC-17 | Implementation follows the file and helper conventions; timeout and error text carry the fix instruction | PASS | Conventions: three separate files (`add_attachment.go`, `attachment_upload_session.go`, `attachment_confirmation.go`) and three named constants (`internal/tools/add_attachment.go:38`, `internal/tools/attachment_upload_session.go:47`, `internal/validate/validate.go:40`). Timeout path now exercised: `TestAddAttachment_StalledTransferIsBounded/a_stalled_direct_post_reports_the_timeout_and_its_bound` stalls the attachment POST past the configured bound and asserts the result carries `graph.TimeoutErrorMessage` for that bound. Graph-error path now exercised: `TestAddAttachment_GraphFailureCarriesFixOnBothChannels` asserts the redacted error names what to correct and that the log record carries the same instruction (GAP-5 fixed) |
+| AC-18 | Draft guard widened once; existing callers unchanged in behaviour | PASS | Second clause: `TestUpdateDraft_NotDraft`, `TestDeleteDraft_NotDraft`, `TestUpdateDraft_Success`, `TestDeleteDraft_Success` pass unmodified. First clause now graded by `TestVerifyIsDraftReturnsSubject` (`internal/tools/update_draft_test.go`), which calls `verifyIsDraft` directly against a fixture recording `req.URL.Query().Get("$select")` and asserts the projection contains `subject`, that exactly one GET is issued, and that the returned message carries the subject (GAP-1 fixed) |
 | AC-19 | Embedded documentation and the lifecycle harness describe the verb that now exists | PASS | `TestMailGatingRowNamesDraftAttachments`, `TestMailGatingRowNamesMessageManagement` (both against the embedded bundle, `internal/docs/catalog_test.go:81`, `:56`); `docs/troubleshooting.md:206`, `:220`, `:238`; `docs/prompts/mcp-tool-crud-test.md:583`, `:681-691`, `:768`; `TestCatalog_AllSlugsResolve`, `TestSeeDocsAnchorsResolve` |
 
 ## Test Strategy Verification
@@ -112,14 +118,14 @@ the CR names is absent, so the evidence is source-reading rather than a passing 
 | `internal/tools/add_attachment_test.go` | `TestAddAttachment_InvalidMessageIDRejectedBeforeCall` | yes | folded into `TestAddAttachment_RejectsBadInputBeforeAnyRequest` | yes — subcases "missing message id", "oversize message id" |
 | `internal/tools/add_attachment_test.go` | `TestAddAttachment_DefaultsMimeType` | yes | yes | yes |
 | `internal/tools/add_attachment_test.go` | `TestAddAttachment_OversizeRejectedBeforeUpload` | yes | yes, as `TestAddAttachment_OversizeRefusedBeforeUpload` | yes |
-| `internal/tools/add_attachment_test.go` | `TestAddAttachment_NoOutputParameter` | yes | **no** | superseded by `TestWriteVerbsDeclareNoOutputParameter`, which the CR itself names as the AC-6 gate and which is strictly stronger (registry-derived across every domain). Not counted as a gap |
+| `internal/tools/add_attachment_test.go` | `TestAddAttachment_NoOutputParameter` | yes | no, and deliberately not added | superseded by `TestWriteVerbsDeclareNoOutputParameter`, which the CR itself names as the AC-6 gate and which is strictly stronger (registry-derived across every domain). GAP-7, closed on that reason |
 | `internal/tools/attachment_upload_session_test.go` | `TestUploadSession_LargeFileChunks` | yes | yes | yes — chunk sizes, `Content-Range`, total bytes |
 | `internal/tools/attachment_upload_session_test.go` | `TestUploadSession_AttachmentIDFromLocationHeader` | yes | yes | yes — including the percent-decoding case and the no-identifier-is-an-error subtest |
 | `internal/tools/attachment_upload_session_test.go` | `TestUploadSession_TransferFailureIsNotPartialSuccess` | yes | yes | yes |
 | `internal/tools/attachment_upload_session_test.go` | `TestUploadSession_ErrorRedactsUploadURL` | yes | yes | yes — asserts the URL, the query-string credential, and the redaction marker |
 | `internal/tools/attachment_confirmation_test.go` | `TestAttachmentConfirmationUsesResponseNotArguments` | yes | yes | yes |
 | `internal/tools/attachment_confirmation_test.go` | `TestAttachmentConfirmationNoSubjectPlaceholder` | yes | yes | yes |
-| `internal/tools/update_draft_test.go` | `TestVerifyIsDraftReturnsSubject` | yes | **no** | **GAP-1** — `internal/tools/update_draft_test.go` was not touched by this CR |
+| `internal/tools/update_draft_test.go` | `TestVerifyIsDraftReturnsSubject` | yes | yes | yes — records the `$select`, asserts it contains `subject`, asserts one GET, asserts the returned message carries the subject |
 | `internal/tools/add_attachment_test.go` | `TestAddAttachment_UsesMaxAttachmentSizeBytes` | yes | folded into `TestAddAttachment_OversizeRefusedBeforeUpload` | yes — handler built with an 8-byte bound; error names size, bound, and the env var |
 | `internal/docs/catalog_test.go` | `TestMailGatingRowNamesDraftAttachments` | yes | yes | yes |
 | `internal/tools/tool_annotations_test.go` | `TestAddAttachmentAnnotations` | yes | yes | yes |
@@ -132,10 +138,18 @@ Unspecified extras added (not defects, recorded for completeness):
 `TestNewHandleAddAttachment_ReturnsHandler`, `TestAttachmentConfirmationLineOrder`,
 `TestValidateBase64_Valid`, `TestValidateBase64_Invalid`, `TestMaxAttachmentNameLenBoundsAName`.
 
+Added by the gap fix, beyond the CR's Test Strategy, to close GAP-5:
+`TestAddAttachment_StalledTransferIsBounded` (two subtests, one per transfer path) and
+`TestAddAttachment_GraphFailureCarriesFixOnBothChannels`. The CR's Test Strategy specified
+neither, which is why GAP-5 was recorded as a coverage gap in the CR as much as in the diff;
+the tests now exist and the gap is closed on the code side without amending the CR.
+
 ### Tests to Modify
 
 | Test File | Test Name | Specified | Exists | Matches Spec |
 |---|---|---|---|---|
+| `internal/server/mail_verbs_test.go` | `TestMailManagementVerbsCarryDotIdentity` | no (gap fix) | yes | its hand-written verb list is replaced by a registry diff, which brings `add_attachment` under it and prevents a future gated verb being omitted (GAP-4) |
+| `internal/tools/attachment_upload_session_test.go` | `TestUploadSession_ErrorRedactsUploadURL` | no (gap fix) | yes | extended to read the log record as well as the tool result (GAP-3) |
 | `internal/tools/dispatch_registry_test.go` | `TestVerbInventoryUnchangedAfterUpgrade` | yes | yes | yes — golden gains exactly one line at `:62` |
 | `internal/server/server_test.go` | `TestRegisterTools_MailEnabled` | yes | yes | yes — negative assertion added at `:799-805` |
 | `internal/tools/tool_annotations_test.go` | `TestMailAnnotationsManageEnabled` | yes | yes | yes — unchanged and re-asserted against the larger verb set; passes |
@@ -185,6 +199,20 @@ Range `ee23a77..HEAD`. 26 files, +2545 / -221.
 | `docs/cr/CR-0079-mail-draft-attachments.md` | +581 / -178 | Governance document itself (review commit `0bcf168` and finalization `b270559`) |
 | `docs/backlog/cr-0078-0083.md` | +197 / -2 | Open Questions 1, 2, 4 — the CR names this file at `docs/cr/CR-0079-mail-draft-attachments.md:1327` as where the settled decisions are recorded |
 
+### Files added by the gap fix
+
+| File | Mapped Gap |
+|---|---|
+| `.agents/scenarios/2026-09-02-draft-attachment-two-transfer-paths.md` | GAP-2 — derived, `outcome: not-run` |
+
+The gap fix also edited `internal/tools/update_draft_test.go` (GAP-1),
+`internal/tools/add_attachment_test.go` and
+`internal/tools/attachment_upload_session_test.go` (GAP-3, GAP-5),
+`internal/server/mail_verbs_test.go` (GAP-4), the FR-15 paragraph of
+`docs/cr/CR-0079-mail-draft-attachments.md` (GAP-6), and
+`docs/backlog/cr-0078-0083.md` (GAP-2, GAP-6). No non-test source file changed: every gap
+was an absent assertion or an over-strict requirement, not a defect in the implementation.
+
 ### Unmapped changed files
 
 None. Two files are outside the CR's Affected Components list and both are justified:
@@ -201,97 +229,135 @@ hunk: `scripts/crud-test.sh` (per-domain accounting keys on the tool name, not t
 
 ## Gaps
 
-**GAP-1 — `TestVerifyIsDraftReturnsSubject` was never written.**
+All seven are closed. Each entry keeps the finding as it was written and appends the
+resolution, so the record shows what was wrong as well as what was done about it.
+
+**GAP-1 — `TestVerifyIsDraftReturnsSubject` was never written. FIXED.**
 *Requirement ref:* Test Strategy "Tests to Add"; AC-18 first clause; FR-5.
-*What's missing:* The CR specifies a test in `internal/tools/update_draft_test.go` asserting
-that the widened guard returns the fetched message with its subject populated and issues
-exactly one GET. That file was not touched by this CR. The `$select` widening at
-`internal/tools/update_draft.go:230` is evidenced only by reading the source. The outcome is
-covered indirectly by `TestAddAttachment_DirectPath` (`rec.gets == 1`, subject in the
-confirmation), but that fixture returns `subject` regardless of the `$select`, so it cannot
-detect a regression that drops `subject` from the projection — which would silently make the
-confirmation read `(No subject)` against a real mailbox.
-*Suggested minimal fix:* Add `TestVerifyIsDraftReturnsSubject` to
-`internal/tools/update_draft_test.go`, calling `verifyIsDraft` directly against an `httptest`
-fixture that records `req.URL.Query().Get("$select")`, asserting the projection contains
-`subject`, that exactly one GET is issued, and that the returned `models.Messageable` carries
-the subject.
+*What was missing:* The CR specifies a test in `internal/tools/update_draft_test.go`
+asserting that the widened guard returns the fetched message with its subject populated and
+issues exactly one GET. That file was not touched. The outcome was covered indirectly by
+`TestAddAttachment_DirectPath`, but that fixture returns `subject` regardless of the
+`$select`, so it could not detect a regression dropping `subject` from the projection —
+which would silently make the confirmation read `(No subject)` against a real mailbox.
+*Resolution:* `TestVerifyIsDraftReturnsSubject` added to
+`internal/tools/update_draft_test.go`. It calls `verifyIsDraft` directly against an
+`httptest` fixture recording `req.URL.Query().Get("$select")`, and asserts the projection
+contains `subject`, that exactly one GET is issued, and that the returned
+`models.Messageable` carries the subject. Passes under `-race`.
 
-**GAP-2 — Live-mailbox verification deferred.**
+**GAP-2 — Live-mailbox verification deferred. CLOSED as derived-not-run; the run is the
+user's.**
 *Requirement ref:* CR "Verification Commands" narrative — `make crud-test` after rebuilding
-the binary, plus a user scenario under `.agents/scenarios/` creating a draft, attaching a
-small file through the direct path and a larger file through the session path, and confirming
-through `list_attachments` that both ids resolve.
-*What's missing:* Neither was performed. `make crud-test` is a paid harness and was excluded
-by instruction. `.agents/scenarios/` contains only
-`2026-09-01-received-message-management-lifecycle.md` (CR-0078); no CR-0079 scenario exists.
-The unit suite serves the upload URL from an in-process `httptest` server, so **the chunked
-transfer has never been exercised against Microsoft Graph** — the `Content-Range` contract,
-the `Location` header shape on the completing 201, and the real service's inline threshold
-are all unconfirmed against the live service.
-*Suggested minimal fix:* Deferred to the user. Rebuild to the path in `.mcp.json` with the
-`-ldflags` commit stamp, confirm the report's `Server version` line against
-`git rev-parse --short HEAD`, run `make crud-test`, then derive and persist the two-path
-attachment scenario under `.agents/scenarios/` per the `user-scenario` skill.
+the binary, plus a user scenario under `.agents/scenarios/`.
+*What was missing:* Neither was performed. `make crud-test` is a paid harness and was
+excluded by instruction. `.agents/scenarios/` contained only the CR-0078 scenario. The unit
+suite serves the upload URL from an in-process `httptest` server, so **the chunked transfer
+has never been exercised against Microsoft Graph** — the `Content-Range` contract, the
+`Location` header shape on the completing 201, and the real service's inline threshold are
+all unconfirmed against the live service.
+*Resolution:* The scenario is now derived and persisted at
+`.agents/scenarios/2026-09-02-draft-attachment-two-transfer-paths.md`, in the same format as
+the CR-0078 scenario, with frontmatter `outcome: not-run` and `runs: "0 of 0 attempted"`. It
+states the preconditions (including the size bound and the rebuild-and-sign steps), the eight
+steps at the MCP stdio surface, and a success condition graded on a `list_attachments` and
+`get_attachment` read-back rather than on the write confirmations. **The run itself remains
+outstanding and is the user's to make**, together with `make crud-test`; a bullet under
+`## CR-0079` in `docs/backlog/cr-0078-0083.md` names both as pending. Running it is what
+settles the three unconfirmed service contracts above; nothing in this report claims they are
+settled.
 
-**GAP-3 — No test asserts the upload URL is absent from the log record.**
+**GAP-3 — No test asserts the upload URL is absent from the log record. FIXED.**
 *Requirement ref:* FR-15; AC-8 second clause ("neither the tool result **nor the log record**
 contains the pre-authenticated upload URL").
-*What's missing:* `TestUploadSession_ErrorRedactsUploadURL` reads only the tool result. The
-log record is safe by construction — `transferAttachmentChunks` redacts at
+*What was missing:* `TestUploadSession_ErrorRedactsUploadURL` read only the tool result. The
+log record was safe by construction — `transferAttachmentChunks` redacts at
 `internal/tools/attachment_upload_session.go:171` before the error reaches
-`logger.ErrorContext` at `internal/tools/add_attachment.go:143-147` — but that ordering is a
+`logger.ErrorContext` at `internal/tools/add_attachment.go:143-147` — but that ordering was a
 one-line invariant with no guard. Moving the redaction, or adding a second log call on the
-raw error, would leak a credential and pass every existing test. This is the highest-impact
+raw error, would leak a credential and pass every existing test. This was the highest-impact
 gap in the report: it guards Risk 2, rated "likelihood high without the mitigation, impact
 high".
-*Suggested minimal fix:* Extend `TestUploadSession_ErrorRedactsUploadURL` to install a
-capturing `slog.Handler` on the context via `logging`, and assert that neither `up.url` nor
-`upload-secret` appears in any emitted record's rendered attributes.
+*Resolution:* `TestUploadSession_ErrorRedactsUploadURL` now installs a buffer-backed
+`slog.NewTextHandler` as the default logger for the duration of the test, drives the failing
+chunk transfer, and asserts on the captured records that neither the upload URL nor its
+`upload-secret` query value appears, and that the record does carry
+`attachmentFixInstruction`. This is the same buffer-backed-handler pattern
+`TestMoveMessage_UnresolvableDestinationCarriesFix` already uses in
+`internal/tools/move_message_test.go`. The invariant is now guarded rather than merely true.
 
-**GAP-4 — The audit record is not asserted for `mail.add_attachment`.**
+**GAP-4 — The audit record is not asserted for `mail.add_attachment`. FIXED, by derivation.**
 *Requirement ref:* AC-16 second clause; FR-13.
-*What's missing:* `TestMailManagementVerbsCarryDotIdentity`
-(`internal/server/mail_verbs_test.go:353`) enumerates its verbs by hand at `:378` and covers
-only the four CR-0078 verbs. The identity is single-source through `wrapWrite`
-(`internal/server/mail_verbs.go:107`) and `TestReadOnlyBlocksAddAttachment` proves the string
-reaches the chain, so the risk is low; but the CR's own criterion names the audit record, and
-the hand-written verb list is the same list-of-known-instances shape the project documents as
-failing to close a class.
-*Suggested minimal fix:* Add `"add_attachment"` to the `want` slice at
-`internal/server/mail_verbs_test.go:378` (`AuditWrap` emits regardless of the handler's
-outcome, so the existing `message_id`-only argument map is sufficient), or better, derive the
-slice from the registry so a future gated verb cannot be omitted.
+*What was missing:* `TestMailManagementVerbsCarryDotIdentity` enumerated its verbs by hand and
+covered only the four CR-0078 verbs. The identity is single-source through `wrapWrite`, so the
+risk was low; but the CR's own criterion names the audit record, and the hand-written verb
+list is the same list-of-known-instances shape the project documents as failing to close a
+class.
+*Resolution:* The hand-written list is replaced by a registry diff, taking the report's
+"or better" option rather than its minimal one, because the minimal one reproduces the defect
+for the next gated verb. The test now builds the mail verbs twice — once with
+`MailManageEnabled` off, once with it on — and grades every verb the gate adds. That set
+includes `add_attachment`, and a future gated verb enters it without an edit. One consequence
+was surfaced by the derivation and handled: `delete_draft` is manage-gated and legitimately
+records `operation_type` `delete`, so the per-record assertion now admits the mutating pair
+rather than only `"write"`, with a comment stating why. The identity assertion, which is the
+point of the test, is unchanged and now covers ten verbs instead of four.
 
-**GAP-5 — The verb's timeout and Graph-error paths are untested.**
+**GAP-5 — The verb's timeout and Graph-error paths are untested. FIXED.**
 *Requirement ref:* AC-17 first clause; NFR-5 per-chunk timeout clause.
-*What's missing:* No test exercises `graph.IsTimeoutError` on this verb, so
-`internal/tools/add_attachment.go:137-141` (session path) and `:181-186` (direct path) and
-the per-chunk `graph.WithTimeout` at `internal/tools/attachment_upload_session.go:201` are
-source-reading only. The CR's Test Strategy does not specify one either, so this is a
-coverage gap in the CR as much as in the diff.
-*Suggested minimal fix:* One test with a fixture that blocks past a 1 ms handler timeout,
-asserting the result carries the seconds figure from `graph.TimeoutErrorMessage`. A second
-subtest with a stalling chunk handler covers the NFR-5 per-chunk bound.
+*What was missing:* No test exercised `graph.IsTimeoutError` on this verb, so
+`internal/tools/add_attachment.go:137-141`, `:181-186`, and the per-chunk `graph.WithTimeout`
+at `internal/tools/attachment_upload_session.go:201` were source-reading only. The CR's Test
+Strategy specified no such test either, so this was a coverage gap in the CR as much as in the
+diff.
+*Resolution:* Two tests added to `internal/tools/add_attachment_test.go`.
+`TestAddAttachment_StalledTransferIsBounded` drives both paths against a fixture that holds a
+request open past a 50 ms bound: the direct-POST subtest asserts the result carries
+`graph.TimeoutErrorMessage` for that bound, and the chunk subtest asserts the transfer fails,
+states the attachment was not added, and leaks neither the upload URL nor its credential.
+`TestAddAttachment_GraphFailureCarriesFixOnBothChannels` answers the POST with a Graph error
+and asserts the redacted result names what to correct while the log record carries
+`attachmentFixInstruction`.
+*One thing the fix establishes rather than assumes*, recorded because it is not inferable
+from the source: a chunk-PUT timeout does **not** classify as a timeout at the handler.
+`transferAttachmentChunks` wraps the transport error with `fmt.Errorf(... %s ...)`, which
+formats the error to a string and drops the chain, so `errors.Is(err, context.DeadlineExceeded)`
+is false and the stalled chunk surfaces on the upload-failure branch, not the timeout branch.
+The chunk subtest therefore grades the property NFR-5 actually asserts — the transfer is
+bounded and reported, never left hanging — rather than the timeout wording. The direct path
+does classify correctly, and that subtest asserts the wording. This is behaviour worth
+knowing before anyone tries to make the chunk path emit the timeout message; doing so would
+require wrapping with `%w` and re-checking the redaction, which is out of this CR's scope.
+*A fixture detail worth keeping:* the stall handlers drain the request body before blocking.
+Without that, Go's HTTP server never notices the abandoning client and every stall is waited
+out in full, which cost 20 s of wall clock in the first passing version and 0.11 s in the
+committed one.
 
-**GAP-6 — Validation errors carry the fix instruction on one channel only.**
-*Requirement ref:* FR-15 ("Every error the verb raises **MUST** carry a fix instruction …
-and **MUST** reach both the tool result and the log record").
-*What's missing:* The eight validation refusals at `internal/tools/add_attachment.go:87-111`
-return a fix-bearing tool result but emit no log record at all, and the oversize log record
-at `:115` carries `"size"` and `"max"` but not the `OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES`
-name its tool result carries. This matches the established pattern across the mail write
-verbs (`internal/tools/move_message.go:65-77` is identical), so the honest reading is that
-FR-15's literal wording is stricter than the convention the codebase follows.
-*Suggested minimal fix:* Either add a `logger.WarnContext` with a `"fix"` attribute to the
-validation branches of `add_attachment.go` — which would make this verb inconsistent with its
-nine siblings — or amend FR-15 to scope the log-record clause to errors that already produce
-one. The second is the smaller and more truthful change; it is a CR amendment, not a code fix.
+**GAP-6 — Validation errors carry the fix instruction on one channel only. CLOSED by CR
+amendment; the row is graded PASS against the amended text.**
+*Requirement ref:* FR-15.
+*What was missing:* The eight validation refusals at `internal/tools/add_attachment.go:87-111`
+return a fix-bearing tool result but emit no log record, and the oversize log record at `:115`
+carries `"size"` and `"max"` but not the `OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES` name its tool
+result carries. This matches the established pattern across the mail write verbs
+(`internal/tools/move_message.go:65-77` is identical), so the honest reading is that FR-15's
+literal wording was stricter than the convention the codebase follows.
+*Resolution:* FR-15 amended, taking the report's second option. It now requires the fix
+instruction in every tool result, and on the log record wherever the verb emits one, and
+states the convention explicitly: a refusal decided from the request arguments alone need not
+emit a record, because the caller already holds the arguments and the operator's log is for
+failures the caller cannot reconstruct. Satisfying the literal wording would have made this
+verb the sole departure from nine siblings, which is a worse outcome than the wording it was
+written to prevent. The amendment is recorded as a bullet under `## CR-0079` in
+`docs/backlog/cr-0078-0083.md`. The redaction clause is unchanged, and is now graded on both
+channels by GAP-3's fix.
 
-**GAP-7 — `TestAddAttachment_NoOutputParameter` was not written.**
+**GAP-7 — `TestAddAttachment_NoOutputParameter` was not written. CLOSED as superseded.**
 *Requirement ref:* Test Strategy "Tests to Add"; AC-6 second clause.
-*What's missing:* The named bespoke test does not exist.
-*Suggested minimal fix:* None required. The CR's own "Existing Tests That Gate This Change
-Without Modification" table names `TestWriteVerbsDeclareNoOutputParameter` as the AC-6 gate,
-and that check is registry-derived across every domain, so it is strictly stronger than the
-bespoke test it displaces. Recorded for completeness; the criterion is graded.
+*What was missing:* The named bespoke test does not exist.
+*Resolution:* No code change, and none should be made. The CR's own "Existing Tests That Gate
+This Change Without Modification" table names `TestWriteVerbsDeclareNoOutputParameter` as the
+AC-6 gate, and that check is registry-derived across every domain, so it is strictly stronger
+than the bespoke test it displaces. Adding the bespoke test would grade one verb where the
+existing one grades all of them, and would need editing for every future write verb. The
+criterion is graded by the registry-derived check.

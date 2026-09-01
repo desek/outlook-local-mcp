@@ -384,10 +384,16 @@ flowchart TD
     (`OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES`, default `10485760`); this change
     **MUST NOT** introduce a second attachment size environment variable.
 15. Every error the verb raises **MUST** carry a fix instruction naming what to
-    supply or correct, and **MUST** reach both the tool result and the log record.
-    An error arising from a chunk `PUT` **MUST** be redacted so the pre-authenticated
-    upload URL, which carries an access token, never appears in the result or the
-    log.
+    supply or correct in its tool result. Where the verb emits a log record for a
+    failure, that record **MUST** carry the same fix instruction, so a headless
+    caller reading a persisted log receives the correction on the only channel it
+    has. Following the convention every sibling mail write verb already applies, a
+    refusal decided from the request arguments alone need not emit a log record:
+    the caller holds the arguments, the operator's log is reserved for failures
+    the caller cannot reconstruct, and a per-verb departure from that convention
+    would make this verb inconsistent with its nine siblings for no gain. An error
+    arising from a chunk `PUT` **MUST** be redacted so the pre-authenticated upload
+    URL, which carries an access token, never appears in the result or the log.
 16. The verb **MUST** carry a non-empty `Summary` of at most eighty characters, a
     non-empty `Description` stating its parameters, its gating requirement, and its
     annotation semantics, at least one `Examples` entry, and at least one `SeeDocs`

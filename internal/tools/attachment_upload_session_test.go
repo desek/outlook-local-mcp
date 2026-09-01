@@ -10,12 +10,16 @@
 package tools
 
 import (
+	"bytes"
 	"encoding/base64"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // uploadServer serves the createUploadSession response and the chunk PUTs that
@@ -49,6 +53,10 @@ type uploadServer struct {
 	// body quoting the upload URL, which is how a service error can carry the
 	// credential the redaction must remove.
 	failStatus int
+
+	// stallChunk holds every chunk PUT open for this long, so a test can drive
+	// the transfer past the per-chunk bound.
+	stallChunk time.Duration
 }
 
 // serveSession answers a createUploadSession request. A nil receiver means the
@@ -73,6 +81,10 @@ func (u *uploadServer) serveChunk(w http.ResponseWriter, req *http.Request) {
 	u.ranges = append(u.ranges, contentRange)
 	u.received += int(req.ContentLength)
 
+	// The body is drained before stalling so the server can notice the client
+	// abandoning the chunk, rather than waiting out its own stall.
+	_, _ = io.Copy(io.Discard, req.Body)
+	stall(req, u.stallChunk)
 	if u.failStatus != 0 {
 		http.Error(w, "the upload to "+u.url+" was rejected", u.failStatus)
 		return
@@ -222,9 +234,19 @@ func TestUploadSession_TransferFailureIsNotPartialSuccess(t *testing.T) {
 }
 
 // TestUploadSession_ErrorRedactsUploadURL verifies that neither the upload URL
-// nor the credential in its query string survives into the tool result, even
-// when the service quotes the URL back in its own error body.
+// nor the credential in its query string survives into the tool result or the
+// log record, even when the service quotes the URL back in its own error body.
+//
+// Both channels are asserted because the log record is safe only by an ordering
+// invariant: the transfer redacts before the handler logs. Moving the redaction,
+// or adding a second log call on the raw error, would write a live access token
+// into a persisted file and pass a result-only assertion.
 func TestUploadSession_ErrorRedactsUploadURL(t *testing.T) {
+	var logged bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	defer slog.SetDefault(restore)
+
 	up := &uploadServer{locationID: "att-large", failStatus: http.StatusForbidden}
 	rec := &attachmentRecorder{isDraft: true, subject: "Quarterly", upload: up}
 	ctx, handler := newAddAttachmentFixture(t, rec, 0)
@@ -242,5 +264,14 @@ func TestUploadSession_ErrorRedactsUploadURL(t *testing.T) {
 	}
 	if !strings.Contains(text, redactedUploadURLPlaceholder) {
 		t.Errorf("the error does not mark the redaction: %s", text)
+	}
+	if strings.Contains(logged.String(), up.url) {
+		t.Errorf("the upload URL reached the log record: %s", logged.String())
+	}
+	if strings.Contains(logged.String(), "upload-secret") {
+		t.Errorf("the upload credential reached the log record: %s", logged.String())
+	}
+	if !strings.Contains(logged.String(), attachmentFixInstruction) {
+		t.Errorf("expected the log record to carry the correction, got: %s", logged.String())
 	}
 }
