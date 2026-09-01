@@ -2,7 +2,7 @@
 id: "CR-0080"
 name: calendar-scheduling-reads
 description: Add two calendar read verbs, find_meeting_times and get_schedule, so the assistant can suggest slots and query cross-person availability.
-status: "draft"
+status: "completed"
 date: 2026-09-01
 requestor: desek
 stakeholders:
@@ -10,7 +10,8 @@ stakeholders:
 priority: "medium"
 target-version: "0.12.0"
 source-branch: docs/cr-implementation-set-0079-0083
-source-commit: caebec3
+source-commit: b9690f2
+completed-date: 2026-09-02
 ---
 
 # Calendar Scheduling Reads
@@ -1123,27 +1124,27 @@ Then Step 42 calls find_meeting_times and Step 43 calls get_schedule
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
-- [ ] Any linter exceptions are documented with justification
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
+- [x] Any linter exceptions are documented with justification
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass, including under the race detector
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass, including under the race detector
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] Every new file carries a package-consistent doc comment and a single index annotation
-- [ ] Every new verb's parameters and annotation semantics are documented in the registry, not in markdown
-- [ ] The troubleshooting entry carries a stable anchor
-- [ ] No governance identifier appears in source, test names, or user-facing documentation
+- [x] Every new file carries a package-consistent doc comment and a single index annotation
+- [x] Every new verb's parameters and annotation semantics are documented in the registry, not in markdown
+- [x] The troubleshooting entry carries a stable anchor
+- [x] No governance identifier appears in source, test names, or user-facing documentation
 
 ### Code Review
 
