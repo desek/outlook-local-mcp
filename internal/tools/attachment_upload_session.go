@@ -15,9 +15,9 @@
 // as a failure, because the service discards an unfinished session and an
 // identifier reported for it would not resolve.
 //
-// @agents-index: Chunked upload-session transfer for a large draft attachment,
-// creating the session through the SDK and PUTting the bytes to the upload URL
-// in fixed-size chunks with Content-Range.
+// @agents-index: Chunked upload-session transfer for a large draft or calendar
+// event attachment, creating the session through the SDK and PUTting the bytes
+// to the upload URL in fixed-size chunks with Content-Range.
 package tools
 
 import (
@@ -133,6 +133,57 @@ func createAttachmentUploadSession(
 	err := graph.RetryGraphCall(ctx, retryCfg, func() error {
 		var gErr error
 		session, gErr = client.Me().Messages().ByMessageId(messageID).
+			Attachments().CreateUploadSession().Post(timeoutCtx, body, nil)
+		return gErr
+	})
+	if err != nil {
+		return "", err
+	}
+	if session == nil || graph.SafeStr(session.GetUploadUrl()) == "" {
+		return "", errors.New("the upload session the service created carries no upload URL, so the attachment cannot be transferred")
+	}
+	return graph.SafeStr(session.GetUploadUrl()), nil
+}
+
+// createEventAttachmentUploadSession asks the service for an upload session for
+// a file attachment clipped to a calendar event, and returns the upload URL it
+// hands back.
+//
+// It is a sibling of createAttachmentUploadSession rather than a shared
+// parameterised call because only the request-builder navigation and the
+// request-body type differ, and those are two distinct generated types the SDK
+// gives no common interface for. The bytes both sessions carry are transferred
+// by the same transferAttachmentChunks, which is where the behaviour that could
+// drift actually lives.
+//
+// Errors: the Graph error is returned unwrapped, so a timeout stays
+// recognisable to the caller; a session that carries no upload URL is an error
+// rather than an empty transfer.
+func createEventAttachmentUploadSession(
+	ctx context.Context,
+	client *msgraphsdk.GraphServiceClient,
+	retryCfg graph.RetryConfig,
+	timeout time.Duration,
+	eventID, name, mimeType string,
+	size int64,
+) (string, error) {
+	item := models.NewAttachmentItem()
+	fileType := models.FILE_ATTACHMENTTYPE
+	item.SetAttachmentType(&fileType)
+	item.SetName(&name)
+	item.SetContentType(&mimeType)
+	item.SetSize(&size)
+
+	body := users.NewItemEventsItemAttachmentsCreateUploadSessionPostRequestBody()
+	body.SetAttachmentItem(item)
+
+	timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	var session models.UploadSessionable
+	err := graph.RetryGraphCall(ctx, retryCfg, func() error {
+		var gErr error
+		session, gErr = client.Me().Events().ByEventId(eventID).
 			Attachments().CreateUploadSession().Post(timeoutCtx, body, nil)
 		return gErr
 	})

@@ -1,8 +1,9 @@
 // Package tools tests.
 //
-// @agents-index: Tests for FormatAttachmentConfirmation, covering the rendered
-// line order, the empty-subject placeholder, and that the identifiers reported
-// are the ones passed in rather than any request-shaped substitute.
+// @agents-index: Tests for the draft and event attachment confirmation
+// formatters, covering the rendered line order, the empty-subject placeholder,
+// and that the identifiers reported are the ones passed in rather than any
+// request-shaped substitute.
 package tools
 
 import (
@@ -76,5 +77,70 @@ func TestAttachmentConfirmationLineOrder(t *testing.T) {
 		if lines[i] != w {
 			t.Errorf("line %d: got %q, want %q", i+1, lines[i], w)
 		}
+	}
+}
+
+// TestFormatEventAttachmentConfirmation_NamesSubjectNameSizeIDAndPath pins the
+// event confirmation's full contract on both transfer paths: the six lines, in
+// order, naming the event rather than a message, and the placeholder an event
+// with no subject renders as.
+//
+// The line order is asserted rather than only the substrings because a
+// reordering passes every containment check while changing what a caller reads
+// first, and the noun on lines two and three is what tells the caller which
+// resource kind the identifier addresses.
+func TestFormatEventAttachmentConfirmation_NamesSubjectNameSizeIDAndPath(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name     string
+		subject  string
+		transfer string
+		want     []string
+	}{
+		{
+			name:     "the direct path names the event and both identifiers",
+			subject:  "Quarterly review",
+			transfer: TransferDirect,
+			want: []string{
+				`Attachment added: "agenda.pdf"`,
+				`Event: "Quarterly review"`,
+				"Event ID: evt-1",
+				"Attachment ID: att-from-service",
+				"Size: 2048 bytes",
+				"Transfer: " + TransferDirect,
+			},
+		},
+		{
+			name:     "an event with no subject renders the placeholder on the session path",
+			subject:  "",
+			transfer: TransferUploadSession,
+			want: []string{
+				`Attachment added: "agenda.pdf"`,
+				`Event: "(No subject)"`,
+				"Event ID: evt-1",
+				"Attachment ID: att-from-service",
+				"Size: 2048 bytes",
+				"Transfer: " + TransferUploadSession,
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := FormatEventAttachmentConfirmation(
+				"agenda.pdf", tc.subject, "evt-1", "att-from-service", 2048, tc.transfer)
+			lines := strings.Split(got, "\n")
+			if len(lines) != len(tc.want) {
+				t.Fatalf("expected %d lines, got %d:\n%s", len(tc.want), len(lines), got)
+			}
+			for i, w := range tc.want {
+				if lines[i] != w {
+					t.Errorf("line %d: got %q, want %q", i+1, lines[i], w)
+				}
+			}
+			if strings.Contains(got, "Message") {
+				t.Errorf("the event confirmation names a message rather than an event:\n%s", got)
+			}
+		})
 	}
 }
