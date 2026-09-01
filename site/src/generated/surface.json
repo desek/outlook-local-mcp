@@ -201,9 +201,15 @@
           "summary": "mark a message read or unread; is_read is a required boolean",
           "readOnly": false,
           "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "add_attachment",
+          "summary": "attach a file to an existing draft; bytes supplied base64 in content_bytes",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
         }
       ],
-      "fullCount": 17,
+      "fullCount": 18,
       "defaultCount": 5
     },
     {
@@ -306,7 +312,7 @@
     }
   ],
   "totals": {
-    "fullCount": 46,
+    "fullCount": 47,
     "defaultCount": 33
   },
   "config": [
@@ -433,12 +439,12 @@
     {
       "name": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED",
       "default": "false",
-      "description": "Enable draft and received-message management and request the Mail.ReadWrite scope; implies MAIL_ENABLED."
+      "description": "Enable draft management, draft attachments, and received-message management, and request the Mail.ReadWrite scope; implies MAIL_ENABLED."
     },
     {
       "name": "OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES",
       "default": "10485760",
-      "description": "Maximum attachment size in bytes returned by get_attachment (default 10 MB)."
+      "description": "Maximum attachment size in bytes, both downloaded by get_attachment and uploaded by add_attachment (default 10 MB)."
     }
   ]
 }

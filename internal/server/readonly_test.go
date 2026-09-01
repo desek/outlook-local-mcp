@@ -198,3 +198,64 @@ func TestReadOnlyBlocksMailManagementVerbs(t *testing.T) {
 		}
 	}
 }
+
+// TestReadOnlyBlocksAddAttachment invokes the attachment verb through its own
+// registered middleware chain with read-only mode enabled and asserts the
+// refusal names the mail.add_attachment identity.
+//
+// The verb is asserted separately from the received-message writes because it
+// takes a different argument set: the shared loop supplies only a message_id,
+// which would reach argument validation rather than the guard if the guard were
+// missing, producing a passing error for the wrong reason.
+func TestReadOnlyBlocksAddAttachment(t *testing.T) {
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	audit.InitAuditLog(false, "")
+
+	identity := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+	verbs, _ := buildMailVerbs(mailVerbsConfig{
+		cfg:               maximalMailConfig(),
+		m:                 m,
+		tracer:            tracenoop.NewTracerProvider().Tracer("test"),
+		authMW:            identity,
+		accountResolverMW: identity,
+		readOnly:          true,
+	})
+
+	var verb *tools.Verb
+	for i := range verbs {
+		if verbs[i].Name == "add_attachment" {
+			verb = &verbs[i]
+			break
+		}
+	}
+	if verb == nil {
+		t.Fatal("verb \"add_attachment\" is not registered under the maximal configuration")
+	}
+
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"message_id":    "msg-1",
+		"name":          "note.txt",
+		"content_bytes": "aGVsbG8=",
+	}
+	result, err := verb.Handler(context.Background(), req)
+	if err != nil {
+		t.Fatalf("add_attachment handler returned a transport error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("verb \"add_attachment\" was not blocked in read-only mode")
+	}
+	tc, ok := result.Content[0].(mcp.TextContent)
+	if !ok {
+		t.Fatalf("add_attachment: expected TextContent, got %T", result.Content[0])
+	}
+	if !strings.Contains(tc.Text, "read-only") {
+		t.Errorf("add_attachment refusal %q does not name read-only mode", tc.Text)
+	}
+	if !strings.Contains(tc.Text, "mail.add_attachment") {
+		t.Errorf("add_attachment refusal %q does not carry the mail.<verb> identity", tc.Text)
+	}
+}

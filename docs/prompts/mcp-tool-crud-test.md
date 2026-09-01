@@ -580,7 +580,7 @@ Call `{tool: "mail", args: {operation: "list_messages", ...}}` four times with t
 
 ### Step 31 -- Create draft (skip if mail management disabled)
 
-If `config.features.mail_manage_enabled` from Step 0c is `false`, **skip** Steps 31 through 35 and Steps 37 through 40 (received-message management) and record them all as SKIP.
+If `config.features.mail_manage_enabled` from Step 0c is `false`, **skip** Steps 31 through 35 and Steps 37 through 41 (received-message management) and record them all as SKIP.
 
 Call `{tool: "mail", args: {operation: "create_draft", to_recipients: "<own UPN>", subject: "CRUD test draft", body: "Created by MCP CRUD lifecycle test.", importance: "normal"}}`.
 
@@ -678,6 +678,18 @@ Call `{tool: "mail", args: {operation: "list_folders"}}` and record the ID of th
 - **Cleanup:** Call `{tool: "mail", args: {operation: "delete_draft", message_id: "<moved message ID>"}}`.
 - **Fail:** If the confirmation omits the new identifier, if the original identifier still resolves, or if the folder-name destination is accepted.
 
+### Step 41 -- Attach a file to a draft
+
+Create the target rather than using an existing message: call `{tool: "mail", args: {operation: "create_draft", to_recipients: "<own UPN>", subject: "CRUD test attachment", body: "Created by MCP CRUD lifecycle test."}}` and record the ID as **attachment draft ID**.
+
+Call `{tool: "mail", args: {operation: "add_attachment", message_id: "<attachment draft ID>", name: "crud-test.txt", mime_type: "text/plain", content_bytes: "Q1JVRCB0ZXN0IGF0dGFjaG1lbnQu"}}` (the base64 of a short ASCII sentence).
+
+- **Verify:** Response is a plain text confirmation naming the attachment name, the draft subject, the message ID, a new attachment ID, the size in bytes, and which transfer path was used.
+- **Verify:** `{tool: "mail", args: {operation: "list_attachments", message_id: "<attachment draft ID>"}}` lists `crud-test.txt` with the reported attachment ID.
+- **Verify (non-draft refused):** Call `add_attachment` again with the `message_id` of any received message from Step 30. The call must fail with an error stating the message is not a draft, and must not attach anything.
+- **Cleanup:** Call `{tool: "mail", args: {operation: "delete_draft", message_id: "<attachment draft ID>"}}`.
+- **Fail:** If the confirmation omits the attachment ID or the size, if the attachment is absent from `list_attachments`, or if the non-draft target is accepted.
+
 ## Reporting
 
 After all steps, print a summary table. Every row **MUST** include a short `Comment` (under ~120 characters) explaining the result — for PASS rows, a brief confirmation of what was verified; for FAIL rows, the failure cause (tool name, error, mismatch); for SKIP rows, the reason (e.g., "single-account mode"). Do not leave the `Comment` column blank.
@@ -753,6 +765,7 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 38   | Set flag (+ invalid refused)      | PASS/FAIL/SKIP | e.g., "flagged written; 'urgent' refused naming 3 values" |
 | 39   | Set categories (+ clear)          | PASS/FAIL/SKIP | e.g., "set from response; empty value cleared all"       |
 | 40   | Move message (new ID follows)     | PASS/FAIL/SKIP | e.g., "new id returned; original 404s; name destination refused" |
+| 41   | Add attachment to a draft         | PASS/FAIL/SKIP | e.g., "attachment id and size confirmed; non-draft refused" |
 ```
 
 Then print the **environment** section using all values recorded in Steps 0c and 1:

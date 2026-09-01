@@ -59,6 +59,7 @@ var verbInventoryGolden = []string{
 	"calendar.search_events ro=true de=false id=true ow=true",
 	"calendar.update_event ro=false de=false id=true ow=true",
 	"calendar.update_meeting ro=false de=false id=true ow=true",
+	"mail.add_attachment ro=false de=false id=false ow=true",
 	"mail.create_draft ro=false de=false id=false ow=true",
 	"mail.create_forward_draft ro=false de=false id=false ow=true",
 	"mail.create_reply_draft ro=false de=false id=false ow=true",

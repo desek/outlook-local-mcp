@@ -56,21 +56,7 @@ func TestCatalog_AllSlugsResolve(t *testing.T) {
 func TestMailGatingRowNamesMessageManagement(t *testing.T) {
 	t.Parallel()
 
-	data, err := docs.ReadSlug("concepts")
-	if err != nil {
-		t.Fatalf("ReadSlug(\"concepts\") error: %v", err)
-	}
-
-	var row string
-	for _, line := range strings.Split(string(data), "\n") {
-		if strings.Contains(line, "`MAIL_MANAGE_ENABLED`") {
-			row = line
-			break
-		}
-	}
-	if row == "" {
-		t.Fatal("no MAIL_MANAGE_ENABLED row found in the embedded concepts document")
-	}
+	row := mailGatingRow(t)
 
 	if !strings.Contains(row, "draft management") {
 		t.Errorf("MAIL_MANAGE_ENABLED row no longer names draft management: %q", row)
@@ -83,4 +69,46 @@ func TestMailGatingRowNamesMessageManagement(t *testing.T) {
 			t.Errorf("MAIL_MANAGE_ENABLED row does not name the gated verb %s: %q", verb, row)
 		}
 	}
+}
+
+// TestMailGatingRowNamesDraftAttachments asserts that the embedded gating row
+// also names the attachment capability the gate unlocks.
+//
+// A row naming draft management and received-message management reads as a
+// complete account of the gate, so an LLM serving itself from the embedded
+// bundle would conclude a draft cannot carry a file and refuse the request
+// rather than issuing the verb that exists.
+func TestMailGatingRowNamesDraftAttachments(t *testing.T) {
+	t.Parallel()
+
+	row := mailGatingRow(t)
+
+	if !strings.Contains(row, "add_attachment") {
+		t.Errorf("MAIL_MANAGE_ENABLED row does not name the gated verb add_attachment: %q", row)
+	}
+	if !strings.Contains(row, "draft attachments") {
+		t.Errorf("MAIL_MANAGE_ENABLED row does not name draft attachments as a capability of the gate: %q", row)
+	}
+}
+
+// mailGatingRow returns the MAIL_MANAGE_ENABLED row of the embedded concepts
+// document, failing the test when the row is absent.
+//
+// It reads the embedded bundle rather than the file on disk, because the bundle
+// is what a running server serves to an LLM mid-session.
+func mailGatingRow(t *testing.T) string {
+	t.Helper()
+
+	data, err := docs.ReadSlug("concepts")
+	if err != nil {
+		t.Fatalf("ReadSlug(\"concepts\") error: %v", err)
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.Contains(line, "`MAIL_MANAGE_ENABLED`") {
+			return line
+		}
+	}
+	t.Fatal("no MAIL_MANAGE_ENABLED row found in the embedded concepts document")
+	return ""
 }

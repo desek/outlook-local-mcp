@@ -796,6 +796,13 @@ func TestRegisterTools_MailEnabled(t *testing.T) {
 			t.Errorf("verb %q is published with MailEnabled alone; it is gated on MailManageEnabled", name)
 		}
 	}
+
+	// add_attachment writes mailbox state, so the read flag must not publish
+	// it. The default surface guarantee is a negative claim, and only a
+	// negative assertion can grade it.
+	if ops["add_attachment"] {
+		t.Error("verb \"add_attachment\" is published with MailEnabled alone; it is gated on MailManageEnabled")
+	}
 }
 
 // TestRegisterTools_MailAggregate_HelpVerb verifies that the mail aggregate
@@ -918,5 +925,83 @@ func TestRegisterTools_MailManage_RegistersManagementVerbs(t *testing.T) {
 	const expectedTotal = 4
 	if got := len(s.ListTools()); got != expectedTotal {
 		t.Errorf("expected %d aggregate tools, got %d; new verbs must not add a top-level tool", expectedTotal, got)
+	}
+}
+
+// TestRegisterTools_MailManage_RegistersAddAttachment verifies that the
+// attachment verb reaches the published operation enum under the manage gate,
+// and that it arrives as a verb rather than as a fifth top-level tool.
+func TestRegisterTools_MailManage_RegistersAddAttachment(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+
+	audit.InitAuditLog(false, "")
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), maximalMailConfig(), nil)
+
+	if ops := registeredOperations(t, s, "mail"); !ops["add_attachment"] {
+		t.Error("verb \"add_attachment\" is absent from the mail operation enum with MailManageEnabled=true")
+	}
+
+	const expectedTotal = 4
+	if got := len(s.ListTools()); got != expectedTotal {
+		t.Errorf("expected %d aggregate tools, got %d; new verbs must not add a top-level tool", expectedTotal, got)
+	}
+}
+
+// TestMailIntroNamesEveryGatedWriteVerb asserts that the mail domain
+// introduction accounts for every verb the manage gate registers.
+//
+// The introduction enumerates those verbs by name, so it reads as exhaustive to
+// a model deciding whether a capability exists. The cases are derived by
+// diffing the registry built with the gate off against the registry built with
+// it on, rather than listed here: a future gated verb added without an
+// introduction edit then fails the build instead of shipping an introduction
+// that describes a smaller server than the one registered.
+func TestMailIntroNamesEveryGatedWriteVerb(t *testing.T) {
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+
+	audit.InitAuditLog(false, "")
+
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), maximalMailConfig(), nil)
+
+	tool, ok := s.ListTools()["mail"]
+	if !ok {
+		t.Fatal("aggregate \"mail\" tool is not registered")
+	}
+	intro := tool.Tool.Description
+
+	readOnlyCfg := testConfig()
+	readOnlyCfg.MailEnabled = true
+	ungated, _ := buildMailVerbs(mailVerbsConfig{cfg: readOnlyCfg, m: m, tracer: tracer, authMW: identityMW, accountResolverMW: identityMW})
+	gated, _ := buildMailVerbs(mailVerbsConfig{cfg: maximalMailConfig(), m: m, tracer: tracer, authMW: identityMW, accountResolverMW: identityMW})
+
+	present := make(map[string]bool, len(ungated))
+	for _, v := range ungated {
+		present[v.Name] = true
+	}
+	for _, v := range gated {
+		if present[v.Name] {
+			continue
+		}
+		if !strings.Contains(intro, v.Name) {
+			t.Errorf("the mail introduction does not name the MailManageEnabled-gated verb %q, so it describes a smaller server than the one registered", v.Name)
+		}
 	}
 }

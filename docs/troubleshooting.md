@@ -203,9 +203,9 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 
 ## Mail management disabled
 
-**Symptom:** Draft operations (`create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, `delete_draft`) or received-message writes (`move_message`, `set_flag`, `set_categories`, `mark_read`) return `mail management is not enabled` or `unknown operation`.
+**Symptom:** Draft operations (`create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, `delete_draft`, `add_attachment`) or received-message writes (`move_message`, `set_flag`, `set_categories`, `mark_read`) return `mail management is not enabled` or `unknown operation`.
 
-**Cause:** `OUTLOOK_MCP_MAIL_MANAGE_ENABLED` is not set. Mail management is a separate opt-in that implies `MAIL_ENABLED`, and it gates both draft management and received-message management.
+**Cause:** `OUTLOOK_MCP_MAIL_MANAGE_ENABLED` is not set. Mail management is a separate opt-in that implies `MAIL_ENABLED`, and it gates draft management, draft attachments, and received-message management.
 
 **Remediation:**
 
@@ -214,6 +214,41 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 3. On first enable, a new OAuth consent for `Mail.ReadWrite` is required (supersedes `Mail.Read`). The authentication flow triggers automatically on the next tool call.
 
 **Note:** The server never requests `Mail.Send`. Drafts are created in the Outlook Drafts folder; the user sends them manually from Outlook.
+
+---
+
+## Attachment target is not a draft {#attachment-target-not-a-draft}
+
+**Symptom:** `{tool: "mail", args: {operation: "add_attachment", ...}}` fails with `message is not a draft: this tool only operates on messages with isDraft=true`, and nothing is attached.
+
+**Cause:** `message_id` names a message that has already been sent or received. A file can only be attached to a message still in composition; the service does not allow the content of a delivered message to change, so the refusal is issued before any upload is started rather than surfaced as a Graph rejection mid-transfer.
+
+The usual source of the wrong identifier is a `list_messages` or `search_messages` result taken from the Inbox rather than from Drafts, or a stale identifier from before a `move_message`, which mints a new identifier for the moved copy.
+
+**Remediation:**
+
+1. Create the target with `{tool: "mail", args: {operation: "create_draft", ...}}`, or with `create_reply_draft` or `create_forward_draft` when replying or forwarding, and use the identifier the confirmation reports.
+2. To attach to an existing draft, locate it with `{tool: "mail", args: {operation: "list_messages", folder_id: "Drafts"}}` and use that identifier.
+3. Confirm the target before retrying: `{tool: "mail", args: {operation: "get_message", message_id: "<id>"}}` reports whether the message is a draft.
+
+**Note:** To put a file on a message that is already sent, forward it with `create_forward_draft` and attach to the forward draft.
+
+---
+
+## Attachment upload did not complete {#attachment-upload-did-not-complete}
+
+**Symptom:** `add_attachment` fails on a large file with a transfer error, or with a request timeout, and the attachment does not appear on the draft. Small files attach normally.
+
+**Cause:** Above roughly 3 MB the file is transferred as a chunked upload session rather than a single request, so it is exposed to a longer window in which the connection can drop, the request timeout can elapse, or the service-side session can expire. A session that does not complete is reported as a failure, never as a partial success: no half-written attachment is left behind, and the draft is unchanged.
+
+The upload URL the service issues carries a pre-authenticated token, so it is redacted from every error. An error that names `[upload URL redacted]` is this failure mode, not a configuration problem.
+
+**Remediation:**
+
+1. Retry the call. A dropped or expired session is not resumable, but a retry starts a fresh session and the earlier failure leaves nothing to clean up.
+2. Confirm the draft is unchanged with `{tool: "mail", args: {operation: "list_attachments", message_id: "<draft id>"}}` before retrying, so a successful upload reported as a timeout is not duplicated.
+3. On a timeout, raise `OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS` and restart the server; a large file on a slow link can need more than the default.
+4. Prefer a smaller file where the content allows it. The upper bound is `OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES`, and a file above it is refused before any transfer starts, with an error naming the measured size and the bound.
 
 ---
 

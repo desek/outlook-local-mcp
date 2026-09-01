@@ -176,7 +176,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 			"(get_conversation, list_attachments, get_attachment) are registered when " +
 			"MailEnabled is configured, and write verbs (create_draft, create_reply_draft, " +
 			"create_forward_draft, update_draft, delete_draft, move_message, set_flag, " +
-			"set_categories, mark_read) are registered when " +
+			"set_categories, mark_read, add_attachment) are registered when " +
 			"MailManageEnabled is configured. The verbs listed below are those active in " +
 			"the current configuration.",
 		Verbs:           mailVerbs,

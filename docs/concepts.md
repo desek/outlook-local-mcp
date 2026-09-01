@@ -62,7 +62,7 @@ Mail access is disabled by default and enabled in two tiers via environment vari
 |---|---|---|
 | `MAIL_ENABLED` | `false` (default) | Mail verbs unavailable; no mail OAuth scope requested |
 | `MAIL_ENABLED` | `true` | Enables read-only mail verbs (`mail.list_folders`, `mail.list_messages`, `mail.search_messages`, `mail.get_message`, `mail.get_attachment`); requests `Mail.Read` scope |
-| `MAIL_MANAGE_ENABLED` | `true` | Enables all mail verbs, including both draft management (`create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, `delete_draft`) and received-message management (`move_message`, `set_flag`, `set_categories`, `mark_read`) (implies `MAIL_ENABLED`); requests `Mail.ReadWrite` scope |
+| `MAIL_MANAGE_ENABLED` | `true` | Enables all mail verbs, including draft management (`create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, `delete_draft`), draft attachments (`add_attachment`), and received-message management (`move_message`, `set_flag`, `set_categories`, `mark_read`) (implies `MAIL_ENABLED`); requests `Mail.ReadWrite` scope |
 
 `Mail.Send` is **never** requested under any configuration. The model prepares drafts that land in Outlook Drafts for manual review; email is never sent automatically. Enabling mail read for the first time triggers an incremental consent prompt; upgrading to mail manage triggers re-consent.
 
