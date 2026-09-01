@@ -92,10 +92,22 @@
           "summary": "get free/busy availability for a time range; returns busy periods with times",
           "readOnly": true,
           "gate": null
+        },
+        {
+          "name": "find_meeting_times",
+          "summary": "propose meeting slots that suit a set of attendees, ranked by confidence",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "get_schedule",
+          "summary": "read free/busy blocks and working hours for one or more mailboxes",
+          "readOnly": true,
+          "gate": null
         }
       ],
-      "fullCount": 15,
-      "defaultCount": 15
+      "fullCount": 17,
+      "defaultCount": 17
     },
     {
       "name": "mail",
@@ -312,8 +324,8 @@
     }
   ],
   "totals": {
-    "fullCount": 47,
-    "defaultCount": 33
+    "fullCount": 49,
+    "defaultCount": 35
   },
   "config": [
     {

@@ -269,6 +269,24 @@ The other cause of the same Graph error is a stale `message_id`. A move mints a 
 
 ---
 
+## A mailbox reports an error inside a schedule reply {#schedule-mailbox-error}
+
+**Symptom:** `{tool: "calendar", args: {operation: "get_schedule", ...}}` succeeds, but one of the named mailboxes carries an `Error:` line instead of its busy periods, typically `ErrorAccessDenied` or `MailboxNotEnabledForRESTAPI`. The other mailboxes in the same call return their blocks normally.
+
+**Cause:** Microsoft Graph grades each mailbox in a schedule query separately and reports a per-mailbox failure inside an otherwise successful reply. The whole call is not failed, so the reply is a mixture: mailboxes the signed-in user may view, and mailboxes it may not. The usual causes are a mailbox that has not shared free/busy with the signed-in user, a room or shared mailbox the account has no permission on, an address that is a distribution list rather than a mailbox, and an address misspelled into one that does not exist.
+
+This is why a mailbox with an error is stated rather than omitted: an omitted mailbox is indistinguishable from a mailbox with nothing in the diary, and "nobody is busy" is the wrong conclusion to draw from "you may not look".
+
+**Remediation:**
+
+1. Read the error text and the response code on the mailbox's own section. They come from Graph unchanged and name which of the causes above applies.
+2. Confirm the address is a mailbox and is spelled correctly. A distribution list address is accepted by the request and refused per-mailbox.
+3. If the call names an `account`, confirm that account has permission on the mailbox. Free/busy visibility is granted per mailbox, so an address readable under one account is not necessarily readable under another.
+4. For a mailbox the signed-in user genuinely cannot view, ask its owner or the tenant administrator to grant free/busy visibility; no parameter on this call can substitute for that permission.
+5. Verify by re-running the same call: a mailbox whose permission has been granted returns blocks and working hours in place of the error line, while the other mailboxes' output is unchanged.
+
+---
+
 ## Read-only mode
 
 **Symptom:** Write tool calls (create, update, delete, cancel, draft operations) return `server is in read-only mode`.

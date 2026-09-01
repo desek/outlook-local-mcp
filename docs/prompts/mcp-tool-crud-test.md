@@ -690,6 +690,28 @@ Call `{tool: "mail", args: {operation: "add_attachment", message_id: "<attachmen
 - **Cleanup:** Call `{tool: "mail", args: {operation: "delete_draft", message_id: "<attachment draft ID>"}}`.
 - **Fail:** If the confirmation omits the attachment ID or the size, if the attachment is absent from `list_attachments`, or if the non-draft target is accepted.
 
+### Step 42 -- Propose meeting slots for a set of attendees
+
+Call `{tool: "calendar", args: {operation: "find_meeting_times", attendees: "[{\"email\":\"<self UPN>\",\"type\":\"required\"}]", meeting_duration: "PT30M", start_datetime: "<test date>T09:00:00", end_datetime: "<test date>T18:00:00", timezone: "Europe/Amsterdam", max_candidates: 5}}`.
+
+- **Verify:** The response is plain text, is a numbered list of at most five candidate slots, and ends with a total count.
+- **Verify:** Each candidate names a start and an end inside the requested window and carries a confidence value.
+- **Verify:** If no slot is offered, the response states the reason Graph gave rather than returning an empty list with no explanation.
+- **Verify (both-or-neither window):** Call again with `start_datetime` supplied and `end_datetime` omitted. The call must fail with an error stating that the two bounds are supplied together or not at all, and must not reach Graph.
+- **Verify (bounds):** Call again with `max_candidates: 0`. The call must fail with an error naming the accepted range.
+- **Fail:** If the default response is not plain text, if a candidate lacks its times or confidence, if the one-sided window is accepted, or if the out-of-range candidate count is accepted.
+
+### Step 43 -- Read free/busy blocks and working hours per mailbox
+
+Call `{tool: "calendar", args: {operation: "get_schedule", schedules: "<self UPN>", date: "<test date>", timezone: "Europe/Amsterdam"}}`.
+
+- **Verify:** The response is plain text with one labeled section for the queried mailbox and a total mailbox count at the end.
+- **Verify:** The section states either the mailbox's busy periods with their times and status, or that it has no busy periods. Both are valid results here: every event this run created on the test date was deleted or cancelled by Step 25, so an empty diary is the expected state and must read as a stated finding rather than a missing section.
+- **Verify:** Where Graph supplies them, the section states the mailbox's working hours, which `get_free_busy` does not report. Record their absence as an observation rather than a failure; Graph omits them for some mailbox types.
+- **Verify (per-mailbox error):** Call again with `schedules: "<self UPN>,definitely-not-a-mailbox@<own domain>"`. The call must succeed, the real mailbox must still return its section, and the unknown address must carry an `Error:` line naming what Graph reported rather than being omitted from the output.
+- **Verify (summary tier):** Call again with `output: "summary"`. The response is structured, attributes every block to its mailbox, and preserves the order the mailboxes were named in.
+- **Fail:** If a per-mailbox failure fails the whole call or silently drops that mailbox, if blocks are not attributable to a mailbox, or if the mailbox order is not the requested order.
+
 ## Reporting
 
 After all steps, print a summary table. Every row **MUST** include a short `Comment` (under ~120 characters) explaining the result — for PASS rows, a brief confirmation of what was verified; for FAIL rows, the failure cause (tool name, error, mismatch); for SKIP rows, the reason (e.g., "single-account mode"). Do not leave the `Comment` column blank.
