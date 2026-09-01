@@ -28,6 +28,7 @@ For full setup instructions including Claude Desktop and Claude Code configurati
 - **Persistent token cache** -- OS-native secure storage (macOS Keychain, Linux libsecret, Windows DPAPI) with AES-256-GCM file fallback
 - **Mail read access** (opt-in, `MAIL_ENABLED=true`) -- list folders, list and search messages, read conversations and attachments using KQL full-text search
 - **Mail draft management** (opt-in, `MAIL_MANAGE_ENABLED=true`) -- compose new drafts, reply drafts, and forward drafts that land in Outlook Drafts for manual review and send; email is never sent automatically
+- **Draft attachments** (same opt-in, `MAIL_MANAGE_ENABLED=true`) -- attach a file to a draft with `add_attachment`, supplying the bytes as base64. The transfer path is chosen for you: a single request for a small file, a chunked upload session above roughly 3 MB. The confirmation names the attachment identifier the service assigns. Only drafts accept an attachment, and the upper size bound is `MAX_ATTACHMENT_SIZE_BYTES`
 - **Received-message management** (same opt-in, `MAIL_MANAGE_ENABLED=true`) -- act on a message already in the mailbox: move it to another folder, set or clear its follow-up flag, replace its categories, and mark it read or unread. A move returns the message's new identifier, because moving mints a new one and the original stops resolving
 - **Read-only mode** -- disable all writes via `READ_ONLY=true`
 - **In-server documentation access** -- the LLM can look up docs and troubleshoot without leaving the session (see below)
@@ -81,7 +82,8 @@ All settings use environment variables prefixed with `OUTLOOK_MCP_`. Key variabl
 | `TOKEN_STORAGE` | `auto` | `auto`, `keychain`, or `file` |
 | `READ_ONLY` | `false` | Disable write operations |
 | `MAIL_ENABLED` | `false` | Enable read-only mail access |
-| `MAIL_MANAGE_ENABLED` | `false` | Enable mail draft and received-message management (implies `MAIL_ENABLED`) |
+| `MAIL_MANAGE_ENABLED` | `false` | Enable draft management, draft attachments, and received-message management (implies `MAIL_ENABLED`) |
+| `MAX_ATTACHMENT_SIZE_BYTES` | `10485760` | Attachment size ceiling, both downloaded by `get_attachment` and uploaded by `add_attachment` |
 | `LOG_LEVEL` | `warn` | `debug`, `info`, `warn`, `error` |
 | `LOG_FILE` | *(disabled)* | File path for persistent log output |
 

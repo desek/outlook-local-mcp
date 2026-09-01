@@ -146,7 +146,7 @@ func GenerateLLMsTxt() string {
 
 	b.WriteString("## When to use this\n\n")
 	b.WriteString("Reach for this server when a user asks an assistant to read or act on their own Microsoft Outlook calendar or mail on the machine the assistant runs on. ")
-	b.WriteString("It is the right tool for jobs like: check what a week looks like, find a free slot and book or reschedule a meeting, list or search calendar events, read a mail folder, search messages by content, draft a reply, or triage a message that has already arrived by filing it in another folder, flagging it for follow-up, categorising it, or marking it read, all against a real Microsoft account. ")
+	b.WriteString("It is the right tool for jobs like: check what a week looks like, find a free slot and book or reschedule a meeting, list or search calendar events, read a mail folder, search messages by content, draft a reply, attach a file to a draft, or triage a message that has already arrived by filing it in another folder, flagging it for follow-up, categorising it, or marking it read, all against a real Microsoft account. ")
 	b.WriteString("It supports several accounts at once, so it also fits \"do this on my work account, not my personal one\".\n\n")
 	b.WriteString("Do not reach for it when there is no local Microsoft account to connect, when the task is a bulk server-side mailbox migration or admin operation, or when the user wants a hosted multi-tenant web API. ")
 	b.WriteString("This is a local, single-binary MCP server that runs on the user's own machine and speaks to Microsoft Graph directly; it has no hosted endpoint and no API keys.\n\n")
