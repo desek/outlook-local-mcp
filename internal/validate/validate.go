@@ -1,6 +1,7 @@
 package validate
 
 import (
+	"encoding/base64"
 	"fmt"
 	"net/mail"
 	"strings"
@@ -30,6 +31,13 @@ const (
 	// MaxResourceIDLen is the maximum allowed length for resource identifiers
 	// (event IDs, calendar IDs).
 	MaxResourceIDLen = 512
+
+	// MaxAttachmentNameLen is the maximum allowed length for an attachment file
+	// name. It is deliberately the same order as the subject bound: the name is
+	// a display string the service echoes back, not a payload, so an
+	// unbounded one buys nothing and costs a rejected request after the bytes
+	// have already been transferred.
+	MaxAttachmentNameLen = 255
 )
 
 // datetimeFormats lists the accepted ISO 8601 datetime formats, tried in order
@@ -222,6 +230,32 @@ func ValidateContentType(value string) error {
 	default:
 		return fmt.Errorf("invalid content_type: %q (accepted: text, html)", value)
 	}
+}
+
+// ValidateBase64 decodes value as standard base64 and returns the decoded
+// bytes. It exists so a caller supplying binary content as a tool argument is
+// refused before any network transfer is attempted rather than after: a
+// malformed encoding is a client-side mistake, and discovering it from a
+// service rejection costs a round trip and yields an error that names the
+// service rather than the parameter.
+//
+// Parameters:
+//   - value: the base64-encoded string to decode.
+//   - paramName: the parameter name for error messages.
+//
+// Returns the decoded bytes, or an error naming the parameter and the
+// correction when value is empty or is not valid standard base64.
+//
+// Side effects: none.
+func ValidateBase64(value, paramName string) ([]byte, error) {
+	if value == "" {
+		return nil, fmt.Errorf("%s must not be empty: supply the file content as a standard base64-encoded string", paramName)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(value)
+	if err != nil {
+		return nil, fmt.Errorf("invalid %s: expected standard base64 encoding, and decoding failed (%v); re-encode the file content with standard base64 including padding", paramName, err)
+	}
+	return decoded, nil
 }
 
 // ValidateFlagStatus validates that value is one of the accepted follow-up flag

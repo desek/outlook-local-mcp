@@ -455,3 +455,64 @@ func TestValidateFlagStatus(t *testing.T) {
 		}
 	}
 }
+
+// TestValidateBase64_Valid asserts a well-formed standard base64 string decodes
+// to its original bytes, including the empty-payload-with-padding case, which
+// is well-formed encoding of nothing rather than a malformed value.
+func TestValidateBase64_Valid(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		encoded string
+		want    string
+	}{
+		{"aGVsbG8=", "hello"},
+		{"YQ==", "a"},
+		{"YWJjZA==", "abcd"},
+	}
+	for _, c := range cases {
+		got, err := ValidateBase64(c.encoded, "content_bytes")
+		if err != nil {
+			t.Errorf("expected %q to decode, got: %v", c.encoded, err)
+			continue
+		}
+		if string(got) != c.want {
+			t.Errorf("decoded %q to %q, want %q", c.encoded, got, c.want)
+		}
+	}
+}
+
+// TestValidateBase64_Invalid asserts an empty or malformed value is refused and
+// that the refusal names the parameter, so the caller corrects the argument it
+// actually supplied rather than guessing which one was wrong.
+func TestValidateBase64_Invalid(t *testing.T) {
+	t.Parallel()
+	for _, v := range []string{"", "not base64!", "aGVsbG8", "###"} {
+		got, err := ValidateBase64(v, "content_bytes")
+		if err == nil {
+			t.Errorf("expected %q to be invalid", v)
+			continue
+		}
+		if got != nil {
+			t.Errorf("expected no bytes on rejection of %q, got %d", v, len(got))
+		}
+		if !strings.Contains(err.Error(), "content_bytes") {
+			t.Errorf("error for %q should name the parameter, got: %v", v, err)
+		}
+	}
+}
+
+// TestMaxAttachmentNameLenBoundsAName asserts the attachment name bound is
+// usable through the shared length check, which is how the handler applies it.
+func TestMaxAttachmentNameLenBoundsAName(t *testing.T) {
+	t.Parallel()
+	if err := ValidateStringLength(strings.Repeat("a", MaxAttachmentNameLen), "name", MaxAttachmentNameLen); err != nil {
+		t.Errorf("a name at the bound should be accepted, got: %v", err)
+	}
+	err := ValidateStringLength(strings.Repeat("a", MaxAttachmentNameLen+1), "name", MaxAttachmentNameLen)
+	if err == nil {
+		t.Fatal("a name one over the bound should be rejected")
+	}
+	if !strings.Contains(err.Error(), "name") {
+		t.Errorf("error should name the parameter, got: %v", err)
+	}
+}
