@@ -241,6 +241,71 @@ func FormatFreeBusyText(data FreeBusyResponse) string {
 	return b.String()
 }
 
+// FormatMeetingTimeSuggestionsText formats a FindMeetingTimesResponse into a
+// numbered plain-text listing of candidate meeting slots.
+//
+// Parameters:
+//   - data: the response envelope carrying summary-serialized suggestions and,
+//     when Graph offered none, its own reason for the empty result.
+//
+// Returns a formatted plain-text string with a numbered list of suggestions and
+// a total count. When there are no suggestions, returns Graph's stated reason
+// so the caller learns why no slot was offered rather than only that none was.
+//
+// Side effects: none.
+func FormatMeetingTimeSuggestionsText(data FindMeetingTimesResponse) string {
+	if len(data.Suggestions) == 0 {
+		if data.EmptySuggestionsReason != "" {
+			return fmt.Sprintf("No meeting times suggested. Reason: %s", data.EmptySuggestionsReason)
+		}
+		return "No meeting times suggested."
+	}
+
+	var b strings.Builder
+	for i, s := range data.Suggestions {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, meetingSlotDisplay(s))
+
+		var details []string
+		if confidence, ok := s["confidence"].(float64); ok {
+			details = append(details, fmt.Sprintf("Confidence %.0f%%", confidence))
+		}
+		if organizer, ok := s["organizerAvailability"].(string); ok && organizer != "" {
+			details = append(details, fmt.Sprintf("Organizer %s", organizer))
+		}
+		if len(details) > 0 {
+			fmt.Fprintf(&b, "   %s\n", strings.Join(details, " | "))
+		}
+		if reason, ok := s["suggestionReason"].(string); ok && reason != "" {
+			fmt.Fprintf(&b, "   %s\n", reason)
+		}
+
+		if i < len(data.Suggestions)-1 {
+			b.WriteString("\n")
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d suggestion(s) total.", len(data.Suggestions))
+
+	return b.String()
+}
+
+// meetingSlotDisplay renders the time slot of a summary-serialized meeting-time
+// suggestion, preferring the localised displayTime and falling back to the raw
+// ISO bounds when Graph supplied no usable timezone.
+func meetingSlotDisplay(suggestion map[string]any) string {
+	slot, ok := suggestion["meetingTimeSlot"].(map[string]string)
+	if !ok {
+		return "(No time slot)"
+	}
+	if slot["displayTime"] != "" {
+		return slot["displayTime"]
+	}
+	if slot["start"] == "" && slot["end"] == "" {
+		return "(No time slot)"
+	}
+	return fmt.Sprintf("%s - %s", slot["start"], slot["end"])
+}
+
 // FormatMessagesText formats a slice of serialized summary message maps into a
 // numbered plain-text listing. Each message shows subject, sender address, date,
 // read/attachment status flags, and body preview.
