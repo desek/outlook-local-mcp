@@ -306,6 +306,119 @@ func meetingSlotDisplay(suggestion map[string]any) string {
 	return fmt.Sprintf("%s - %s", slot["start"], slot["end"])
 }
 
+// FormatScheduleText formats a GetScheduleResponse into a labeled per-mailbox
+// plain-text listing of free/busy blocks, working hours, and, where Graph
+// reported one, that mailbox's error.
+//
+// Parameters:
+//   - data: the response envelope carrying the resolved window and one
+//     summary-serialized record per mailbox, in the order they were requested.
+//
+// Returns a formatted plain-text string with one labeled section per mailbox and
+// a total count. A mailbox Graph could not read states its error rather than
+// being omitted, so a caller can tell a mailbox with no meetings from one it may
+// not view.
+//
+// Side effects: none.
+func FormatScheduleText(data GetScheduleResponse) string {
+	if len(data.Schedules) == 0 {
+		return "No schedules returned."
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Schedules (%s to %s):\n\n", data.TimeRange.Start, data.TimeRange.End)
+
+	for i, record := range data.Schedules {
+		fmt.Fprintf(&b, "%s\n", scheduleMailboxLabel(record))
+
+		if failure := scheduleErrorLine(record); failure != "" {
+			fmt.Fprintf(&b, "  Error: %s\n", failure)
+		}
+		if hours := scheduleWorkingHoursLine(record); hours != "" {
+			fmt.Fprintf(&b, "  Working hours: %s\n", hours)
+		}
+		writeScheduleItems(&b, record)
+
+		if i < len(data.Schedules)-1 {
+			b.WriteString("\n")
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d mailbox(es) total.", len(data.Schedules))
+
+	return b.String()
+}
+
+// writeScheduleItems renders one mailbox's busy blocks, or states that it has
+// none, so an empty schedule reads as a finding rather than a missing section.
+func writeScheduleItems(b *strings.Builder, record map[string]any) {
+	items, _ := record["scheduleItems"].([]map[string]any)
+	if len(items) == 0 {
+		b.WriteString("  No busy periods.\n")
+		return
+	}
+	for _, item := range items {
+		when, _ := item["displayTime"].(string)
+		if when == "" {
+			start, _ := item["start"].(string)
+			end, _ := item["end"].(string)
+			when = fmt.Sprintf("%s - %s", start, end)
+		}
+		status, _ := item["status"].(string)
+		if status == "" {
+			status = "unknown"
+		}
+		fmt.Fprintf(b, "  %s | %s\n", when, status)
+	}
+}
+
+// scheduleErrorLine renders the per-mailbox error Graph reported, naming both
+// the message and the response code so the caller can act on either. Returns
+// the empty string when the mailbox was read successfully.
+func scheduleErrorLine(record map[string]any) string {
+	failure, ok := record["error"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	message, _ := failure["message"].(string)
+	code, _ := failure["responseCode"].(string)
+	switch {
+	case message != "" && code != "":
+		return fmt.Sprintf("%s (%s)", message, code)
+	case message != "":
+		return message
+	default:
+		return code
+	}
+}
+
+// scheduleWorkingHoursLine renders a mailbox's working hours as its days and
+// its daily bounds. Returns the empty string when Graph supplied none, so the
+// section is omitted rather than shown blank.
+func scheduleWorkingHoursLine(record map[string]any) string {
+	hours, ok := record["workingHours"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	days, _ := hours["daysOfWeek"].([]string)
+	startTime, _ := hours["startTime"].(string)
+	endTime, _ := hours["endTime"].(string)
+	timeZone, _ := hours["timeZone"].(string)
+
+	if len(days) == 0 && startTime == "" && endTime == "" {
+		return ""
+	}
+
+	line := fmt.Sprintf("%s - %s", startTime, endTime)
+	if len(days) > 0 {
+		line = fmt.Sprintf("%s, %s", strings.Join(days, ", "), line)
+	}
+	if timeZone != "" {
+		line += " (" + timeZone + ")"
+	}
+	return line
+}
+
 // FormatMessagesText formats a slice of serialized summary message maps into a
 // numbered plain-text listing. Each message shows subject, sender address, date,
 // read/attachment status flags, and body preview.

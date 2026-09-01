@@ -3,6 +3,7 @@ package graph
 import (
 	"testing"
 
+	"github.com/microsoft/kiota-abstractions-go/serialization"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
 )
 
@@ -145,5 +146,184 @@ func TestSerializeSummaryMeetingTimeSuggestionOmitsAbsentReason(t *testing.T) {
 	withoutReason := SerializeSummaryMeetingTimeSuggestion(newTestSuggestion(""))
 	if _, ok := withoutReason["suggestionReason"]; ok {
 		t.Error("suggestionReason is present when Graph supplied no reason")
+	}
+}
+
+// newTestScheduleInformation builds one mailbox's schedule with a busy block and
+// working hours, so the two tiers can be compared against the same source
+// object. The failure argument sets the per-mailbox error Graph returns for a
+// mailbox it could not read.
+func newTestScheduleInformation(scheduleID string, failure string) models.ScheduleInformationable {
+	start := models.NewDateTimeTimeZone()
+	startDT := "2026-03-12T09:00:00"
+	tz := "UTC"
+	start.SetDateTime(&startDT)
+	start.SetTimeZone(&tz)
+
+	end := models.NewDateTimeTimeZone()
+	endDT := "2026-03-12T10:00:00"
+	end.SetDateTime(&endDT)
+	end.SetTimeZone(&tz)
+
+	item := models.NewScheduleItem()
+	item.SetStart(start)
+	item.SetEnd(end)
+	status := models.BUSY_FREEBUSYSTATUS
+	item.SetStatus(&status)
+	subject := "Budget review"
+	item.SetSubject(&subject)
+	location := "Room 1"
+	item.SetLocation(&location)
+
+	zone := models.NewTimeZoneBase()
+	zoneName := "UTC"
+	zone.SetName(&zoneName)
+
+	hoursStart, _ := serialization.ParseTimeOnly("08:00:00")
+	hoursEnd, _ := serialization.ParseTimeOnly("17:00:00")
+	hours := models.NewWorkingHours()
+	hours.SetDaysOfWeek([]models.DayOfWeek{models.MONDAY_DAYOFWEEK, models.TUESDAY_DAYOFWEEK})
+	hours.SetStartTime(hoursStart)
+	hours.SetEndTime(hoursEnd)
+	hours.SetTimeZone(zone)
+
+	info := models.NewScheduleInformation()
+	info.SetScheduleId(&scheduleID)
+	availability := "0022"
+	info.SetAvailabilityView(&availability)
+	info.SetScheduleItems([]models.ScheduleItemable{item})
+	info.SetWorkingHours(hours)
+
+	if failure != "" {
+		freeBusyErr := models.NewFreeBusyError()
+		code := "ErrorAccessDenied"
+		freeBusyErr.SetMessage(&failure)
+		freeBusyErr.SetResponseCode(&code)
+		info.SetError(freeBusyErr)
+	}
+
+	return info
+}
+
+// TestSerializeScheduleInformationRawKeepsEveryKey checks that the raw tier keeps
+// its full shape even when the source object supplies nothing, which is what
+// makes raw comparable across mailboxes within one response.
+func TestSerializeScheduleInformationRawKeepsEveryKey(t *testing.T) {
+	raw := SerializeScheduleInformation(models.NewScheduleInformation())
+
+	for _, key := range []string{"scheduleId", "availabilityView", "scheduleItems", "workingHours", "error"} {
+		if _, ok := raw[key]; !ok {
+			t.Errorf("raw serialization is missing key %q on an empty schedule", key)
+		}
+	}
+
+	hours, ok := raw["workingHours"].(map[string]any)
+	if !ok {
+		t.Fatalf("workingHours = %T, want map[string]any", raw["workingHours"])
+	}
+	for _, key := range []string{"daysOfWeek", "startTime", "endTime", "timeZone"} {
+		if _, ok := hours[key]; !ok {
+			t.Errorf("raw working hours are missing key %q on an empty schedule", key)
+		}
+	}
+}
+
+// TestSerializeScheduleTiersDifferInFieldSet checks that the summary tier is a
+// chosen field set rather than the raw one with empty values dropped: raw
+// carries keys summary omits, and summary introduces no key raw lacks.
+func TestSerializeScheduleTiersDifferInFieldSet(t *testing.T) {
+	info := newTestScheduleInformation("a@example.com", "")
+
+	raw := SerializeScheduleInformation(info)
+	summary := SerializeSummaryScheduleInformation(info)
+
+	for key := range summary {
+		if _, ok := raw[key]; !ok {
+			t.Errorf("summary key %q is absent from raw", key)
+		}
+	}
+
+	if _, ok := summary["error"]; ok {
+		t.Error("summary carries an error key for a mailbox Graph read successfully")
+	}
+	if _, ok := raw["error"]; !ok {
+		t.Error("raw omits the error key, so its shape varies between mailboxes")
+	}
+
+	rawItems, ok := raw["scheduleItems"].([]map[string]any)
+	if !ok || len(rawItems) != 1 {
+		t.Fatalf("raw scheduleItems = %v, want one item", raw["scheduleItems"])
+	}
+	if rawItems[0]["subject"] != "Budget review" {
+		t.Errorf("raw item subject = %v, want the Graph subject", rawItems[0]["subject"])
+	}
+
+	summaryItems, ok := summary["scheduleItems"].([]map[string]any)
+	if !ok || len(summaryItems) != 1 {
+		t.Fatalf("summary scheduleItems = %v, want one item", summary["scheduleItems"])
+	}
+	for _, key := range []string{"subject", "location", "isPrivate"} {
+		if _, ok := summaryItems[0][key]; ok {
+			t.Errorf("summary item carries %q, which belongs to the raw tier", key)
+		}
+	}
+}
+
+// TestSerializeSummaryScheduleInformationSurfacesError checks that a mailbox
+// Graph could not read states its error and its response code, so the caller can
+// tell it from a mailbox with no meetings.
+func TestSerializeSummaryScheduleInformationSurfacesError(t *testing.T) {
+	summary := SerializeSummaryScheduleInformation(newTestScheduleInformation("b@example.com", "Access is denied."))
+
+	failure, ok := summary["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("error = %T, want map[string]any", summary["error"])
+	}
+	if failure["message"] != "Access is denied." {
+		t.Errorf("error message = %v, want the Graph message", failure["message"])
+	}
+	if failure["responseCode"] != "ErrorAccessDenied" {
+		t.Errorf("error responseCode = %v, want the Graph response code", failure["responseCode"])
+	}
+}
+
+// TestSerializeSummaryScheduleInformationFlattensItems checks that the summary
+// tier flattens each block's bounds to plain strings and adds the localised
+// display time the text formatter renders.
+func TestSerializeSummaryScheduleInformationFlattensItems(t *testing.T) {
+	summary := SerializeSummaryScheduleInformation(newTestScheduleInformation("a@example.com", ""))
+
+	items, ok := summary["scheduleItems"].([]map[string]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("scheduleItems = %v, want one item", summary["scheduleItems"])
+	}
+	if items[0]["start"] != "2026-03-12T09:00:00" {
+		t.Errorf("start = %v, want %q", items[0]["start"], "2026-03-12T09:00:00")
+	}
+	if display, _ := items[0]["displayTime"].(string); display == "" {
+		t.Error("displayTime is empty, so the text tier has nothing localised to render")
+	}
+
+	hours, ok := summary["workingHours"].(map[string]any)
+	if !ok {
+		t.Fatalf("workingHours = %T, want map[string]any", summary["workingHours"])
+	}
+	if hours["startTime"] != "08:00:00" {
+		t.Errorf("working hours startTime = %v, want %q", hours["startTime"], "08:00:00")
+	}
+	days, _ := hours["daysOfWeek"].([]string)
+	if len(days) != 2 {
+		t.Errorf("working hours daysOfWeek = %v, want two days", hours["daysOfWeek"])
+	}
+}
+
+// TestSerializeSummaryScheduleInformationOmitsAbsentWorkingHours checks that a
+// mailbox Graph published no working hours for omits the key entirely rather
+// than publishing an empty section the reader must interpret.
+func TestSerializeSummaryScheduleInformationOmitsAbsentWorkingHours(t *testing.T) {
+	summary := SerializeSummaryScheduleInformation(models.NewScheduleInformation())
+
+	if _, ok := summary["workingHours"]; ok {
+		t.Error("workingHours is present when Graph supplied none")
 	}
 }
