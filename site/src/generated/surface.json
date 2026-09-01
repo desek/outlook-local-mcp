@@ -433,7 +433,7 @@
     {
       "name": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED",
       "default": "false",
-      "description": "Enable draft management and request the Mail.ReadWrite scope; implies MAIL_ENABLED."
+      "description": "Enable draft and received-message management and request the Mail.ReadWrite scope; implies MAIL_ENABLED."
     },
     {
       "name": "OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES",

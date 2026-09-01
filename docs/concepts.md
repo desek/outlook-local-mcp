@@ -48,7 +48,7 @@ For `device_code` auth without elicitation, `account.add` uses a two-call patter
 
 ## Read-only mode
 
-Set `OUTLOOK_MCP_READ_ONLY=true` to disable all write operations. All write verbs (`calendar.create_event`, `calendar.create_meeting`, `calendar.update_event`, `calendar.update_meeting`, `calendar.delete_event`, `calendar.cancel_meeting`, `calendar.respond_event`, `calendar.reschedule_event`, `calendar.reschedule_meeting`, `mail.create_draft`, `mail.create_reply_draft`, `mail.create_forward_draft`, `mail.update_draft`, `mail.delete_draft`) return an error when invoked. Read and search verbs remain fully functional.
+Set `OUTLOOK_MCP_READ_ONLY=true` to disable all write operations. All write verbs (`calendar.create_event`, `calendar.create_meeting`, `calendar.update_event`, `calendar.update_meeting`, `calendar.delete_event`, `calendar.cancel_meeting`, `calendar.respond_event`, `calendar.reschedule_event`, `calendar.reschedule_meeting`, `mail.create_draft`, `mail.create_reply_draft`, `mail.create_forward_draft`, `mail.update_draft`, `mail.delete_draft`, `mail.move_message`, `mail.set_flag`, `mail.set_categories`, `mail.mark_read`) return an error when invoked. Read and search verbs remain fully functional.
 
 ```bash
 OUTLOOK_MCP_READ_ONLY=true ./outlook-local-mcp

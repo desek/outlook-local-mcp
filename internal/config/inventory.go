@@ -88,7 +88,7 @@ var inventory = []Variable{
 	{EnvTokenStorage, "auto", "Token storage backend: auto, keychain, or file."},
 	{EnvProvenanceTag, "com.github.desek.outlook-local-mcp.created", "Extended-property tag name for MCP-created events; empty disables provenance tagging."},
 	{EnvMailEnabled, "false", "Enable read-only mail access and request the Mail.Read scope."},
-	{EnvMailManageEnabled, "false", "Enable draft management and request the Mail.ReadWrite scope; implies MAIL_ENABLED."},
+	{EnvMailManageEnabled, "false", "Enable draft and received-message management and request the Mail.ReadWrite scope; implies MAIL_ENABLED."},
 	{EnvMaxAttachmentSizeBytes, "10485760", "Maximum attachment size in bytes returned by get_attachment (default 10 MB)."},
 }
 

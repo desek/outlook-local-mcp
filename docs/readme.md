@@ -1,6 +1,6 @@
 # Outlook Local MCP Server
 
-A single-binary MCP server that connects Claude Desktop and Claude Code to Microsoft Outlook via the Microsoft Graph API. Manage your calendar, read email, and compose drafts without leaving your AI assistant.
+A single-binary MCP server that connects Claude Desktop and Claude Code to Microsoft Outlook via the Microsoft Graph API. Manage your calendar, read and triage email, and compose drafts without leaving your AI assistant.
 
 <p align="center">
   <img src="docs/assets/demo.gif" alt="outlook-local-mcp demo">
@@ -28,6 +28,7 @@ For full setup instructions including Claude Desktop and Claude Code configurati
 - **Persistent token cache** -- OS-native secure storage (macOS Keychain, Linux libsecret, Windows DPAPI) with AES-256-GCM file fallback
 - **Mail read access** (opt-in, `MAIL_ENABLED=true`) -- list folders, list and search messages, read conversations and attachments using KQL full-text search
 - **Mail draft management** (opt-in, `MAIL_MANAGE_ENABLED=true`) -- compose new drafts, reply drafts, and forward drafts that land in Outlook Drafts for manual review and send; email is never sent automatically
+- **Received-message management** (same opt-in, `MAIL_MANAGE_ENABLED=true`) -- act on a message already in the mailbox: move it to another folder, set or clear its follow-up flag, replace its categories, and mark it read or unread. A move returns the message's new identifier, because moving mints a new one and the original stops resolving
 - **Read-only mode** -- disable all writes via `READ_ONLY=true`
 - **In-server documentation access** -- the LLM can look up docs and troubleshoot without leaving the session (see below)
 - **MCP tool annotations** -- full annotation set for Anthropic Software Directory compliance
@@ -80,7 +81,7 @@ All settings use environment variables prefixed with `OUTLOOK_MCP_`. Key variabl
 | `TOKEN_STORAGE` | `auto` | `auto`, `keychain`, or `file` |
 | `READ_ONLY` | `false` | Disable write operations |
 | `MAIL_ENABLED` | `false` | Enable read-only mail access |
-| `MAIL_MANAGE_ENABLED` | `false` | Enable mail draft management (implies `MAIL_ENABLED`) |
+| `MAIL_MANAGE_ENABLED` | `false` | Enable mail draft and received-message management (implies `MAIL_ENABLED`) |
 | `LOG_LEVEL` | `warn` | `debug`, `info`, `warn`, `error` |
 | `LOG_FILE` | *(disabled)* | File path for persistent log output |
 

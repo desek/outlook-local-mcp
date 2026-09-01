@@ -225,8 +225,8 @@ type statusConfigFeatures struct {
 	// MailEnabled indicates whether read-only email access is active.
 	MailEnabled bool `json:"mail_enabled"`
 
-	// MailManageEnabled indicates whether draft management (Mail.ReadWrite) is
-	// active; draft/reply/forward/update/delete tools are registered only when
+	// MailManageEnabled indicates whether draft and received-message management (Mail.ReadWrite) is
+	// active; the draft and received-message write verbs are registered only when
 	// this flag is set (see CR-0058).
 	MailManageEnabled bool `json:"mail_manage_enabled"`
 

@@ -1,6 +1,6 @@
 # Outlook Local MCP Server
 
-A single-binary MCP server that connects Claude Desktop and Claude Code to Microsoft Outlook via the Microsoft Graph API. Manage your calendar, read email, and compose drafts without leaving your AI assistant.
+A single-binary MCP server that connects Claude Desktop and Claude Code to Microsoft Outlook via the Microsoft Graph API. Manage your calendar, read and triage email, and compose drafts without leaving your AI assistant.
 
 <p align="center">
   <img src="docs/assets/demo.gif" alt="outlook-local-mcp demo">
