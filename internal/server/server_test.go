@@ -1097,6 +1097,92 @@ func TestRegisterTools_ContactsEnabled_RegistersFifthTool(t *testing.T) {
 	}
 }
 
+// TestRegisterTools_TeamsEnabled_RegistersSixthTool asserts that enabling the
+// teams flag registers a sixth top-level tool named teams, publishing its
+// thirteen verbs in the operation enum. The contacts flag is set alongside it,
+// because the sixth position is only reachable with the fifth domain present.
+func TestRegisterTools_TeamsEnabled_RegistersSixthTool(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	cfg := testConfig()
+	cfg.ContactsEnabled = true
+	cfg.TeamsEnabled = true
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
+
+	registered := s.ListTools()
+	if _, ok := registered["teams"]; !ok {
+		t.Fatal("aggregate 'teams' tool is absent although the teams flag is set")
+	}
+
+	const expectedTotal = 6
+	if got := len(registered); got != expectedTotal {
+		t.Errorf("expected %d tools with contacts and teams enabled, got %d", expectedTotal, got)
+	}
+
+	ops := registeredOperations(t, s, "teams")
+	for _, name := range []string{
+		"help", "search", "list_chats", "list_chat_messages", "get_chat_message",
+		"list_chat_message_replies", "list_channel_messages", "get_channel_message",
+		"list_channel_message_replies", "compose_reply", "get_online_meeting",
+		"list_transcripts", "get_transcript",
+	} {
+		if !ops[name] {
+			t.Errorf("verb %q is absent from the teams operation enum", name)
+		}
+	}
+	if got := len(ops); got != 13 {
+		t.Errorf("teams publishes %d operations, want 13; the domain is scoped to reads and the draft-only reply", got)
+	}
+}
+
+// TestRegisterTools_TeamsDisabled_NoTeamsTool asserts that the default surface
+// is unchanged by this domain's existence, graded by name and not only by
+// count: a tool registered under a different name would pass a count assertion
+// alone.
+func TestRegisterTools_TeamsDisabled_NoTeamsTool(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), testConfig(), nil)
+
+	registered := s.ListTools()
+	if _, ok := registered["teams"]; ok {
+		t.Error("aggregate 'teams' tool is registered although the teams flag is unset")
+	}
+
+	want := map[string]bool{"calendar": true, "mail": true, "account": true, "system": true}
+	for name := range registered {
+		if !want[name] {
+			t.Errorf("unexpected tool %q in the default surface", name)
+		}
+	}
+	for name := range want {
+		if _, ok := registered[name]; !ok {
+			t.Errorf("default tool %q is missing", name)
+		}
+	}
+}
+
 // TestRegisterTools_ContactsDisabled_StaysFourTools asserts that the default
 // surface is unchanged by this domain's existence, graded by name and not only
 // by count: a fifth tool registered under a different name would pass a count

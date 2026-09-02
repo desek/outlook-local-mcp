@@ -112,31 +112,42 @@ func TestEveryVerbCarriesSummaryAndGate(t *testing.T) {
 }
 
 // TestContactsDomainRecordedGatedAndFull asserts that the record carries the
-// contacts domain in last position with all five of its verbs and none of them
-// in the default set, each attributed to the contacts gate.
+// contacts domain with all five of its verbs and none of them in the default
+// set, each attributed to the contacts gate.
 //
 // The domain is gated whole rather than verb by verb, which is a shape no other
 // domain has: every one of its verbs must carry the gate, and its default count
 // must be zero rather than merely lower.
+//
+// The domain is selected by name rather than by position. Position is not the
+// property under test, and a later gated domain appended after this one would
+// otherwise fail this check while nothing about contacts had changed.
 func TestContactsDomainRecordedGatedAndFull(t *testing.T) {
 	rec := BuildRecord()
 
 	if len(rec.Domains) == 0 {
 		t.Fatal("record contains no domains")
 	}
-	last := rec.Domains[len(rec.Domains)-1]
-	if last.Name != "contacts" {
-		t.Fatalf("last domain is %q, want contacts; domainOrder places it last", last.Name)
+
+	var contacts *Domain
+	for i := range rec.Domains {
+		if rec.Domains[i].Name == "contacts" {
+			contacts = &rec.Domains[i]
+			break
+		}
+	}
+	if contacts == nil {
+		t.Fatal("the record carries no contacts domain; domainOrder omits it")
 	}
 
-	if last.FullCount != 5 {
-		t.Errorf("contacts FullCount = %d, want 5", last.FullCount)
+	if contacts.FullCount != 5 {
+		t.Errorf("contacts FullCount = %d, want 5", contacts.FullCount)
 	}
-	if last.DefaultCount != 0 {
-		t.Errorf("contacts DefaultCount = %d, want 0; the whole domain is gated", last.DefaultCount)
+	if contacts.DefaultCount != 0 {
+		t.Errorf("contacts DefaultCount = %d, want 0; the whole domain is gated", contacts.DefaultCount)
 	}
 
-	for _, v := range last.Verbs {
+	for _, v := range contacts.Verbs {
 		if v.Gate == nil {
 			t.Errorf("contacts verb %q carries no gate although the domain is gated whole", v.Name)
 			continue

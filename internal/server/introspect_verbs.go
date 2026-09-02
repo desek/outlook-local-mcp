@@ -7,9 +7,9 @@
 // presence guard needs that per-verb detail, so BuildDomainVerbSets reproduces
 // the verb-building portion of RegisterTools without registering, returning the
 // slices for inspection. It deliberately mirrors the build-config literals
-// in RegisterTools, including the condition under which the opt-in contacts
-// domain is built; keep the two in sync when a domain gains a dependency or a
-// gate.
+// in RegisterTools, including the conditions under which the opt-in contacts
+// and teams domains are built; keep the two in sync when a domain gains a
+// dependency or a gate.
 package server
 
 import (
@@ -29,11 +29,12 @@ import (
 // metadata (Name, Annotations) that RegisterTools does not otherwise expose.
 //
 // The returned map is keyed by domain name ("calendar", "account", "system",
-// "mail", and "contacts" when enabled). The verb set for each domain reflects
-// the same gating RegisterTools applies: mail read/write verbs follow
-// cfg.MailEnabled / cfg.MailManageEnabled, system's complete_auth follows
-// cfg.AuthMethod, and the whole contacts domain follows cfg.ContactsEnabled,
-// so no "contacts" key is present when that flag is false.
+// "mail", and "contacts" and "teams" when enabled). The verb set for each
+// domain reflects the same gating RegisterTools applies: mail read/write verbs
+// follow cfg.MailEnabled / cfg.MailManageEnabled, system's complete_auth
+// follows cfg.AuthMethod, the whole contacts domain follows
+// cfg.ContactsEnabled, and the whole teams domain follows cfg.TeamsEnabled, so
+// no "contacts" or "teams" key is present when the matching flag is false.
 //
 // Parameters:
 //   - cfg: the server configuration driving verb gating.
@@ -131,6 +132,19 @@ func BuildDomainVerbSets(
 			accountResolverMW: accountResolverMW,
 		})
 		sets["contacts"] = contactsVerbs
+	}
+
+	// The teams domain is built under the same condition, for the same reason.
+	if cfg.TeamsEnabled {
+		teamsVerbs, _ := buildTeamsVerbs(teamsVerbsConfig{
+			retryCfg:          retryCfg,
+			timeout:           timeout,
+			m:                 m,
+			tracer:            tracer,
+			authMW:            authMW,
+			accountResolverMW: accountResolverMW,
+		})
+		sets["teams"] = teamsVerbs
 	}
 
 	return sets

@@ -225,6 +225,36 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		toolCount++
 	}
 
+	// Teams domain aggregate tool, gated the same way and for the same reason:
+	// the whole domain, and with it the four Teams read scopes, is opt-in behind
+	// TeamsEnabled, so a default server keeps its surface and asks for no Teams
+	// consent. Every verb reads; compose_reply prepares reply text and posts
+	// nothing, so there is no write for ReadOnlyGuard to block.
+	//
+	// The identical condition is repeated in BuildDomainVerbSets.
+	if cfg.TeamsEnabled {
+		teamsVerbs, teamsRegistry := buildTeamsVerbs(teamsVerbsConfig{
+			retryCfg:          retryCfg,
+			timeout:           timeout,
+			m:                 m,
+			tracer:            t,
+			authMW:            authMW,
+			accountResolverMW: accountResolverMW,
+		})
+		populatedTeams := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+			Domain: "teams",
+			Intro: "Microsoft Teams reads via Microsoft Graph, for finding what was said and " +
+				"recapping a meeting: search, the chat and channel message reads, the online " +
+				"meeting resolution, and the transcript reads, plus compose_reply, which " +
+				"prepares reply text and posts nothing. The domain is registered only when " +
+				"TeamsEnabled is configured, and no verb sends, posts, or writes.",
+			Verbs:           teamsVerbs,
+			ToolAnnotations: tools.AggregateAnnotations("Teams", teamsVerbs),
+		})
+		*teamsRegistry = populatedTeams
+		toolCount++
+	}
+
 	slog.Info("tool registration complete", "tools", toolCount)
 }
 
