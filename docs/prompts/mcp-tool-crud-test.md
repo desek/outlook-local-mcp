@@ -1,3 +1,10 @@
+| 52   | Teams help (thirteen verbs)       | PASS/FAIL/SKIP | e.g., "all thirteen verbs listed; no send verb offered"   |
+| 53   | Search Teams messages             | PASS/FAIL/SKIP | e.g., "hits carry chat or channel ids; blank query refused" |
+| 54   | Read a chat thread                | PASS/FAIL/SKIP | e.g., "messages, one message, replies all returned"      |
+| 55   | Read a channel thread             | PASS/FAIL/SKIP | e.g., "messages, one message, replies; or no channel hit" |
+| 56   | Prepare a reply (nothing sent)    | PASS/FAIL/SKIP | e.g., "quoted text returned; thread unchanged on re-read" |
+| 57   | Resolve an online meeting         | PASS/FAIL/SKIP | e.g., "join URL resolved; both identifiers refused"      |
+| 58   | Read a meeting transcript         | PASS/FAIL/SKIP | e.g., "preview by default; full content under raw"       |
 # MCP Tool CRUD Lifecycle Test
 
 Step-by-step instruction for Claude Code to exercise the MCP tools through a complete create-read-update-delete cycle with verification at each stage.
@@ -125,6 +132,7 @@ Treat the following as a user question that you must answer using only the in-se
 - **Record:** `config.identity.client_id` and `config.identity.tenant_id` as the **identity config**.
 - **Record:** `config.storage.token_cache_backend` (either `"keychain"` or `"file"`) as the **auth cache type**.
 - **Record:** `config.features.read_only` as the **read-only mode** setting.
+- **Record:** `config.features.mail_enabled`, `config.features.mail_manage_enabled`, `config.features.contacts_enabled`, and `config.features.teams_enabled` as the **feature gates**. The skip rules in Steps 30, 31, 37, 47, and 52 read these values.
 - **Record:** `config.features.provenance_tag` as the **provenance tag**.
 - **Record:** `config.graph_api.max_retries` and `config.graph_api.request_timeout_seconds` as the **Graph API settings**.
 - **Fail:** Stop and report if `config.logging.log_file` is empty or `config.logging.log_level` is not `"debug"`.
@@ -746,7 +754,7 @@ Call `{tool: "calendar", args: {operation: "get_event_attachment", event_id: "<a
 
 Call `{tool: "contacts", args: {operation: "help"}}`.
 
-- **Skip:** If no `contacts` tool is registered, mark Steps 47-51 SKIP with the reason "contacts disabled" and continue. The domain is opt-in and is absent unless `OUTLOOK_MCP_CONTACTS_ENABLED` is set.
+- **Skip:** If `config.features.contacts_enabled` from Step 0c is `false`, or if no `contacts` tool is registered, mark Steps 47-51 SKIP with the reason "contacts disabled" and continue. The domain is opt-in and is absent unless `OUTLOOK_MCP_CONTACTS_ENABLED` is set.
 - **Verify:** The response names all five verbs: `help`, `search`, `get_contact`, `list_people`, `get_person`.
 - **Verify:** Every verb is documented as read-only and non-destructive; no write, create, update, delete, folder, photo, directory, or sync verb is listed.
 - **Fail:** If any of the five verbs is missing, or if any verb that writes a contact is offered.
@@ -791,7 +799,7 @@ Call `{tool: "contacts", args: {operation: "get_person", person_id: "<person_id 
 
 Call `{tool: "teams", args: {operation: "help"}}`.
 
-- **Skip:** If `config.features.teams_enabled` from the Step 0b status output is false, or if no `teams` tool is registered, mark Steps 52-58 SKIP with the reason "teams disabled" and continue. The domain is opt-in and is absent unless `OUTLOOK_MCP_TEAMS_ENABLED` is set.
+- **Skip:** If `config.features.teams_enabled` from Step 0c is `false`, or if no `teams` tool is registered, mark Steps 52-58 SKIP with the reason "teams disabled" and continue. The domain is opt-in and is absent unless `OUTLOOK_MCP_TEAMS_ENABLED` is set.
 - **Verify:** The response names all thirteen verbs: `help`, `search`, `list_chats`, `list_chat_messages`, `get_chat_message`, `list_chat_message_replies`, `list_channel_messages`, `get_channel_message`, `list_channel_message_replies`, `compose_reply`, `get_online_meeting`, `list_transcripts`, `get_transcript`.
 - **Verify:** Every verb is documented as read-only and non-destructive; no send, post, create, update, delete, presence, recording, or attendance verb is listed, and no verb enumerates joined teams or channels.
 - **Fail:** If any of the thirteen verbs is missing, or if any verb that writes to Teams is offered.
