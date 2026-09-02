@@ -35,9 +35,9 @@ type manifestTool struct {
 
 // manifestDocument is the subset of extension/manifest.json this check reads.
 type manifestDocument struct {
-	// Tools is the published aggregate tool list, which must stay at five
+	// Tools is the published aggregate tool list, which must stay at six
 	// entries because the MCP surface is four aggregate domain tools by
-	// default plus the opt-in contacts domain.
+	// default plus the opt-in contacts and teams domains.
 	Tools []manifestTool `json:"tools"`
 }
 
@@ -70,6 +70,7 @@ func maximalSurfaceConfig() config.Config {
 		MailEnabled:       true,
 		MailManageEnabled: true,
 		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 		AuthMethod:        "auth_code",
 	}
 }
@@ -77,8 +78,8 @@ func maximalSurfaceConfig() config.Config {
 // TestManifestDescribesEveryRegisteredVerb asserts that every verb the registry
 // registers for a domain under the maximal configuration is named in that
 // domain's extension/manifest.json description, and that the tools array holds
-// exactly the four default aggregate domain tools plus the opt-in contacts
-// domain.
+// exactly the four default aggregate domain tools plus the opt-in contacts and
+// teams domains.
 //
 // The verb name is matched on word boundaries so a shorter name cannot be
 // satisfied by a longer one that contains it: Go's \b treats the underscore as a
@@ -87,8 +88,8 @@ func maximalSurfaceConfig() config.Config {
 func TestManifestDescribesEveryRegisteredVerb(t *testing.T) {
 	doc := readExtensionManifest(t)
 
-	if len(doc.Tools) != 5 {
-		t.Fatalf("extension/manifest.json declares %d tools, want exactly 5 aggregate domain tools", len(doc.Tools))
+	if len(doc.Tools) != 6 {
+		t.Fatalf("extension/manifest.json declares %d tools, want exactly 6 aggregate domain tools", len(doc.Tools))
 	}
 
 	described := make(map[string]string, len(doc.Tools))

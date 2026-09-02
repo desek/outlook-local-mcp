@@ -173,7 +173,7 @@ Parameters: `event_id` (required), `comment` (optional cancellation message). On
 
 ### Contacts (opt-in)
 
-The verbs above take email addresses, never names. The `contacts` tool supplies the address, and it is the one tool that is absent unless asked for: set `OUTLOOK_MCP_CONTACTS_ENABLED=true` in the server's environment and restart the client.
+The verbs above take email addresses, never names. The `contacts` tool supplies the address, and it is one of the two tools that are absent unless asked for: set `OUTLOOK_MCP_CONTACTS_ENABLED=true` in the server's environment and restart the client.
 
 ```json
 {
@@ -207,6 +207,42 @@ Parameters: `account`, `output`.
 
 Every contacts verb reads. Nothing in the domain creates, changes, or deletes a contact, and no contact write scope is ever requested. See [Contacts gating](concepts#contacts-gating).
 
+### Teams (opt-in)
+
+The `teams` tool reads Microsoft Teams conversations and meeting transcripts, and it is the other tool absent unless asked for: set `OUTLOOK_MCP_TEAMS_ENABLED=true` in the server's environment and restart the client.
+
+```json
+{
+  "mcpServers": {
+    "outlook-local": {
+      "command": "/absolute/path/to/outlook-local-mcp",
+      "env": {
+        "OUTLOOK_MCP_TEAMS_ENABLED": "true"
+      }
+    }
+  }
+}
+```
+
+Enabling it adds the `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` scopes, so the next tool call re-runs the sign-in flow once for incremental consent. If the tool does not appear, see [Teams tool not listed](troubleshooting#teams-disabled).
+
+**Search** is where every Teams flow starts, because it is what turns a topic into the identifiers the other verbs need:
+> "Find the Teams messages about the release checklist"
+
+Parameters: `query` (required), `account`, `output`. Each hit names the chat, or the team and channel, it came from. Enumerating teams and channels is not offered; a channel is reached this way. See [Teams channel read is missing an identifier](troubleshooting#teams-channel-identifiers).
+
+**Read a thread** with `list_chats`, `list_chat_messages`, and `list_channel_messages`, then escalate one message with `get_chat_message` or `get_channel_message`. Replies hang under a message and are listed separately, by `list_chat_message_replies` and `list_channel_message_replies`. A message body is returned as a preview by default; pass `output: "raw"` for the whole thing.
+
+**Recap a meeting** by resolving the join URL a calendar event carries:
+> "Summarise yesterday's project sync from its Teams transcript"
+
+`get_online_meeting` takes exactly one of `meeting_id` or `join_web_url` and returns the meeting-scoped identifier `list_transcripts` and `get_transcript` are keyed by. The full WEBVTT text comes back only under `output: "raw"`. See [Teams meeting or transcript not resolved](troubleshooting#teams-meeting-unresolved).
+
+**Compose a reply** without sending one:
+> "Draft a reply to that message quoting what Sam asked"
+
+`compose_reply` reads the parent message, quotes it, and returns prepared text. It posts nothing: no Teams send scope is requested in any configuration, so pasting the reply into Microsoft Teams is a step the user takes. Every other Teams verb reads. See [Teams gating](concepts#teams-gating).
+
 ## 5. Configuration
 
 All environment variables are prefixed with `OUTLOOK_MCP_`:
@@ -219,6 +255,7 @@ All environment variables are prefixed with `OUTLOOK_MCP_`:
 | `LOG_LEVEL` | `warn` | Log level: `debug`, `info`, `warn`, `error` |
 | `READ_ONLY` | `false` | Disable write tools (create, update, delete, cancel) |
 | `CONTACTS_ENABLED` | `false` | Register the opt-in read-only `contacts` tool; requests `Contacts.Read` and `People.Read` |
+| `TEAMS_ENABLED` | `false` | Register the opt-in read-only `teams` tool; requests `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` |
 | `LOG_FORMAT` | `json` | Log format: `json` or `text` |
 | `LOG_SANITIZE` | `true` | Mask PII in log output |
 | `LOG_FILE` | *(empty = disabled)* | Log file path for persistent file output |

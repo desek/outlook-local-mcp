@@ -10,7 +10,7 @@ Reach for this server when a user asks an assistant to read or act on their own 
 
 Do not reach for it when there is no local Microsoft account to connect, when the task is a bulk server-side mailbox migration or admin operation, or when the user wants a hosted multi-tenant web API. This is a local, single-binary MCP server that runs on the user's own machine and speaks to Microsoft Graph directly; it has no hosted endpoint and no API keys.
 
-To call it, connect over the Model Context Protocol and dispatch a verb on one of the four default aggregate tools (`calendar`, `mail`, `account`, `system`), or on `contacts` where the operator has set `OUTLOOK_MCP_CONTACTS_ENABLED`, with a required `operation`. Start with `{tool: "system", args: {operation: "status"}}` to confirm the server is up, then `{tool: "calendar", args: {operation: "help"}}` or the same `help` verb on any domain to discover that domain's verbs and parameters.
+To call it, connect over the Model Context Protocol and dispatch a verb on one of the four default aggregate tools (`calendar`, `mail`, `account`, `system`), or on `contacts` where the operator has set `OUTLOOK_MCP_CONTACTS_ENABLED` and `teams` where they have set `OUTLOOK_MCP_TEAMS_ENABLED`, with a required `operation`. Start with `{tool: "system", args: {operation: "status"}}` to confirm the server is up, then `{tool: "calendar", args: {operation: "help"}}` or the same `help` verb on any domain to discover that domain's verbs and parameters.
 
 ## Site
 
@@ -26,7 +26,7 @@ To call it, connect over the Model Context Protocol and dispatch a verb on one o
 
 ## Tools
 
-- [Extension Manifest](https://github.com/desek/outlook-local-mcp/blob/main/extension/manifest.json): MCP tool manifest listing the four default aggregate domain tools (calendar, mail, account, system) and the opt-in contacts tool, with their annotations.
+- [Extension Manifest](https://github.com/desek/outlook-local-mcp/blob/main/extension/manifest.json): MCP tool manifest listing the four default aggregate domain tools (calendar, mail, account, system) and the opt-in contacts and teams tools, with their annotations.
 
 ## Change Requests
 

@@ -242,9 +242,10 @@ func TestTopLevelDescription_HelpVerbPresent(t *testing.T) {
 		MailEnabled:       true,
 		MailManageEnabled: true,
 		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 	})
 
-	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts"} {
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts", "teams"} {
 		desc := getToolDescription(t, s, domain)
 		if !strings.Contains(desc, "help") {
 			t.Errorf("domain %q description missing 'help' verb\n  got: %s", domain, desc)
@@ -262,9 +263,10 @@ func TestTopLevelDescription_DescriptionNonEmpty(t *testing.T) {
 		MailEnabled:       true,
 		MailManageEnabled: true,
 		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 	})
 
-	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts"} {
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts", "teams"} {
 		desc := getToolDescription(t, s, domain)
 		if desc == "" {
 			t.Errorf("domain %q has empty description", domain)

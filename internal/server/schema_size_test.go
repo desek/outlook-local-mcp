@@ -30,11 +30,12 @@ const preCRBaselineBytes = 74_000 // conservative lower-bound estimate in bytes
 const minRequiredReductionPct = 60
 
 // TestColdStartSchemaSize_Reduction verifies that the cold-start schema byte
-// count of the five aggregate tools is at least 60% smaller than the pre-CR
+// count of the six aggregate tools is at least 60% smaller than the pre-CR
 // baseline (CR-0060 AC-8 / NFR-1).
 //
-// The test registers all five domain tools with all feature flags enabled
-// (the maximum-size configuration, which includes the opt-in contacts domain),
+// The test registers all six domain tools with all feature flags enabled
+// (the maximum-size configuration, which includes the opt-in contacts and
+// teams domains),
 // serialises each tool's definition to JSON, sums the byte counts, and asserts
 // the reduction exceeds the threshold.
 func TestColdStartSchemaSize_Reduction(t *testing.T) {
@@ -55,7 +56,7 @@ func TestColdStartSchemaSize_Reduction(t *testing.T) {
 	audit.InitAuditLog(false, "")
 
 	// Use maximum feature-flag configuration to get the largest possible
-	// post-CR schema (all mail verbs and the opt-in contacts domain enabled).
+	// post-CR schema (all mail verbs and both opt-in domains enabled).
 	cfg := config.Config{
 		AuthRecordPath:    "/tmp/test-schema",
 		CacheName:         "test",
@@ -63,6 +64,7 @@ func TestColdStartSchemaSize_Reduction(t *testing.T) {
 		MailEnabled:       true,
 		MailManageEnabled: true,
 		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 	}
 
 	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, r, cfg, nil)

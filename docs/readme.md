@@ -41,7 +41,7 @@ For full setup instructions including Claude Desktop and Claude Code configurati
 
 ## Tool invocation shape (v0.6.0+)
 
-All operations use four aggregate domain tools dispatched by an `operation` verb, plus an opt-in fifth (`contacts`) registered only when `OUTLOOK_MCP_CONTACTS_ENABLED` is set:
+All operations use four aggregate domain tools dispatched by an `operation` verb, plus two opt-in ones registered only when their variable is set, `contacts` under `OUTLOOK_MCP_CONTACTS_ENABLED` and `teams` under `OUTLOOK_MCP_TEAMS_ENABLED`:
 
 ```
 {tool: "calendar", args: {operation: "list_events", date: "today"}}
@@ -49,6 +49,7 @@ All operations use four aggregate domain tools dispatched by an `operation` verb
 {tool: "account",  args: {operation: "list"}}
 {tool: "system",   args: {operation: "status"}}
 {tool: "contacts", args: {operation: "search", query: "alex"}}   // OUTLOOK_MCP_CONTACTS_ENABLED
+{tool: "teams",    args: {operation: "search", query: "release checklist"}}   // OUTLOOK_MCP_TEAMS_ENABLED
 ```
 
 Call any domain with `operation: "help"` to list its verbs and parameters:

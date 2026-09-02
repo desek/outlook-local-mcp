@@ -376,10 +376,95 @@
       ],
       "fullCount": 5,
       "defaultCount": 0
+    },
+    {
+      "name": "teams",
+      "verbs": [
+        {
+          "name": "help",
+          "summary": "show detailed documentation for all verbs or a single named verb",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "search",
+          "summary": "free-text search over Teams chat and channel messages",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_chats",
+          "summary": "list the chats the signed-in user is a member of",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_chat_messages",
+          "summary": "list the messages in one chat, each with a body preview",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "get_chat_message",
+          "summary": "get one chat message; the full body requires output=raw",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_chat_message_replies",
+          "summary": "list the replies hanging under one chat message",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_channel_messages",
+          "summary": "list the top-level posts in one channel",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "get_channel_message",
+          "summary": "get one channel post; the full body requires output=raw",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_channel_message_replies",
+          "summary": "list the replies hanging under one channel post",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "compose_reply",
+          "summary": "prepare reply text quoting a message; nothing is sent",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "get_online_meeting",
+          "summary": "resolve a meeting id or join URL to its online meeting",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_transcripts",
+          "summary": "list the transcript metadata one online meeting holds",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "get_transcript",
+          "summary": "get one transcript; the full WEBVTT text requires output=raw",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        }
+      ],
+      "fullCount": 13,
+      "defaultCount": 0
     }
   ],
   "totals": {
-    "fullCount": 57,
+    "fullCount": 70,
     "defaultCount": 38
   },
   "config": [

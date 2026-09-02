@@ -787,6 +787,77 @@ Call `{tool: "contacts", args: {operation: "get_person", person_id: "<person_id 
 - **Verify (invalid identifier):** Call again with `person_id: ""`. The call must fail naming the `person_id` parameter, before any Microsoft Graph request is issued.
 - **Fail:** If any scored address is omitted, or if the empty identifier is accepted.
 
+### Step 52 -- Teams domain help (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "help"}}`.
+
+- **Skip:** If `config.features.teams_enabled` from the Step 0b status output is false, or if no `teams` tool is registered, mark Steps 52-58 SKIP with the reason "teams disabled" and continue. The domain is opt-in and is absent unless `OUTLOOK_MCP_TEAMS_ENABLED` is set.
+- **Verify:** The response names all thirteen verbs: `help`, `search`, `list_chats`, `list_chat_messages`, `get_chat_message`, `list_chat_message_replies`, `list_channel_messages`, `get_channel_message`, `list_channel_message_replies`, `compose_reply`, `get_online_meeting`, `list_transcripts`, `get_transcript`.
+- **Verify:** Every verb is documented as read-only and non-destructive; no send, post, create, update, delete, presence, recording, or attendance verb is listed, and no verb enumerates joined teams or channels.
+- **Fail:** If any of the thirteen verbs is missing, or if any verb that writes to Teams is offered.
+
+### Step 53 -- Search Teams messages (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "search", query: "the"}}`.
+
+- **Verify:** The default response is plain text and each hit is labelled with the chat, or the team and channel, it came from, so the identifiers the other verbs require are obtainable here.
+- **Verify (summary tier):** Call again with `output: "summary"`. The response is structured and still carries the identifiers of each hit.
+- **Verify (empty query rejected):** Call again with `query: "   "`. The call must fail naming the `query` parameter and stating what to supply, and no result set is returned.
+- **Record:** From the hits, a `chat_id` and message id for a chat message, and a team id, channel id, and message id for a channel message, for Steps 54 to 56.
+- **Fail:** If a hit carries no chat or channel label, or if the whitespace-only query is accepted.
+
+### Step 54 -- Read a chat thread (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "list_chats"}}`, then `{tool: "teams", args: {operation: "list_chat_messages", chat_id: "<chat_id from Step 53 or from list_chats>"}}`, then `{tool: "teams", args: {operation: "get_chat_message", chat_id: "<same chat_id>", message_id: "<message id from the listing>"}}`, then `{tool: "teams", args: {operation: "list_chat_message_replies", chat_id: "<same chat_id>", message_id: "<same message id>"}}`.
+
+- **Skip:** If the account is a member of no chat, mark this step SKIP with the reason "no Teams chat in this account".
+- **Verify:** `list_chats` returns a numbered list ending with a total count, each entry carrying enough to tell one chat from another.
+- **Verify:** `list_chat_messages` returns a body preview per message rather than every full body.
+- **Verify (body escalation):** `get_chat_message` returns a preview by default and states that the full body requires `output=raw`; calling it again with `output: "raw"` returns the full body.
+- **Verify (invalid identifier):** Call `get_chat_message` again with `chat_id: ""`. The call must fail naming the `chat_id` parameter, before any Microsoft Graph request is issued.
+- **Fail:** If the default tier returns full bodies, if the raw tier does not, or if the empty identifier is accepted.
+
+### Step 55 -- Read a channel thread (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "list_channel_messages", team_id: "<team id from Step 53>", channel_id: "<channel id from Step 53>"}}`, then `{tool: "teams", args: {operation: "get_channel_message", team_id: "<same team id>", channel_id: "<same channel id>", message_id: "<message id from the listing>"}}`, then `{tool: "teams", args: {operation: "list_channel_message_replies", team_id: "<same team id>", channel_id: "<same channel id>", message_id: "<same message id>"}}`.
+
+- **Skip:** If Step 53 returned no channel hit, mark this step SKIP with the reason "no Teams channel message reachable from search".
+- **Verify:** `list_channel_messages` returns the thread openers, and the replies under one of them come back only from `list_channel_message_replies`.
+- **Verify (body escalation):** `get_channel_message` returns a preview by default and the full body under `output: "raw"`.
+- **Verify (missing identifier):** Call `list_channel_messages` again with `team_id: ""`. The call must fail naming the `team_id` parameter and pointing at the `search` operation as the way to obtain it, before any Microsoft Graph request is issued.
+- **Fail:** If a channel read succeeds without both identifiers, or if the refusal does not say where the identifier comes from.
+
+### Step 56 -- Prepare a reply without sending it (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "compose_reply", chat_id: "<chat_id from Step 54>", message_id: "<message id from Step 54>", body: "Acknowledged, thank you."}}`.
+
+- **Verify:** The response is the prepared reply text, quoting the message being answered, and it states plainly that nothing was sent or posted.
+- **Verify:** Nothing new appears in the chat. Call `list_chat_messages` for the same `chat_id` again; the message list is unchanged.
+- **Verify (no output parameter):** The `help` output for `compose_reply` declares no `output` parameter; it returns its prepared text unconditionally.
+- **Verify (mixed identifiers refused):** Call again supplying `chat_id`, `team_id`, and `channel_id` together. The call must fail naming which shape to supply.
+- **Fail:** If a message is posted to Teams, if the response does not say the reply is unsent, or if the mixed identifier shape is accepted.
+
+### Step 57 -- Resolve an online meeting (skip if teams disabled)
+
+Call `{tool: "calendar", args: {operation: "list_events", date: "week"}}` and find an event carrying a Teams join URL, then call `{tool: "teams", args: {operation: "get_online_meeting", join_web_url: "<the join URL>"}}`.
+
+- **Skip:** If no event in the range carries a join URL, mark Steps 57 and 58 SKIP with the reason "no Teams meeting in range".
+- **Verify:** The response carries the meeting-scoped identifier the transcript verbs are keyed by.
+- **Verify (both identifiers refused):** Call again supplying both `meeting_id` and `join_web_url`. The call must fail naming both parameters, before any Microsoft Graph request is issued.
+- **Verify (neither identifier refused):** Call again supplying neither. The call must fail naming both parameters and pointing at the calendar `get_event` operation as the source of the join URL.
+- **Record:** The meeting identifier for Step 58.
+- **Fail:** If either malformed call is accepted, or if no meeting identifier is returned.
+
+### Step 58 -- Read a meeting transcript (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "list_transcripts", meeting_id: "<meeting id from Step 57>"}}`, then `{tool: "teams", args: {operation: "get_transcript", meeting_id: "<same meeting id>", transcript_id: "<transcript id from the listing>"}}`.
+
+- **Skip:** If the meeting holds no transcript, mark this step SKIP with the reason "meeting holds no transcript".
+- **Verify:** `list_transcripts` returns metadata only; no transcript text is delivered by it.
+- **Verify (content escalation):** `get_transcript` returns metadata and a short preview by default and states that the full text requires `output=raw`; calling it again with `output: "raw"` returns the full WEBVTT text.
+- **Verify (invalid identifier):** Call `get_transcript` again with `transcript_id: ""`. The call must fail naming the `transcript_id` parameter, before any Microsoft Graph request is issued.
+- **Fail:** If the listing delivers transcript content, if the default tier returns the full text, or if the empty identifier is accepted.
+
 ## Reporting
 
 After all steps, print a summary table. Every row **MUST** include a short `Comment` (under ~120 characters) explaining the result — for PASS rows, a brief confirmation of what was verified; for FAIL rows, the failure cause (tool name, error, mismatch); for SKIP rows, the reason (e.g., "single-account mode"). Do not leave the `Comment` column blank.

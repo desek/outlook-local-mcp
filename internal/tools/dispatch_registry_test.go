@@ -94,6 +94,19 @@ var verbInventoryGolden = []string{
 	"system.list_docs ro=true de=false id=true ow=false",
 	"system.search_docs ro=true de=false id=true ow=false",
 	"system.status ro=true de=false id=true ow=false",
+	"teams.compose_reply ro=true de=false id=true ow=true",
+	"teams.get_channel_message ro=true de=false id=true ow=true",
+	"teams.get_chat_message ro=true de=false id=true ow=true",
+	"teams.get_online_meeting ro=true de=false id=true ow=true",
+	"teams.get_transcript ro=true de=false id=true ow=true",
+	"teams.help ro=true de=false id=true ow=false",
+	"teams.list_channel_message_replies ro=true de=false id=true ow=true",
+	"teams.list_channel_messages ro=true de=false id=true ow=true",
+	"teams.list_chat_message_replies ro=true de=false id=true ow=true",
+	"teams.list_chat_messages ro=true de=false id=true ow=true",
+	"teams.list_chats ro=true de=false id=true ow=true",
+	"teams.list_transcripts ro=true de=false id=true ow=true",
+	"teams.search ro=true de=false id=true ow=true",
 }
 
 // buildFullVerbInventory returns the canonical, sorted inventory lines for every
@@ -124,6 +137,7 @@ func buildFullVerbInventory(t *testing.T) []string {
 		MailEnabled:       true,
 		MailManageEnabled: true,
 		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 	}
 	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
 

@@ -2,7 +2,7 @@
 
 Reference documentation for the server's component layout, middleware chain, MCP transport, tool registration, error handling, pagination, configuration, startup sequence, and Claude Desktop integration.
 
-> **Status note:** The tool definitions in this document describe the original tool-per-operation surface that predates CR-0060. As of v0.6.0 the server exposes four aggregate domain tools by default (`calendar`, `mail`, `account`, `system`), plus an opt-in fifth (`contacts`) registered only when `OUTLOOK_MCP_CONTACTS_ENABLED` is set, each dispatched by an `operation` verb. The verb-level semantics described below remain accurate; only the registration shape changed.
+> **Status note:** The tool definitions in this document describe the original tool-per-operation surface that predates CR-0060. As of v0.6.0 the server exposes four aggregate domain tools by default (`calendar`, `mail`, `account`, `system`), plus two opt-in ones registered only when their variable is set, `contacts` under `OUTLOOK_MCP_CONTACTS_ENABLED` and `teams` under `OUTLOOK_MCP_TEAMS_ENABLED`, each dispatched by an `operation` verb. The verb-level semantics described below remain accurate; only the registration shape changed.
 
 ---
 
@@ -518,7 +518,7 @@ The published website states no figure of its own. Every tool count, verb name, 
 
 `internal/surface` builds a **surface record** from the live surface, performing no network call and reading no credential:
 
-* It calls `server.BuildVerbsForInspection` to construct the four domain verb slices twice, once with every gate open and once under the default configuration, using zero-value dependencies and no-op middleware. `TestBuildVerbsRequiresNoCredentials` asserts this needs no credentials.
+* It calls `server.BuildVerbsForInspection` to construct every domain's verb slice twice, once with every gate open and once under the default configuration, using zero-value dependencies and no-op middleware. `TestBuildVerbsRequiresNoCredentials` asserts this needs no credentials.
 * It pairs the verbs with the declarative configuration inventory from `internal/config` (see [Configuration](#configuration)).
 * Per domain it records the domain name, the ordered verb list, and for each verb its name, one-line summary, read-only flag, and the configuration key that gates it or an explicit null. It records both the full verb count and the count exposed under the default configuration, per domain and in total, each **derived by counting the built verbs** rather than stated as a literal.
 

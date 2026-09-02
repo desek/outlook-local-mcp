@@ -68,18 +68,31 @@ Mail access is disabled by default and enabled in two tiers via environment vari
 
 ## Contacts gating
 
-The `contacts` domain is off by default. It is the one aggregate tool that is not registered unless it is asked for, so a user who never enables it sees four tools, no contacts verb, and no contacts consent prompt.
+The `contacts` domain is off by default. It is one of the two aggregate tools that are not registered unless they are asked for, so a user who enables neither opt-in sees four tools, no contacts verb, and no contacts consent prompt.
 
 | Variable | Value | Effect |
 |---|---|---|
 | `OUTLOOK_MCP_CONTACTS_ENABLED` | `false` (default) | The `contacts` tool is not registered; the surface stays at four aggregate tools and no contacts OAuth scope is requested |
-| `OUTLOOK_MCP_CONTACTS_ENABLED` | `true` | Registers the fifth aggregate tool, `contacts`, with its read verbs (`contacts.search`, `contacts.get_contact`, `contacts.list_people`, `contacts.get_person`) and the mandatory `contacts.help`; requests `Contacts.Read` and `People.Read` |
+| `OUTLOOK_MCP_CONTACTS_ENABLED` | `true` | Registers the opt-in aggregate tool `contacts` with its read verbs (`contacts.search`, `contacts.get_contact`, `contacts.list_people`, `contacts.get_person`) and the mandatory `contacts.help`; requests `Contacts.Read` and `People.Read` |
 
 Both scopes are read scopes. No contact write scope (`Contacts.ReadWrite`) is requested under any configuration, and the domain registers no verb that creates, updates, deletes, or moves a contact, person, or folder. Enabling contacts for the first time triggers an incremental consent prompt.
 
+## Teams gating
+
+The `teams` domain is off by default, the second of the two opt-in aggregate tools. It reads Microsoft Teams conversations and meeting transcripts and writes nothing: it registers no verb that sends, posts, edits, or deletes a message, and no Teams send or write scope is requested in any configuration.
+
+| Variable | Value | Effect |
+|---|---|---|
+| `OUTLOOK_MCP_TEAMS_ENABLED` | `false` (default) | The `teams` tool is not registered; no Teams OAuth scope is requested |
+| `OUTLOOK_MCP_TEAMS_ENABLED` | `true` | Registers the opt-in aggregate tool `teams` with its read verbs (`teams.search`, `teams.list_chats`, `teams.list_chat_messages`, `teams.get_chat_message`, `teams.list_chat_message_replies`, `teams.list_channel_messages`, `teams.get_channel_message`, `teams.list_channel_message_replies`, `teams.compose_reply`, `teams.get_online_meeting`, `teams.list_transcripts`, `teams.get_transcript`) and the mandatory `teams.help`; requests `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` |
+
+All four scopes are read scopes. `teams.compose_reply` is named for what it does: it reads the message being answered, quotes it, and hands the prepared text back to the caller. Posting that text is a manual action the user performs in Microsoft Teams; the server cannot post it, because it never holds a send scope.
+
+Enumerating teams and channels is not offered. A channel is reached by searching for a message in it, and every channel read is addressed by a team identifier and a channel identifier together, both carried by a search hit. Transcript reads are keyed by a meeting-scoped identifier that a calendar event does not carry, so `teams.get_online_meeting` resolves the event's join URL to it first. Enabling Teams for the first time triggers an incremental consent prompt.
+
 ## Tool annotation semantics
 
-The four default aggregate tools (`calendar`, `mail`, `account`, `system`), and the opt-in `contacts` tool when it is registered, each publish the five MCP annotations (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) at tool granularity. Because a single tool hosts many verbs whose individual classifications differ, each aggregate annotation is computed as a **conservative fold** over the verbs actually registered in the running configuration, not hard-coded:
+The four default aggregate tools (`calendar`, `mail`, `account`, `system`), and the opt-in `contacts` and `teams` tools when they are registered, each publish the five MCP annotations (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) at tool granularity. Because a single tool hosts many verbs whose individual classifications differ, each aggregate annotation is computed as a **conservative fold** over the verbs actually registered in the running configuration, not hard-coded:
 
 - `readOnlyHint` is `true` only when **every** registered verb is read-only.
 - `destructiveHint` is `true` when **at least one** registered verb is destructive.
@@ -125,7 +138,7 @@ The server requests scopes incrementally. Expanding mail access after initial co
 | `OUTLOOK_MCP_CONTACTS_ENABLED=true` | `Contacts.Read`, `People.Read` |
 | Refresh tokens (always) | `offline_access` (added automatically by the identity library) |
 
-`Mail.Send` is never requested under any configuration, and neither is `Contacts.ReadWrite`.
+`Mail.Send` is never requested under any configuration, and neither is `Contacts.ReadWrite` nor any Teams send or write scope.
 
 ## Well-known client IDs
 
@@ -173,7 +186,7 @@ The server ships as an OCI container image at `ghcr.io/desek/outlook-local-mcp`.
 
 Running inside a container supports the full feature set over stdio:
 
-- All four default aggregate domain tools: `calendar`, `mail`, `account`, `system`, plus the opt-in `contacts` tool when `OUTLOOK_MCP_CONTACTS_ENABLED` is set
+- All four default aggregate domain tools: `calendar`, `mail`, `account`, `system`, plus the opt-in `contacts` tool when `OUTLOOK_MCP_CONTACTS_ENABLED` is set and the opt-in `teams` tool when `OUTLOOK_MCP_TEAMS_ENABLED` is set
 - Microsoft Graph API access (ca-certs are included in every variant)
 - Multi-account support with file-backed token storage
 - Observability: structured logs written to stderr, OpenTelemetry metrics and traces

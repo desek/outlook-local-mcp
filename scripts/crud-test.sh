@@ -94,7 +94,7 @@ SHA="$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
 WALL_S="$(awk '/^real/ {print $2}' "$TIMEFILE")"
 
 if [[ ! -s "$CSV" ]]; then
-  echo "run_ts,branch,sha,model,thinking,wall_s,duration_ms,duration_api_ms,num_turns,total_cost_usd,input_tokens,output_tokens,cache_creation_input_tokens,cache_read_input_tokens,is_error,mcp_calendar,mcp_mail,mcp_account,mcp_system,mcp_contacts,bash,read,write,tool_other" > "$CSV"
+  echo "run_ts,branch,sha,model,thinking,wall_s,duration_ms,duration_api_ms,num_turns,total_cost_usd,input_tokens,output_tokens,cache_creation_input_tokens,cache_read_input_tokens,is_error,mcp_calendar,mcp_mail,mcp_account,mcp_system,mcp_contacts,mcp_teams,bash,read,write,tool_other" > "$CSV"
 fi
 
 # Tool-call counts per bucket (mcp__outlook-local-mcp__{domain} + common built-ins).
@@ -106,7 +106,7 @@ fi
 #   2. add a matching pattern and counter to the awk block below,
 #   3. add the counter to the read/printf pair and to the jq output array.
 # Removing a domain requires pruning all three.
-read -r MCP_CAL MCP_MAIL MCP_ACC MCP_SYS MCP_CONTACTS T_BASH T_READ T_WRITE T_OTHER < <(
+read -r MCP_CAL MCP_MAIL MCP_ACC MCP_SYS MCP_CONTACTS MCP_TEAMS T_BASH T_READ T_WRITE T_OTHER < <(
   jq -r 'select(.type=="assistant") | .message.content[]? | select(.type=="tool_use") | .name' "$STREAM" \
   | awk '
     { total++ }
@@ -115,18 +115,19 @@ read -r MCP_CAL MCP_MAIL MCP_ACC MCP_SYS MCP_CONTACTS T_BASH T_READ T_WRITE T_OT
     /^mcp__outlook-local-mcp__account$/  { acc++;  next }
     /^mcp__outlook-local-mcp__system$/   { sys++;  next }
     /^mcp__outlook-local-mcp__contacts$/ { con++;  next }
+    /^mcp__outlook-local-mcp__teams$/    { team++; next }
     /^Bash$/  { bash++;  next }
     /^Read$/  { read_++; next }
     /^Write$/ { write++; next }
     { other++ }
-    END { printf "%d %d %d %d %d %d %d %d %d\n", cal+0, mail+0, acc+0, sys+0, con+0, bash+0, read_+0, write+0, other+0 }
+    END { printf "%d %d %d %d %d %d %d %d %d %d\n", cal+0, mail+0, acc+0, sys+0, con+0, team+0, bash+0, read_+0, write+0, other+0 }
   '
 )
 
 jq -r --arg ts "$RUN_TS" --arg branch "$BRANCH" --arg sha "$SHA" \
   --arg model "$MODEL" --arg thinking "$THINKING" --arg wall "$WALL_S" \
   --arg cal "$MCP_CAL" --arg mail "$MCP_MAIL" --arg acc "$MCP_ACC" --arg sys "$MCP_SYS" \
-  --arg contacts "$MCP_CONTACTS" \
+  --arg contacts "$MCP_CONTACTS" --arg teams "$MCP_TEAMS" \
   --arg bash "$T_BASH" --arg read "$T_READ" --arg write "$T_WRITE" --arg other "$T_OTHER" '
   select(.type=="result") |
   [$ts, $branch, $sha, $model, $thinking, $wall,
@@ -134,7 +135,7 @@ jq -r --arg ts "$RUN_TS" --arg branch "$BRANCH" --arg sha "$SHA" \
    .usage.input_tokens, .usage.output_tokens,
    .usage.cache_creation_input_tokens, .usage.cache_read_input_tokens,
    .is_error,
-   ($cal|tonumber), ($mail|tonumber), ($acc|tonumber), ($sys|tonumber), ($contacts|tonumber),
+   ($cal|tonumber), ($mail|tonumber), ($acc|tonumber), ($sys|tonumber), ($contacts|tonumber), ($teams|tonumber),
    ($bash|tonumber), ($read|tonumber), ($write|tonumber), ($other|tonumber)] | @csv
 ' "$STREAM" >> "$CSV"
 

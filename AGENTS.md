@@ -79,7 +79,7 @@ All MCP tools **MUST** be registered in `extension/manifest.json` under the `too
 
 ## Tool Naming Convention
 
-As of CR-0060 (v0.6.0) the MCP surface is four aggregate domain tools by default, plus an opt-in fifth (`contacts`) registered only when `OUTLOOK_MCP_CONTACTS_ENABLED` is set, each dispatched by a required `operation` verb. New work **MUST** add a verb to the appropriate domain registry, not a new top-level MCP tool.
+As of CR-0060 (v0.6.0) the MCP surface is four aggregate domain tools by default, plus two opt-in ones registered only when their variable is set, `contacts` under `OUTLOOK_MCP_CONTACTS_ENABLED` and `teams` under `OUTLOOK_MCP_TEAMS_ENABLED`, each dispatched by a required `operation` verb. New work **MUST** add a verb to the appropriate domain registry, not a new top-level MCP tool.
 
 Aggregate tools and their domains:
 
@@ -88,6 +88,7 @@ Aggregate tools and their domains:
 * `account` -- Account management verbs
 * `system` -- Server-level and diagnostic verbs
 * `contacts` -- Contact and people read verbs; opt-in, registered only under `OUTLOOK_MCP_CONTACTS_ENABLED`
+* `teams` -- Microsoft Teams message and meeting transcript read verbs; opt-in, registered only under `OUTLOOK_MCP_TEAMS_ENABLED`
 
 The current verb inventory of a domain is the registry's to state, not this
 file's: invoke `operation="help"` on the domain.

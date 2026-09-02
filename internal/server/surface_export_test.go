@@ -20,12 +20,12 @@ import (
 // when it is closed and would otherwise be absent from the assertion. Opening a
 // gate reads no credential, so the property under test is unaffected.
 func TestBuildVerbsRequiresNoCredentials(t *testing.T) {
-	// No client, no accounts, no credentials; only the contacts gate is open.
-	cfg := config.Config{ContactsEnabled: true}
+	// No client, no accounts, no credentials; only the opt-in read gates are open.
+	cfg := config.Config{ContactsEnabled: true, TeamsEnabled: true}
 
 	sets := BuildVerbsForInspection(cfg)
 
-	for _, domain := range []string{"calendar", "account", "system", "mail", "contacts"} {
+	for _, domain := range []string{"calendar", "account", "system", "mail", "contacts", "teams"} {
 		verbs, ok := sets[domain]
 		if !ok {
 			t.Errorf("missing domain %q in inspection result", domain)

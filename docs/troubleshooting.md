@@ -226,7 +226,7 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 **Remediation:**
 
 1. Set `OUTLOOK_MCP_CONTACTS_ENABLED=true` in the server's environment configuration and restart the server.
-2. Verify with `{tool: "system", args: {operation: "status", output: "summary"}}` and check `config.features.contacts_enabled`, or list tools in the client: five tools should be present, the fifth named `contacts`. `{tool: "contacts", args: {operation: "help"}}` returns the verb list and needs no authentication.
+2. Verify with `{tool: "system", args: {operation: "status", output: "summary"}}` and check `config.features.contacts_enabled`, or list tools in the client: a tool named `contacts` should be present alongside the four default ones. `{tool: "contacts", args: {operation: "help"}}` returns the verb list and needs no authentication.
 3. If the tool is still missing, confirm the variable reached the server process rather than only the shell: environment variables set in a Claude Desktop or Claude Code configuration file take effect only after the client restarts the server.
 
 **Note:** `system.status` does not report a contacts feature flag. The presence of the `contacts` tool in the tool list is the check.
@@ -247,6 +247,52 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 4. In a work or school tenant where user consent is restricted, the sign-in ends in an administrator-approval message. Ask an administrator to grant the two delegated read scopes, or unset the flag to return to the previous scope set.
 
 **Note:** Turning the flag back off does not revoke consent already granted. It stops the scopes being requested and removes the tool; revoke the grant in the account's Microsoft app-permissions page if that is the intent.
+
+---
+
+## Teams tool not listed {#teams-disabled}
+
+**Symptom:** The client's tool list does not include `teams`, and a call to `{tool: "teams", ...}` fails with an unknown-tool error rather than an unknown-operation error.
+
+**Cause:** `OUTLOOK_MCP_TEAMS_ENABLED` is not set (default is `false`). The whole `teams` tool is registered only when the flag is set, because every Teams verb needs a scope the default configuration does not request. An absent tool is the expected default state, not a fault. See [Teams gating](concepts#teams-gating).
+
+**Remediation:**
+
+1. Set `OUTLOOK_MCP_TEAMS_ENABLED=true` in the server's environment configuration and restart the server.
+2. Verify with `{tool: "system", args: {operation: "status", output: "summary"}}` and check `config.features.teams_enabled`. `{tool: "teams", args: {operation: "help"}}` returns the verb list and needs no authentication.
+3. If the tool is still missing, confirm the variable reached the server process rather than only the shell: environment variables set in a Claude Desktop or Claude Code configuration file take effect only after the client restarts the server.
+4. Expect a sign-in prompt on the first call after enabling: four read scopes are added to the requested set and consent is incremental. `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` are the only Teams scopes this server ever requests; if a consent screen names a send or write scope, the prompt is not coming from this server. In a work or school tenant where user consent is restricted, the sign-in ends in an administrator-approval message and an administrator must grant the four delegated read scopes.
+
+**Note:** Nothing in the domain sends, posts, edits, or deletes a Teams message. `teams.compose_reply` returns prepared text for the user to paste; it posts nothing.
+
+---
+
+## Teams meeting or transcript not resolved {#teams-meeting-unresolved}
+
+**Symptom:** `{tool: "teams", args: {operation: "get_online_meeting", ...}}` is refused for naming neither or both of `meeting_id` and `join_web_url`, resolves a join URL to no meeting, or a following `list_transcripts` or `get_transcript` call reports the meeting identifier is unusable.
+
+**Cause:** Transcript reads are keyed by a meeting-scoped identifier that a calendar event does not carry. An event carries the meeting's join URL, so the identifier is obtained by resolving that URL first. A join URL resolves only for a meeting in the signed-in account's own tenant, and only exactly one identifier may be supplied, because there is no unfiltered meeting listing to fall back on.
+
+**Remediation:**
+
+1. Read the event with `{tool: "calendar", args: {operation: "get_event", ...}}` and take the complete `https` join link it carries, not a fragment of it.
+2. Resolve it with `{tool: "teams", args: {operation: "get_online_meeting", join_web_url: "<the join URL>"}}`, supplying `join_web_url` or `meeting_id` but never both.
+3. Use the returned meeting identifier for `list_transcripts`, then read one transcript with `get_transcript`. The full WEBVTT text is returned only under `output: "raw"`.
+4. If the URL still resolves to nothing, confirm the event belongs to this account. A meeting organised on another tenant is not resolvable here, and a meeting that was never recorded with transcription on holds no transcript to list.
+
+---
+
+## Teams channel read is missing an identifier {#teams-channel-identifiers}
+
+**Symptom:** `{tool: "teams", args: {operation: "list_channel_messages", ...}}`, `get_channel_message`, `list_channel_message_replies`, or a channel-shaped `compose_reply` is refused before any request is issued, with an error naming `team_id` or `channel_id`.
+
+**Cause:** A channel is addressed by a team identifier and a channel identifier together; neither alone identifies it. This server offers no verb that enumerates joined teams or their channels, so the pair is not obtained by browsing.
+
+**Remediation:**
+
+1. Locate a message in the channel with `{tool: "teams", args: {operation: "search", query: "<text from the channel>"}}`. Each channel hit carries the `teamId` and `channelId` the channel reads require, alongside the message `id`.
+2. Pass both identifiers on every channel call, and the message `id` as `message_id` where the verb also names one.
+3. For a chat rather than a channel, use `chat_id` instead: `list_chats` returns it, as does the `chatId` of a chat search hit. `compose_reply` takes `chat_id` or both `team_id` and `channel_id`, never a mixture of the two shapes.
 
 ---
 

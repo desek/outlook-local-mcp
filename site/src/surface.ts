@@ -34,7 +34,7 @@ export interface SurfaceVerb {
 /**
  * SurfaceDomain is one aggregate MCP tool and its verbs.
  *
- * @property name  The domain (aggregate tool) name: calendar, mail, account, system, or the opt-in contacts.
+ * @property name  The domain (aggregate tool) name: calendar, mail, account, system, or one of the opt-in contacts and teams.
  * @property verbs  The ordered verbs the domain registers.
  * @property fullCount  Verbs exposed with every gate open.
  * @property defaultCount  Verbs exposed under the default configuration.
