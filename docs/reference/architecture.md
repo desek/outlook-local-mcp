@@ -75,7 +75,7 @@ internal/
   buildinfo/      Build identity and host environment snapshot (consumed by system.about; see CR-0067)
   server/         RegisterTools, ReadOnlyGuard, AwaitShutdownSignal, BuildVerbsForInspection
   surface/        Code-derived surface record and its deterministic serialization (consumed by cmd/gen-surface; see CR-0073)
-  tools/          4 aggregate domain tools dispatching verb sets
+  tools/          4 default aggregate domain tools plus the opt-in contacts and teams tools, dispatching verb sets
   docs/           Catalog, search, llms.txt; consumes docs.Bundle from docs/embed.go
 ```
 
@@ -264,6 +264,7 @@ Every `OUTLOOK_MCP_` variable name is spelled exactly once, as an `Env*` constan
 | `OUTLOOK_MCP_LOG_FILE` | *(empty)* | Optional file path for persistent log output. When set, log records are written to both stderr and the file via a `MultiHandler`. File is opened append-mode with `0600` permissions. See CR-0023. |
 | `OUTLOOK_MCP_MAIL_ENABLED` | `false` | Enable read-only mail access. When `true`, adds `Mail.Read` OAuth scope and registers mail verbs. See CR-0043. |
 | `OUTLOOK_MCP_CONTACTS_ENABLED` | `false` | Enable the opt-in read-only `contacts` domain. When `true`, adds the `Contacts.Read` and `People.Read` OAuth scopes and registers a fifth top-level tool; when `false` the tool is not registered at all, unlike `mail`, which is always registered and gates its verbs. No contact write scope is requested in any configuration. |
+| `OUTLOOK_MCP_TEAMS_ENABLED` | `false` | Enable the opt-in read-only `teams` domain. When `true`, adds the `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` OAuth scopes and registers a sixth top-level tool; when `false` the tool is not registered at all. No Teams send or write scope is requested in any configuration, and no verb in the domain posts a message: `teams.compose_reply` returns prepared text for the user to send by hand. |
 | `OUTLOOK_MCP_PROVENANCE_TAG` | `com.github.desek.outlook-local-mcp.created` | Name for the provenance extended property stamped on MCP-created events. Combined with a dedicated GUID to form the full MAPI property ID. Set to empty string to disable provenance tagging entirely. See CR-0040. |
 
 ---

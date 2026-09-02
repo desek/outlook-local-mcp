@@ -241,6 +241,8 @@ Parameters: `query` (required), `account`, `output`. Each hit names the chat, or
 **Compose a reply** without sending one:
 > "Draft a reply to that message quoting what Sam asked"
 
+Parameters: `body` (required, the reply text), `message_id` (required), plus `chat_id` for a chat message or both `team_id` and `channel_id` for a channel post, and optional `account`. It takes no `output` parameter, because it projects no Graph resource.
+
 `compose_reply` reads the parent message, quotes it, and returns prepared text. It posts nothing: no Teams send scope is requested in any configuration, so pasting the reply into Microsoft Teams is a step the user takes. Every other Teams verb reads. See [Teams gating](concepts#teams-gating).
 
 ## 5. Configuration

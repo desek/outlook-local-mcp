@@ -27,7 +27,7 @@ outlook-mcp/
     observability/             # OpenTelemetry metrics and tracing, WithObservability middleware
     buildinfo/                 # Build identity and host environment snapshot (system.about; CR-0067)
     server/                    # RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
-    tools/                     # The 4 default aggregate domain tools, the opt-in contacts tool, and their verb registries
+    tools/                     # The 4 default aggregate domain tools, the opt-in contacts and teams tools, and their verb registries
   docs/
     ...
 ```
