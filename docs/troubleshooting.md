@@ -233,22 +233,43 @@ The usual source of the wrong identifier is a `list_messages` or `search_message
 
 **Note:** To put a file on a message that is already sent, forward it with `create_forward_draft` and attach to the forward draft.
 
+**Note:** This restriction is a mail one. A calendar event accepts an attachment at any point in its life through `{tool: "calendar", args: {operation: "add_event_attachment", ...}}`, and attaching a file to an event does not notify its attendees.
+
 ---
 
 ## Attachment upload did not complete {#attachment-upload-did-not-complete}
 
-**Symptom:** `add_attachment` fails on a large file with a transfer error, or with a request timeout, and the attachment does not appear on the draft. Small files attach normally.
+**Symptom:** `add_attachment` on a mail draft, or `add_event_attachment` on a calendar event, fails on a large file with a transfer error, or with a request timeout, and the attachment does not appear on the draft or the event. Small files attach normally.
 
-**Cause:** Above roughly 3 MB the file is transferred as a chunked upload session rather than a single request, so it is exposed to a longer window in which the connection can drop, the request timeout can elapse, or the service-side session can expire. A session that does not complete is reported as a failure, never as a partial success: no half-written attachment is left behind, and the draft is unchanged.
+**Cause:** Both write paths choose their transfer the same way. Above roughly 3 MB the file is transferred as a chunked upload session rather than a single request, so it is exposed to a longer window in which the connection can drop, the request timeout can elapse, or the service-side session can expire. A session that does not complete is reported as a failure, never as a partial success: no half-written attachment is left behind, and the draft or event is unchanged. The confirmation of a successful call names the path it used, so a call that reported `Transfer: chunked upload session` is the one this entry describes.
 
 The upload URL the service issues carries a pre-authenticated token, so it is redacted from every error. An error that names `[upload URL redacted]` is this failure mode, not a configuration problem.
 
 **Remediation:**
 
 1. Retry the call. A dropped or expired session is not resumable, but a retry starts a fresh session and the earlier failure leaves nothing to clean up.
-2. Confirm the draft is unchanged with `{tool: "mail", args: {operation: "list_attachments", message_id: "<draft id>"}}` before retrying, so a successful upload reported as a timeout is not duplicated.
+2. Confirm the target is unchanged before retrying, so a successful upload reported as a timeout is not duplicated: `{tool: "mail", args: {operation: "list_attachments", message_id: "<draft id>"}}` for a draft, `{tool: "calendar", args: {operation: "list_event_attachments", event_id: "<event id>"}}` for an event.
 3. On a timeout, raise `OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS` and restart the server; a large file on a slow link can need more than the default.
-4. Prefer a smaller file where the content allows it. The upper bound is `OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES`, and a file above it is refused before any transfer starts, with an error naming the measured size and the bound.
+4. Prefer a smaller file where the content allows it. The upper bound is `OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES`, which governs both domains, and a file above it is refused before any transfer starts, with an error naming the measured size and the bound.
+
+**Note:** No verb removes an attachment in either domain, so a duplicate left by a retry has to be deleted from Outlook directly. Checking the target first, as in step 2, is what avoids that.
+
+---
+
+## Event not found {#event-not-found}
+
+**Symptom:** A calendar verb taking an `event_id` (`get_event`, `update_event`, `reschedule_event`, `list_event_attachments`, `get_event_attachment`, `add_event_attachment`) fails with a Graph `ErrorItemNotFound` or `ErrorInvalidIdMalformed`, and nothing is read or written.
+
+**Cause:** `event_id` does not resolve to an event on the signed-in mailbox. The usual sources are a stale identifier from a conversation held before the event was deleted or moved between calendars, an identifier taken from a different account than the one the call names, or a value that is not an event identifier at all, such as a subject line. An identifier that is not well-formed is refused before any request is issued; one that is well-formed but no longer resolves is refused by the service.
+
+An event attachment adds a second identifier with the same failure shape: `attachment_id` is scoped to one event, so an identifier read from one event does not resolve on another.
+
+**Remediation:**
+
+1. Re-resolve the event rather than reusing an identifier from earlier in the conversation: `{tool: "calendar", args: {operation: "search_events", query: "<subject>"}}` or `{tool: "calendar", args: {operation: "list_events", start_datetime: "...", end_datetime: "..."}}`, and use the `id` those return.
+2. If the call names an `account`, resolve the event under that same account. Event identifiers do not transfer between mailboxes.
+3. For an attachment, re-read the identifier from `{tool: "calendar", args: {operation: "list_event_attachments", event_id: "<event id>"}}` on the same event you are downloading from.
+4. If the event genuinely no longer exists, create it again rather than retrying; a deleted event's identifier never resolves after deletion.
 
 ---
 

@@ -955,7 +955,7 @@ func buildListEventAttachmentsVerb(c calendarVerbsConfig, rc graph.RetryConfig, 
 			{Args: map[string]any{"event_id": "AAMkAGI2..."}, Comment: "list what is attached to an event"},
 			{Args: map[string]any{"event_id": "AAMkAGI2...", "output": "raw"}, Comment: "read the full attachment metadata as structured JSON"},
 		},
-		SeeDocs: []string{"concepts#output-tiers"},
+		SeeDocs: []string{"concepts#output-tiers", "troubleshooting#event-not-found"},
 		Handler: wrap("calendar.list_event_attachments", "read", tools.NewHandleListEventAttachments(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -994,7 +994,7 @@ func buildGetEventAttachmentVerb(c calendarVerbsConfig, rc graph.RetryConfig, wr
 			{Args: map[string]any{"event_id": "AAMkAGI2...", "attachment_id": "AAMkAGI2ZGY..."}, Comment: "download an attachment of an event"},
 			{Args: map[string]any{"event_id": "AAMkAGI2...", "attachment_id": "AAMkAGI2ZGY...", "output": "raw"}, Comment: "read the attachment and its metadata as structured JSON"},
 		},
-		SeeDocs: []string{"concepts#output-tiers"},
+		SeeDocs: []string{"concepts#output-tiers", "troubleshooting#event-not-found"},
 		Handler: wrap("calendar.get_event_attachment", "read", tools.NewHandleGetEventAttachment(rc, c.timeout, c.maxAttachmentSize)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -1040,7 +1040,7 @@ func buildAddEventAttachmentVerb(c calendarVerbsConfig, rc graph.RetryConfig, wr
 			{Args: map[string]any{"event_id": "AAMkAGI2...", "name": "agenda.pdf", "content_bytes": "JVBERi0xLjQK...", "mime_type": "application/pdf"}, Comment: "attach a PDF agenda to a meeting"},
 			{Args: map[string]any{"event_id": "AAMkAGI2...", "name": "notes.txt", "content_bytes": "aGVsbG8gd29ybGQ="}, Comment: "attach a small file without naming its MIME type"},
 		},
-		SeeDocs: []string{"concepts#read-only-mode"},
+		SeeDocs: []string{"concepts#read-only-mode", "troubleshooting#event-not-found", "troubleshooting#attachment-upload-did-not-complete"},
 		Handler: wrapWrite("calendar.add_event_attachment", "write", tools.NewHandleAddEventAttachment(rc, c.timeout, c.maxAttachmentSize)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(false),

@@ -140,6 +140,25 @@ Optional: `body`, `location`, `attendees` (JSON array), `is_online_meeting`, `is
 
 Required: `event_id`. All other fields are optional.
 
+### Attachments
+
+The files clipped to an event are reachable by the same `event_id` the reads above return. No opt-in flag governs them: an event attachment is calendar data.
+
+**List event attachments** -- metadata only, no file content:
+> "What is attached to the design review invite?"
+
+Parameters: `event_id` (required), `account`, `output`.
+
+**Get event attachment** -- the file's bytes, base64 encoded:
+> "Read the agenda attached to that meeting"
+
+Parameters: `event_id` (required), `attachment_id` (required, from the list above), `account`, `output`. The content is returned only within `OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES` (10 MB by default); a larger attachment is refused rather than truncated.
+
+**Add event attachment** -- attach a file to an existing event:
+> "Attach this PDF to tomorrow's team meeting"
+
+Required: `event_id`, `name`, `content_bytes` (base64). Optional: `mime_type` (defaults to `application/octet-stream`), `account`. A small file goes in one request and a file above roughly 3 MB through a chunked upload session; the confirmation names the path used, the attachment identifier the service assigned, and the size measured after decoding. Attaching a file does not notify attendees. This is a write verb, so read-only mode refuses it -- see [Attachment upload did not complete](troubleshooting#attachment-upload-did-not-complete) if a large file fails to land.
+
 ### Delete
 
 **Delete event**:
