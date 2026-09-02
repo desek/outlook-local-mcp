@@ -32,6 +32,7 @@ For full setup instructions including Claude Desktop and Claude Code configurati
 - **Mail draft management** (opt-in, `MAIL_MANAGE_ENABLED=true`) -- compose new drafts, reply drafts, and forward drafts that land in Outlook Drafts for manual review and send; email is never sent automatically
 - **Draft attachments** (same opt-in, `MAIL_MANAGE_ENABLED=true`) -- attach a file to a draft with `add_attachment`, supplying the bytes as base64. The transfer path is chosen for you: a single request for a small file, a chunked upload session above roughly 3 MB. The confirmation names the attachment identifier the service assigns. Only drafts accept an attachment, and the upper size bound is `MAX_ATTACHMENT_SIZE_BYTES`
 - **Received-message management** (same opt-in, `MAIL_MANAGE_ENABLED=true`) -- act on a message already in the mailbox: move it to another folder, set or clear its follow-up flag, replace its categories, and mark it read or unread. A move returns the message's new identifier, because moving mints a new one and the original stops resolving
+- **Contacts resolution** (opt-in, `CONTACTS_ENABLED=true`) -- turn a name into an email address before drafting mail or inviting an attendee. Registers a fifth, read-only `contacts` tool that searches saved personal contacts and relevance-ranked people together, labelling each match by its source, and fetches either kind by identifier. No contact is created, changed, or deleted, and no contact write scope is requested
 - **Read-only mode** -- disable all writes via `READ_ONLY=true`
 - **In-server documentation access** -- the LLM can look up docs and troubleshoot without leaving the session (see below)
 - **MCP tool annotations** -- full annotation set for Anthropic Software Directory compliance
@@ -86,6 +87,7 @@ All settings use environment variables prefixed with `OUTLOOK_MCP_`. Key variabl
 | `READ_ONLY` | `false` | Disable write operations |
 | `MAIL_ENABLED` | `false` | Enable read-only mail access |
 | `MAIL_MANAGE_ENABLED` | `false` | Enable draft management, draft attachments, and received-message management (implies `MAIL_ENABLED`) |
+| `CONTACTS_ENABLED` | `false` | Register the opt-in `contacts` tool for read-only name-to-address resolution; requests `Contacts.Read` and `People.Read` |
 | `MAX_ATTACHMENT_SIZE_BYTES` | `10485760` | Attachment size ceiling for every direction and both domains: `get_attachment`, `add_attachment`, `get_event_attachment`, and `add_event_attachment` |
 | `LOG_LEVEL` | `warn` | `debug`, `info`, `warn`, `error` |
 | `LOG_FILE` | *(disabled)* | File path for persistent log output |

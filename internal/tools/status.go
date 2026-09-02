@@ -230,6 +230,10 @@ type statusConfigFeatures struct {
 	// this flag is set (see CR-0058).
 	MailManageEnabled bool `json:"mail_manage_enabled"`
 
+	// ContactsEnabled indicates whether the opt-in contacts domain (Contacts.Read,
+	// People.Read) is registered; the contacts tool is absent when false.
+	ContactsEnabled bool `json:"contacts_enabled"`
+
 	// ProvenanceTag is the extended property name for MCP-created events.
 	ProvenanceTag string `json:"provenance_tag"`
 }
@@ -327,6 +331,7 @@ func HandleStatus(cfg config.Config, registry *auth.AccountRegistry, startTime t
 					ReadOnly:          cfg.ReadOnly,
 					MailEnabled:       cfg.MailEnabled,
 					MailManageEnabled: cfg.MailManageEnabled,
+					ContactsEnabled:   cfg.ContactsEnabled,
 					ProvenanceTag:     cfg.ProvenanceTag,
 				},
 				Observability: statusConfigObservability{

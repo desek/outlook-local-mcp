@@ -171,6 +171,42 @@ Parameters: `event_id` (required). Cancellation notices are sent to attendees au
 
 Parameters: `event_id` (required), `comment` (optional cancellation message). Only the organizer can cancel.
 
+### Contacts (opt-in)
+
+The verbs above take email addresses, never names. The `contacts` tool supplies the address, and it is the one tool that is absent unless asked for: set `OUTLOOK_MCP_CONTACTS_ENABLED=true` in the server's environment and restart the client.
+
+```json
+{
+  "mcpServers": {
+    "outlook-local": {
+      "command": "/absolute/path/to/outlook-local-mcp",
+      "env": {
+        "OUTLOOK_MCP_CONTACTS_ENABLED": "true"
+      }
+    }
+  }
+}
+```
+
+Enabling it adds the `Contacts.Read` and `People.Read` scopes, so the next tool call re-runs the sign-in flow once for incremental consent -- see [Contacts consent prompt on first use](troubleshooting#contacts-consent). If the tool does not appear, see [Contacts tool not listed](troubleshooting#contacts-disabled).
+
+**Search** across saved contacts and relevance-ranked people at once:
+> "What is Alex's email address?"
+
+Parameters: `query` (required), `account`, `output`. Each match is labelled with its source, a contact you saved or a person Graph inferred from your correspondence, so you can judge how much to trust it.
+
+**Get contact** and **get person** fetch one full record by the identifier a search returned:
+> "Show me the full contact record for that Alex"
+
+Parameters: `contact_id` or `person_id` (required), `account`, `output`.
+
+**List people** returns your correspondents in Graph's relevance order, most relevant first:
+> "Who do I email most?"
+
+Parameters: `account`, `output`.
+
+Every contacts verb reads. Nothing in the domain creates, changes, or deletes a contact, and no contact write scope is ever requested. See [Contacts gating](concepts#contacts-gating).
+
 ## 5. Configuration
 
 All environment variables are prefixed with `OUTLOOK_MCP_`:
@@ -182,6 +218,7 @@ All environment variables are prefixed with `OUTLOOK_MCP_`:
 | `DEFAULT_TIMEZONE` | `UTC` | IANA timezone for calendar operations |
 | `LOG_LEVEL` | `warn` | Log level: `debug`, `info`, `warn`, `error` |
 | `READ_ONLY` | `false` | Disable write tools (create, update, delete, cancel) |
+| `CONTACTS_ENABLED` | `false` | Register the opt-in read-only `contacts` tool; requests `Contacts.Read` and `People.Read` |
 | `LOG_FORMAT` | `json` | Log format: `json` or `text` |
 | `LOG_SANITIZE` | `true` | Mask PII in log output |
 | `LOG_FILE` | *(empty = disabled)* | Log file path for persistent file output |
@@ -210,7 +247,7 @@ Fetch a document or a specific section by heading anchor:
 {tool: "system", args: {operation: "get_docs", slug: "troubleshooting", section: "keychain-locked"}}
 ```
 
-The embedded bundle contains `readme`, `quickstart`, and `troubleshooting`. Each document is also exposed as an MCP resource at `doc://outlook-local-mcp/{slug}` for clients that support `resources/list` and `resources/read`. Run `system.status` to discover the base URI and the troubleshooting slug. See CR-0061 for implementation details.
+The embedded bundle contains `readme`, `quickstart`, `concepts`, and `troubleshooting`. Each document is also exposed as an MCP resource at `doc://outlook-local-mcp/{slug}` for clients that support `resources/list` and `resources/read`. Run `system.status` to discover the base URI and the troubleshooting slug.
 
 ## Container deployment {#container-deployment}
 

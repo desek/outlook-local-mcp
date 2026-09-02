@@ -217,6 +217,39 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 
 ---
 
+## Contacts tool not listed {#contacts-disabled}
+
+**Symptom:** The client's tool list shows only `calendar`, `mail`, `account`, and `system`, and a call to `{tool: "contacts", ...}` fails with an unknown-tool error rather than an unknown-operation error.
+
+**Cause:** `OUTLOOK_MCP_CONTACTS_ENABLED` is not set (default is `false`). Unlike `mail`, which is always registered and gates its verbs, the whole `contacts` tool is registered only when the flag is set, because every contacts verb needs a scope the default configuration does not request. An absent tool is the expected default state, not a fault. See [Contacts gating](concepts#contacts-gating).
+
+**Remediation:**
+
+1. Set `OUTLOOK_MCP_CONTACTS_ENABLED=true` in the server's environment configuration and restart the server.
+2. Verify with `{tool: "system", args: {operation: "status", output: "summary"}}` and check `config.features.contacts_enabled`, or list tools in the client: five tools should be present, the fifth named `contacts`. `{tool: "contacts", args: {operation: "help"}}` returns the verb list and needs no authentication.
+3. If the tool is still missing, confirm the variable reached the server process rather than only the shell: environment variables set in a Claude Desktop or Claude Code configuration file take effect only after the client restarts the server.
+
+**Note:** `system.status` does not report a contacts feature flag. The presence of the `contacts` tool in the tool list is the check.
+
+---
+
+## Contacts consent prompt on first use {#contacts-consent}
+
+**Symptom:** After enabling `OUTLOOK_MCP_CONTACTS_ENABLED=true`, the next tool call, including a calendar or mail call, opens a Microsoft sign-in page asking to approve permissions the account has already approved before.
+
+**Cause:** Enabling contacts adds `Contacts.Read` and `People.Read` to the requested scope set. Consent is incremental, so the cached token no longer covers the requested scopes and the configured authentication flow runs again. The consent screen lists the previously granted scopes alongside the two new ones; that is the identity platform restating the full set, not a request for anything wider.
+
+**Remediation:**
+
+1. Complete the sign-in once. The refreshed token covers the new scope set and subsequent calls authenticate silently.
+2. Confirm what was requested in the server's startup log record `graph client initialized`, whose `scopes` field names every requested scope.
+3. Expect exactly `Contacts.Read` and `People.Read` to be added. `Contacts.ReadWrite` is never requested; if a consent screen names it, the prompt is not coming from this server.
+4. In a work or school tenant where user consent is restricted, the sign-in ends in an administrator-approval message. Ask an administrator to grant the two delegated read scopes, or unset the flag to return to the previous scope set.
+
+**Note:** Turning the flag back off does not revoke consent already granted. It stops the scopes being requested and removes the tool; revoke the grant in the account's Microsoft app-permissions page if that is the intent.
+
+---
+
 ## Attachment target is not a draft {#attachment-target-not-a-draft}
 
 **Symptom:** `{tool: "mail", args: {operation: "add_attachment", ...}}` fails with `message is not a draft: this tool only operates on messages with isDraft=true`, and nothing is attached.

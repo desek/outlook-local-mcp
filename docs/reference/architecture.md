@@ -263,6 +263,7 @@ Every `OUTLOOK_MCP_` variable name is spelled exactly once, as an `Env*` constan
 | `OUTLOOK_MCP_LOG_FORMAT` | `json` | Log output format: `json` for structured JSON lines, `text` for human-readable `key=value` format. Both include source file and line number. |
 | `OUTLOOK_MCP_LOG_FILE` | *(empty)* | Optional file path for persistent log output. When set, log records are written to both stderr and the file via a `MultiHandler`. File is opened append-mode with `0600` permissions. See CR-0023. |
 | `OUTLOOK_MCP_MAIL_ENABLED` | `false` | Enable read-only mail access. When `true`, adds `Mail.Read` OAuth scope and registers mail verbs. See CR-0043. |
+| `OUTLOOK_MCP_CONTACTS_ENABLED` | `false` | Enable the opt-in read-only `contacts` domain. When `true`, adds the `Contacts.Read` and `People.Read` OAuth scopes and registers a fifth top-level tool; when `false` the tool is not registered at all, unlike `mail`, which is always registered and gates its verbs. No contact write scope is requested in any configuration. |
 | `OUTLOOK_MCP_PROVENANCE_TAG` | `com.github.desek.outlook-local-mcp.created` | Name for the provenance extended property stamped on MCP-created events. Combined with a dedicated GUID to form the full MAPI property ID. Set to empty string to disable provenance tagging entirely. See CR-0040. |
 
 ---
