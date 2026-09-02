@@ -995,6 +995,66 @@ func TestInventoryNamesContactsFlag(t *testing.T) {
 	t.Errorf("inventory names no %s row", EnvContactsEnabled)
 }
 
+// TestLoadConfig_TeamsEnabledDefaultFalse validates that TeamsEnabled defaults
+// to false, is read case-insensitively from OUTLOOK_MCP_TEAMS_ENABLED, and
+// implies no other flag: the Teams domain gates only its own tool and its own
+// four read scopes, independently of the mail and contacts gates.
+func TestLoadConfig_TeamsEnabledDefaultFalse(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		set   bool
+		want  bool
+	}{
+		{name: "unset defaults to false", set: false, want: false},
+		{name: "true enables", value: "true", set: true, want: true},
+		{name: "uppercase TRUE enables", value: "TRUE", set: true, want: true},
+		{name: "false disables", value: "false", set: true, want: false},
+		{name: "unrecognised value disables", value: "yes", set: true, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clearOutlookEnvVars(t)
+			if tc.set {
+				t.Setenv(EnvTeamsEnabled, tc.value)
+			}
+
+			cfg := LoadConfig()
+
+			if cfg.TeamsEnabled != tc.want {
+				t.Errorf("TeamsEnabled = %v, want %v", cfg.TeamsEnabled, tc.want)
+			}
+			if cfg.MailEnabled || cfg.MailManageEnabled || cfg.ContactsEnabled {
+				t.Errorf("teams must imply no other flag; MailEnabled=%v MailManageEnabled=%v ContactsEnabled=%v",
+					cfg.MailEnabled, cfg.MailManageEnabled, cfg.ContactsEnabled)
+			}
+		})
+	}
+}
+
+// TestInventoryNamesTeamsFlag validates that the declarative inventory carries a
+// row for the Teams gate, defaulting to false.
+//
+// The inventory is what the published configuration surface is generated from,
+// so a flag the loader reads but the inventory omits is a flag no user is ever
+// told about. Asserting the row directly holds that binding, which a test of
+// LoadConfig alone cannot.
+func TestInventoryNamesTeamsFlag(t *testing.T) {
+	for _, v := range Inventory() {
+		if v.Name != EnvTeamsEnabled {
+			continue
+		}
+		if v.Default != "false" {
+			t.Errorf("%s default = %q, want %q", v.Name, v.Default, "false")
+		}
+		if v.Description == "" {
+			t.Errorf("%s carries no description", v.Name)
+		}
+		return
+	}
+	t.Errorf("inventory names no %s row", EnvTeamsEnabled)
+}
+
 // TestLoadConfig_MailManageEnabledDefault validates that MailManageEnabled
 // defaults to false when OUTLOOK_MCP_MAIL_MANAGE_ENABLED is not set.
 func TestLoadConfig_MailManageEnabledDefault(t *testing.T) {

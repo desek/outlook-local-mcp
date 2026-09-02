@@ -716,6 +716,107 @@ func TestScopes_NoContactsWriteEver(t *testing.T) {
 	}
 }
 
+// TestScopes_TeamsEnabled validates that TeamsEnabled appends all four Teams
+// read scopes on top of whatever the mail and contacts flags select, in a stable
+// order and appended rather than substituted for an existing scope.
+func TestScopes_TeamsEnabled(t *testing.T) {
+	teams := []string{"Chat.Read", "ChannelMessage.Read.All", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All"}
+
+	cases := []struct {
+		name string
+		cfg  config.Config
+		want []string
+	}{
+		{
+			name: "teams alone",
+			cfg:  config.Config{TeamsEnabled: true},
+			want: append([]string{"Calendars.ReadWrite"}, teams...),
+		},
+		{
+			name: "teams with mail read",
+			cfg:  config.Config{MailEnabled: true, TeamsEnabled: true},
+			want: append([]string{"Calendars.ReadWrite", "Mail.Read"}, teams...),
+		},
+		{
+			name: "teams with mail manage",
+			cfg:  config.Config{MailEnabled: true, MailManageEnabled: true, TeamsEnabled: true},
+			want: append([]string{"Calendars.ReadWrite", "Mail.ReadWrite"}, teams...),
+		},
+		{
+			name: "teams with contacts",
+			cfg:  config.Config{ContactsEnabled: true, TeamsEnabled: true},
+			want: append([]string{"Calendars.ReadWrite", "Contacts.Read", "People.Read"}, teams...),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scopes := Scopes(tc.cfg)
+			if len(scopes) != len(tc.want) {
+				t.Fatalf("Scopes() = %v, want %v", scopes, tc.want)
+			}
+			for i, want := range tc.want {
+				if scopes[i] != want {
+					t.Errorf("Scopes()[%d] = %q, want %q (full set %v)", i, scopes[i], want, scopes)
+				}
+			}
+		})
+	}
+}
+
+// TestScopes_NoTeamsByDefault validates that no Teams scope reaches a
+// configuration that did not opt in. A user who never sets the flag must see a
+// consent surface identical to the one before the domain existed.
+func TestScopes_NoTeamsByDefault(t *testing.T) {
+	cases := []config.Config{
+		{},
+		{MailEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true},
+		{ContactsEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true, ContactsEnabled: true},
+	}
+	for i, cfg := range cases {
+		for _, s := range Scopes(cfg) {
+			switch s {
+			case "Chat.Read", "ChannelMessage.Read.All", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All":
+				t.Errorf("case %d: Scopes() must not include %q when TeamsEnabled is false; got %v", i, s, Scopes(cfg))
+			}
+		}
+	}
+}
+
+// TestScopes_NoTeamsSendEver validates that no configuration requests a Teams
+// send or write scope. The Teams surface is read-only, so the read-only property
+// is enforced at the scope layer and not only at the verb layer: even a defect in
+// a handler cannot post a message the token was never granted permission to post.
+func TestScopes_NoTeamsSendEver(t *testing.T) {
+	forbidden := []string{
+		"ChatMessage.Send",
+		"Chat.ReadWrite",
+		"ChannelMessage.Send",
+		"ChannelMessage.ReadWrite.All",
+		"Group.ReadWrite",
+		"Group.ReadWrite.All",
+		"OnlineMeetings.ReadWrite",
+	}
+	cases := []config.Config{
+		{},
+		{TeamsEnabled: true},
+		{MailEnabled: true, TeamsEnabled: true},
+		{ContactsEnabled: true, TeamsEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true, ContactsEnabled: true, TeamsEnabled: true},
+	}
+	for i, cfg := range cases {
+		scopes := Scopes(cfg)
+		for _, s := range scopes {
+			for _, bad := range forbidden {
+				if s == bad {
+					t.Errorf("case %d: Scopes() must never include the write scope %q; got %v", i, s, scopes)
+				}
+			}
+		}
+	}
+}
+
 // mockAuthenticator is a test double for the Authenticator interface.
 type mockAuthenticator struct {
 	record azidentity.AuthenticationRecord

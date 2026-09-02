@@ -1183,3 +1183,311 @@ func contactDisplayLabel(record map[string]any) string {
 	}
 	return "(Unnamed)"
 }
+
+// FormatChatsText formats the signed-in user's chats into a numbered plain-text
+// listing with a total count. A one-to-one chat commonly carries no topic, so
+// the preview of its last message is listed under it: without that, a page of
+// untitled chats is indistinguishable rows of identifiers.
+//
+// Parameters:
+//   - chats: slice of summary chat maps carrying "topic", "chatType", "id",
+//     "lastUpdatedDateTime", and "lastMessagePreview".
+//
+// Returns a formatted plain-text string. Returns a stated no-result line when
+// the slice is empty.
+//
+// Side effects: none.
+func FormatChatsText(chats []map[string]any) string {
+	if len(chats) == 0 {
+		return "No chats found."
+	}
+
+	var b strings.Builder
+	for i, chat := range chats {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, teamsChatLabel(chat))
+		if chatType, _ := chat["chatType"].(string); chatType != "" {
+			fmt.Fprintf(&b, "   Type: %s\n", chatType)
+		}
+		if updated, _ := chat["lastUpdatedDateTime"].(string); updated != "" {
+			fmt.Fprintf(&b, "   Last updated: %s\n", updated)
+		}
+		if preview, _ := chat["lastMessagePreview"].(string); preview != "" {
+			fmt.Fprintf(&b, "   Latest: %s\n", teamsSingleLine(preview))
+		}
+		if id, _ := chat["id"].(string); id != "" {
+			fmt.Fprintf(&b, "   ID: %s\n", id)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d chat(s) total.", len(chats))
+
+	return b.String()
+}
+
+// FormatTeamsMessagesText formats a collection of Teams messages, whether chat
+// messages, channel messages, or replies, into a numbered plain-text listing
+// with a total count. One formatter serves all three because the reading task is
+// the same, scanning a thread for the message worth opening; the identifier
+// lines differ per shape and are written from whichever the record carries.
+//
+// Parameters:
+//   - messages: slice of summary message maps carrying "from",
+//     "createdDateTime", "bodyPreview", "id", and whichever of "chatId",
+//     "teamId", "channelId", and "replyToId" apply.
+//
+// Returns a formatted plain-text string. Returns a stated no-result line when
+// the slice is empty.
+//
+// Side effects: none.
+func FormatTeamsMessagesText(messages []map[string]any) string {
+	if len(messages) == 0 {
+		return "No Teams messages found."
+	}
+
+	var b strings.Builder
+	for i, msg := range messages {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, teamsMessageLabel(msg))
+		if created, _ := msg["createdDateTime"].(string); created != "" {
+			fmt.Fprintf(&b, "   Sent: %s\n", created)
+		}
+		if preview, _ := msg["bodyPreview"].(string); preview != "" {
+			fmt.Fprintf(&b, "   %s\n", teamsSingleLine(preview))
+		}
+		if count, ok := msg["attachmentCount"].(int); ok && count > 0 {
+			fmt.Fprintf(&b, "   Attachments: %d\n", count)
+		}
+		writeTeamsIdentifierLines(&b, msg, "   ")
+	}
+
+	fmt.Fprintf(&b, "\n%d message(s) total.", len(messages))
+
+	return b.String()
+}
+
+// FormatTeamsMessageDetailText formats one Teams message as labelled fields. The
+// whole body is written rather than a preview, because this formatter renders
+// what the caller escalated to see.
+//
+// Parameters:
+//   - msg: a message map carrying "from", "subject", "createdDateTime", and
+//     either "body" or "bodyPreview", plus its locating identifiers.
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatTeamsMessageDetailText(msg map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "From: %s\n", teamsFieldOr(msg, "from", "(unknown sender)"))
+	if subject, _ := msg["subject"].(string); subject != "" {
+		fmt.Fprintf(&b, "Subject: %s\n", subject)
+	}
+	if created, _ := msg["createdDateTime"].(string); created != "" {
+		fmt.Fprintf(&b, "Sent: %s\n", created)
+	}
+	if edited, _ := msg["lastEditedDateTime"].(string); edited != "" {
+		fmt.Fprintf(&b, "Edited: %s\n", edited)
+	}
+	writeTeamsIdentifierLines(&b, msg, "")
+	fmt.Fprintf(&b, "\n%s\n", teamsMessageBody(msg))
+	if names := teamsAttachmentNames(msg); len(names) > 0 {
+		fmt.Fprintf(&b, "\nAttachments: %s\n", strings.Join(names, ", "))
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// FormatOnlineMeetingText formats one online meeting as labelled fields. The
+// meeting identifier is stated on its own line because it is the key the
+// transcript verbs take, and resolving it is the whole purpose of the verb this
+// formatter renders.
+//
+// Parameters:
+//   - meeting: a meeting map carrying "subject", "id", "startDateTime",
+//     "endDateTime", and "joinWebUrl".
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatOnlineMeetingText(meeting map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Meeting: %s\n", teamsFieldOr(meeting, "subject", "(no subject)"))
+	if id, _ := meeting["id"].(string); id != "" {
+		fmt.Fprintf(&b, "Meeting ID: %s\n", id)
+	}
+	if start, _ := meeting["startDateTime"].(string); start != "" {
+		fmt.Fprintf(&b, "Start: %s\n", start)
+	}
+	if end, _ := meeting["endDateTime"].(string); end != "" {
+		fmt.Fprintf(&b, "End: %s\n", end)
+	}
+	if organizer, _ := meeting["organizer"].(string); organizer != "" {
+		fmt.Fprintf(&b, "Organizer: %s\n", organizer)
+	}
+	if join, _ := meeting["joinWebUrl"].(string); join != "" {
+		fmt.Fprintf(&b, "Join URL: %s\n", join)
+	}
+	if allowed, ok := meeting["allowTranscription"].(bool); ok && !allowed {
+		b.WriteString("Transcription: not enabled for this meeting\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// FormatTranscriptsText formats a meeting's transcripts into a numbered
+// plain-text listing with a total count. No content is shown: the listing exists
+// to choose which transcript to fetch, and each entry states the identifier that
+// fetch is keyed by.
+//
+// Parameters:
+//   - transcripts: slice of summary transcript maps carrying "id",
+//     "createdDateTime", and "endDateTime".
+//
+// Returns a formatted plain-text string. Returns a stated no-result line naming
+// why a transcribed meeting may still list none.
+//
+// Side effects: none.
+func FormatTranscriptsText(transcripts []map[string]any) string {
+	if len(transcripts) == 0 {
+		return "No transcripts found for this meeting. A meeting has transcripts only if it was transcribed while it ran."
+	}
+
+	var b strings.Builder
+	for i, transcript := range transcripts {
+		fmt.Fprintf(&b, "%d. Transcript %s\n", i+1, teamsFieldOr(transcript, "id", "(no id)"))
+		if created, _ := transcript["createdDateTime"].(string); created != "" {
+			fmt.Fprintf(&b, "   Created: %s\n", created)
+		}
+		if end, _ := transcript["endDateTime"].(string); end != "" {
+			fmt.Fprintf(&b, "   Ended: %s\n", end)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d transcript(s) total.", len(transcripts))
+
+	return b.String()
+}
+
+// FormatTranscriptDetailText formats one transcript as labelled fields followed
+// by its text. When the text was truncated the reader is told so explicitly,
+// because a WEBVTT transcript cut mid-sentence otherwise reads as a complete
+// record of a shorter meeting.
+//
+// Parameters:
+//   - transcript: a transcript map carrying "id", "meetingId",
+//     "createdDateTime", "contentTruncated", and either "content" or
+//     "contentPreview".
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatTranscriptDetailText(transcript map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Transcript: %s\n", teamsFieldOr(transcript, "id", "(no id)"))
+	if meetingID, _ := transcript["meetingId"].(string); meetingID != "" {
+		fmt.Fprintf(&b, "Meeting ID: %s\n", meetingID)
+	}
+	if created, _ := transcript["createdDateTime"].(string); created != "" {
+		fmt.Fprintf(&b, "Created: %s\n", created)
+	}
+
+	text, _ := transcript["content"].(string)
+	if text == "" {
+		text, _ = transcript["contentPreview"].(string)
+	}
+	if text == "" {
+		b.WriteString("\n(no transcript text returned)\n")
+		return strings.TrimRight(b.String(), "\n")
+	}
+
+	fmt.Fprintf(&b, "\n%s\n", text)
+	if truncated, _ := transcript["contentTruncated"].(bool); truncated {
+		b.WriteString("\nThis is a preview. Request output=raw for the full transcript.\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// writeTeamsIdentifierLines writes an ID line for each locating identifier a
+// Teams message record carries, skipping the ones its shape does not have, so a
+// chat message is not padded with empty channel coordinates and a channel
+// message is not padded with an empty chat one.
+func writeTeamsIdentifierLines(b *strings.Builder, msg map[string]any, indent string) {
+	for _, field := range []struct {
+		key   string
+		label string
+	}{
+		{"id", "Message ID"},
+		{"replyToId", "Reply to"},
+		{"chatId", "Chat ID"},
+		{"teamId", "Team ID"},
+		{"channelId", "Channel ID"},
+	} {
+		if value, _ := msg[field.key].(string); value != "" {
+			fmt.Fprintf(b, "%s%s: %s\n", indent, field.label, value)
+		}
+	}
+}
+
+// teamsChatLabel returns the name a chat should be listed under, falling back
+// from its topic to its type and then to a stated placeholder, so a chat with no
+// topic is still identifiable rather than rendered as a blank line.
+func teamsChatLabel(chat map[string]any) string {
+	if topic, _ := chat["topic"].(string); topic != "" {
+		return topic
+	}
+	if chatType, _ := chat["chatType"].(string); chatType != "" {
+		return "(untitled " + chatType + " chat)"
+	}
+	return "(untitled chat)"
+}
+
+// teamsMessageLabel returns the heading a message is listed under: the sender,
+// with the subject appended when the message has one, which a channel post
+// commonly does and a chat message commonly does not.
+func teamsMessageLabel(msg map[string]any) string {
+	sender := teamsFieldOr(msg, "from", "(unknown sender)")
+	if subject, _ := msg["subject"].(string); subject != "" {
+		return sender + " - " + subject
+	}
+	return sender
+}
+
+// teamsMessageBody returns the text a detail rendering should show, preferring
+// the full body and falling back to the preview, so the same formatter serves a
+// raw-tier record and a summary-tier one.
+func teamsMessageBody(msg map[string]any) string {
+	if body, _ := msg["body"].(string); body != "" {
+		return body
+	}
+	if preview, _ := msg["bodyPreview"].(string); preview != "" {
+		return preview
+	}
+	return "(no message text)"
+}
+
+// teamsAttachmentNames reduces a raw-tier message's attachments to their names,
+// which is all a plain-text rendering can usefully state about them.
+func teamsAttachmentNames(msg map[string]any) []string {
+	attachments, _ := msg["attachments"].([]map[string]any)
+	names := make([]string, 0, len(attachments))
+	for _, att := range attachments {
+		if name, _ := att["name"].(string); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// teamsFieldOr returns a record's string field, or the given placeholder when it
+// is absent or empty, so a missing value reads as a stated absence rather than
+// leaving a label with nothing after it.
+func teamsFieldOr(record map[string]any, key, placeholder string) string {
+	if value, _ := record[key].(string); value != "" {
+		return value
+	}
+	return placeholder
+}
+
+// teamsSingleLine collapses a message body onto one line for a listing entry.
+// A Teams body carries newlines and HTML markup, and a multi-line entry inside a
+// numbered list breaks the alignment the list's readability depends on.
+func teamsSingleLine(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}

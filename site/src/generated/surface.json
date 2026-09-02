@@ -514,6 +514,11 @@
       "description": "Enable the read-only contacts domain and request the Contacts.Read and People.Read scopes; no contact write scope is ever requested."
     },
     {
+      "name": "OUTLOOK_MCP_TEAMS_ENABLED",
+      "default": "false",
+      "description": "Enable the read-only Teams domain and request the Chat.Read, ChannelMessage.Read.All, OnlineMeetings.Read, and OnlineMeetingTranscript.Read.All scopes; no Teams send or write scope is ever requested."
+    },
+    {
       "name": "OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES",
       "default": "10485760",
       "description": "Maximum attachment size in bytes, both downloaded by get_attachment and uploaded by add_attachment (default 10 MB)."

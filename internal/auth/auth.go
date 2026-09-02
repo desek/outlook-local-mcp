@@ -46,6 +46,34 @@ const contactsReadScope = "Contacts.Read"
 // ContactsEnabled is true.
 const peopleReadScope = "People.Read"
 
+// chatReadScope is the OAuth scope requested for read-only access to the
+// signed-in user's chats and chat messages (GET /me/chats and its message
+// collections). It is a read scope: it grants no ability to create a chat, post
+// a message, or edit one. It is requested only when TeamsEnabled is true.
+const chatReadScope = "Chat.Read"
+
+// channelMessageReadScope is the OAuth scope requested for read-only access to
+// channel messages and their replies
+// (GET /teams/{team}/channels/{channel}/messages). It is a read scope; the
+// corresponding send scope, ChannelMessage.Send, is deliberately never
+// requested. It is requested only when TeamsEnabled is true.
+const channelMessageReadScope = "ChannelMessage.Read.All"
+
+// onlineMeetingsReadScope is the OAuth scope requested for read-only access to
+// the user's online meetings (GET /me/onlineMeetings), which is how a meeting
+// join URL is resolved to the meeting-scoped identifier transcripts are keyed
+// by. It is requested only when TeamsEnabled is true.
+const onlineMeetingsReadScope = "OnlineMeetings.Read"
+
+// onlineMeetingTranscriptReadScope is the OAuth scope requested for read-only
+// access to meeting transcripts and their WEBVTT content
+// (GET /me/onlineMeetings/{id}/transcripts). Transcript content is not covered
+// by onlineMeetingsReadScope, so the two are requested together. Meeting
+// recordings and attendance reports are outside the server's surface and no
+// scope granting them is requested. It is requested only when TeamsEnabled is
+// true.
+const onlineMeetingTranscriptReadScope = "OnlineMeetingTranscript.Read.All"
+
 // Scopes returns the OAuth scope slice based on the application configuration.
 // The calendar scope is always included. Mail scopes are selected according to
 // configuration:
@@ -64,14 +92,28 @@ const peopleReadScope = "People.Read"
 //   - When it is false, the scope set is unchanged, so a user who has not opted
 //     in sees no additional consent prompt.
 //
+// Teams scopes are selected independently of every other flag:
+//
+//   - When cfg.TeamsEnabled is true, chatReadScope ("Chat.Read"),
+//     channelMessageReadScope ("ChannelMessage.Read.All"),
+//     onlineMeetingsReadScope ("OnlineMeetings.Read"), and
+//     onlineMeetingTranscriptReadScope ("OnlineMeetingTranscript.Read.All") are
+//     all appended.
+//   - When it is false, the scope set is unchanged, so the consent surface a
+//     user who has not opted in sees is byte-identical to the one before the
+//     Teams domain existed.
+//
 // Scopes never includes "Mail.Send"; sending mail is deliberately outside the
 // server's capability surface. It likewise never includes a contact write scope
-// such as "Contacts.ReadWrite": the contacts surface is read-only in every
-// configuration.
+// such as "Contacts.ReadWrite", nor any Teams send or write scope such as
+// "ChatMessage.Send", "Chat.ReadWrite", "ChannelMessage.Send", or
+// "Group.ReadWrite": the contacts and Teams surfaces are read-only in every
+// configuration, and that property is enforced here at the scope layer rather
+// than only at the verb layer.
 //
 // Parameters:
 //   - cfg: the application configuration providing MailEnabled,
-//     MailManageEnabled, and ContactsEnabled.
+//     MailManageEnabled, ContactsEnabled, and TeamsEnabled.
 //
 // Returns the slice of OAuth scopes to request during authentication and
 // Graph client initialization.
@@ -85,6 +127,14 @@ func Scopes(cfg config.Config) []string {
 	}
 	if cfg.ContactsEnabled {
 		scopes = append(scopes, contactsReadScope, peopleReadScope)
+	}
+	if cfg.TeamsEnabled {
+		scopes = append(scopes,
+			chatReadScope,
+			channelMessageReadScope,
+			onlineMeetingsReadScope,
+			onlineMeetingTranscriptReadScope,
+		)
 	}
 	return scopes
 }
