@@ -712,6 +712,36 @@ Call `{tool: "calendar", args: {operation: "get_schedule", schedules: "<self UPN
 - **Verify (summary tier):** Call again with `output: "summary"`. The response is structured, attributes every block to its mailbox, and preserves the order the mailboxes were named in.
 - **Fail:** If a per-mailbox failure fails the whole call or silently drops that mailbox, if blocks are not attributable to a mailbox, or if the mailbox order is not the requested order.
 
+### Step 44 -- Attach a file to an event
+
+Create the target rather than reusing an earlier one: every event created before this point was deleted by Step 14 or cancelled by Step 24. Call `{tool: "calendar", args: {operation: "create_event", subject: "MCP CRUD attachment -- <timestamp>", start_datetime: "<test date>T11:00:00", end_datetime: "<test date>T11:30:00", start_timezone: "Europe/Amsterdam", end_timezone: "Europe/Amsterdam", body: "Automated CRUD lifecycle test.", show_as: "free"}}` and record the ID as **attachment event ID**.
+
+Call `{tool: "calendar", args: {operation: "add_event_attachment", event_id: "<attachment event ID>", name: "crud-test.txt", mime_type: "text/plain", content_bytes: "Q1JVRCB0ZXN0IGF0dGFjaG1lbnQu"}}` (the base64 of a short ASCII sentence).
+
+- **Verify:** Response is a plain text confirmation naming the attachment name, the event subject, the event ID, a new attachment ID, the size in bytes, and which transfer path was used. Record the attachment ID as **event attachment ID**.
+- **Verify:** The verb takes no `output` parameter; it is a write and confirms in text unconditionally.
+- **Verify (invalid content):** Call `add_event_attachment` again with `content_bytes: "not base64!!"`. The call must fail with an error stating the content is not standard base64 and saying to re-encode it, and must attach nothing.
+- **Verify (unknown event):** Call `add_event_attachment` with `event_id: "AAAAAAAAAAAAAAAAAAAAAA=="` and otherwise valid arguments. The call must fail naming the event rather than reporting a successful attach.
+- **Fail:** If the confirmation omits the attachment ID or the size, if the malformed content is accepted, or if the unknown event is accepted.
+
+### Step 45 -- List the attachments of an event
+
+Call `{tool: "calendar", args: {operation: "list_event_attachments", event_id: "<attachment event ID>"}}`.
+
+- **Verify:** The default response is plain text, a numbered list naming `crud-test.txt` with the **event attachment ID**, its content type, and its size, and ends with a total count.
+- **Verify:** No content bytes appear in the response at the default tier; this verb returns metadata only.
+- **Verify (summary tier):** Call again with `output: "summary"`. The response is structured and still carries the attachment ID, name, content type, and size.
+- **Fail:** If the attachment added in Step 44 is absent, if the listed ID does not match the one confirmed there, or if content bytes are returned.
+
+### Step 46 -- Download an event attachment
+
+Call `{tool: "calendar", args: {operation: "get_event_attachment", event_id: "<attachment event ID>", attachment_id: "<event attachment ID>"}}`.
+
+- **Verify:** Response is plain text with the attachment metadata (name, content type, size) and the content as base64. Decoding the content yields the sentence sent in Step 44, so the round trip is graded on the bytes rather than on the metadata alone.
+- **Verify (unknown attachment):** Call again with `attachment_id: "AAAAAAAAAAAAAAAAAAAAAA=="`. The call must fail naming the attachment rather than returning empty content.
+- **Cleanup:** Call `{tool: "calendar", args: {operation: "delete_event", event_id: "<attachment event ID>"}}`. Deleting the event removes its attachments with it; there is no separate attachment removal verb.
+- **Fail:** If the returned content does not decode to the bytes sent in Step 44, if the unknown attachment ID is accepted, or if the cleanup delete fails.
+
 ## Reporting
 
 After all steps, print a summary table. Every row **MUST** include a short `Comment` (under ~120 characters) explaining the result — for PASS rows, a brief confirmation of what was verified; for FAIL rows, the failure cause (tool name, error, mismatch); for SKIP rows, the reason (e.g., "single-account mode"). Do not leave the `Comment` column blank.
@@ -788,6 +818,11 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 39   | Set categories (+ clear)          | PASS/FAIL/SKIP | e.g., "set from response; empty value cleared all"       |
 | 40   | Move message (new ID follows)     | PASS/FAIL/SKIP | e.g., "new id returned; original 404s; name destination refused" |
 | 41   | Add attachment to a draft         | PASS/FAIL/SKIP | e.g., "attachment id and size confirmed; non-draft refused" |
+| 42   | Find meeting times (candidates)   | PASS/FAIL      | e.g., "5 slots with confidence; one-sided window refused" |
+| 43   | Get schedule (per-mailbox)        | PASS/FAIL      | e.g., "self section returned; unknown mailbox carried Error:" |
+| 44   | Add attachment to an event        | PASS/FAIL      | e.g., "attachment id and size confirmed; bad base64 refused" |
+| 45   | List event attachments            | PASS/FAIL      | e.g., "crud-test.txt listed, metadata only, no content"  |
+| 46   | Get event attachment (round trip) | PASS/FAIL      | e.g., "base64 decodes to the bytes sent; event deleted"  |
 ```
 
 Then print the **environment** section using all values recorded in Steps 0c and 1:

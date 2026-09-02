@@ -24,6 +24,7 @@ For full setup instructions including Claude Desktop and Claude Code configurati
 
 - **Calendar management** -- list, search, create, update, delete, and respond to events; create and cancel meetings with attendee confirmation
 - **Scheduling and availability** -- read your own busy periods with their subjects, read free/busy blocks and working hours for up to twenty mailboxes you are permitted to view, and ask Graph to propose candidate meeting slots for a set of attendees ranked by confidence. All three are reads; booking stays with the meeting verbs
+- **Event attachments** -- list what is attached to an event, download one as base64, and attach a file to an existing event with `add_event_attachment`. No opt-in is required: an event attachment is calendar data, so no mail flag governs it. The transfer path is chosen for you, a single request for a small file and a chunked upload session above roughly 3 MB, and the same `MAX_ATTACHMENT_SIZE_BYTES` ceiling bounds both directions
 - **Multi-account support** -- manage multiple Microsoft accounts simultaneously with per-account token isolation and lifecycle control (`add`, `remove`, `login`, `logout`, `refresh`)
 - **Lazy authentication** -- authenticates on first tool call; device code, browser, and authorization code flows supported
 - **Persistent token cache** -- OS-native secure storage (macOS Keychain, Linux libsecret, Windows DPAPI) with AES-256-GCM file fallback
@@ -84,7 +85,7 @@ All settings use environment variables prefixed with `OUTLOOK_MCP_`. Key variabl
 | `READ_ONLY` | `false` | Disable write operations |
 | `MAIL_ENABLED` | `false` | Enable read-only mail access |
 | `MAIL_MANAGE_ENABLED` | `false` | Enable draft management, draft attachments, and received-message management (implies `MAIL_ENABLED`) |
-| `MAX_ATTACHMENT_SIZE_BYTES` | `10485760` | Attachment size ceiling, both downloaded by `get_attachment` and uploaded by `add_attachment` |
+| `MAX_ATTACHMENT_SIZE_BYTES` | `10485760` | Attachment size ceiling for every direction and both domains: `get_attachment`, `add_attachment`, `get_event_attachment`, and `add_event_attachment` |
 | `LOG_LEVEL` | `warn` | `debug`, `info`, `warn`, `error` |
 | `LOG_FILE` | *(disabled)* | File path for persistent log output |
 
