@@ -365,6 +365,70 @@ func SerializeTranscript(transcript models.CallTranscriptable, content []byte, f
 	return result
 }
 
+// The label a search hit carries stating which collection its message came
+// from. A hit is the entry point to the domain, and the two collections are read
+// by different verbs taking different identifiers, so the record says which
+// follow-up applies rather than leaving a caller to infer it from which
+// identifier fields happen to be populated.
+const (
+	teamsHitSourceChat    = "chat"
+	teamsHitSourceChannel = "channel"
+)
+
+// SerializeTeamsSearchHit projects one ranked search hit onto the output tier.
+// The message inside the hit is projected by whichever of the chat and channel
+// serializers matches it, so a chat hit carries the chatId its reads are keyed
+// by and a channel hit carries the teamId and channelId theirs are, and the hit
+// itself contributes the rank, the service's highlighted snippet, and the source
+// label naming which of the two applies.
+//
+// Parameters:
+//   - hit: one ranked hit; nil, or one whose resource is not a chat message,
+//     yields nil.
+//   - full: true for the raw tier, which carries the whole message body; false
+//     for the summary tier, which carries its preview.
+//
+// Returns nil for a hit this domain cannot address, so a caller appends only the
+// hits a follow-up verb can act on. Only chatMessage results are requested, so a
+// nil is an unexpected service response rather than an ordinary case.
+//
+// Side effects: none.
+func SerializeTeamsSearchHit(hit models.SearchHitable, full bool) map[string]any {
+	if hit == nil {
+		return nil
+	}
+	msg, ok := hit.GetResource().(models.ChatMessageable)
+	if !ok || msg == nil {
+		return nil
+	}
+
+	source := teamsHitSourceChat
+	if teamID, _ := teamsChannelIdentity(msg); teamID != "" {
+		source = teamsHitSourceChannel
+	}
+
+	record := teamsSearchHitMessage(msg, source, full)
+	record["source"] = source
+	record["rank"] = graph.SafeInt32(hit.GetRank())
+	record["hitSummary"] = graph.SafeStr(hit.GetSummary())
+	return record
+}
+
+// teamsSearchHitMessage projects the message inside a hit through the serializer
+// for the collection it came from, at the requested tier.
+func teamsSearchHitMessage(msg models.ChatMessageable, source string, full bool) map[string]any {
+	if source == teamsHitSourceChannel {
+		if full {
+			return SerializeChannelMessage(msg)
+		}
+		return SerializeSummaryChannelMessage(msg)
+	}
+	if full {
+		return SerializeChatMessage(msg)
+	}
+	return SerializeSummaryChatMessage(msg)
+}
+
 // teamsMessageRawCommon builds the raw-tier fields every Teams message shares,
 // whichever collection it came from. The caller adds the identifiers that locate
 // it, which is the only thing separating the three message shapes at this tier.

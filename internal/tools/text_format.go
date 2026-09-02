@@ -1184,6 +1184,43 @@ func contactDisplayLabel(record map[string]any) string {
 	return "(Unnamed)"
 }
 
+// FormatTeamsSearchHitsText formats ranked Teams search hits into a numbered
+// plain-text listing with a total count. Hits arrive in relevance order and are
+// listed in it, since the ranking is what the search adds over an enumeration.
+// Each entry names the collection its message came from, because a chat hit and
+// a channel hit are read back by different verbs taking different identifiers.
+//
+// Parameters:
+//   - hits: slice of hit maps carrying "source", "from", "createdDateTime",
+//     "bodyPreview", and whichever of "chatId", "teamId", and "channelId" the
+//     hit's collection supplies.
+//
+// Returns a formatted plain-text string. Returns a stated no-result line when
+// the slice is empty.
+//
+// Side effects: none.
+func FormatTeamsSearchHitsText(hits []map[string]any) string {
+	if len(hits) == 0 {
+		return "No Teams messages matched."
+	}
+
+	var b strings.Builder
+	for i, hit := range hits {
+		fmt.Fprintf(&b, "%d. [%s] %s\n", i+1, teamsFieldOr(hit, "source", "unknown"), teamsMessageLabel(hit))
+		if created, _ := hit["createdDateTime"].(string); created != "" {
+			fmt.Fprintf(&b, "   Sent: %s\n", created)
+		}
+		if preview, _ := hit["bodyPreview"].(string); preview != "" {
+			fmt.Fprintf(&b, "   %s\n", teamsSingleLine(preview))
+		}
+		writeTeamsIdentifierLines(&b, hit, "   ")
+	}
+
+	fmt.Fprintf(&b, "\n%d match(es) total.", len(hits))
+
+	return b.String()
+}
+
 // FormatChatsText formats the signed-in user's chats into a numbered plain-text
 // listing with a total count. A one-to-one chat commonly carries no topic, so
 // the preview of its last message is listed under it: without that, a page of

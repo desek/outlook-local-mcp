@@ -405,3 +405,20 @@ func TestSerializeMessageReplyCarriesEveryLocatingIdentifier(t *testing.T) {
 		}
 	}
 }
+
+// TestSerializeTeamsSearchHitSkipsAnUnaddressableResource validates that a hit
+// carrying something other than a Teams message yields nothing. Only chat
+// messages are asked for, so such a hit is an unexpected service response, and
+// returning a record for it would put an entry in the result that no follow-up
+// verb can act on.
+func TestSerializeTeamsSearchHitSkipsAnUnaddressableResource(t *testing.T) {
+	hit := models.NewSearchHit()
+	hit.SetResource(models.NewEvent())
+
+	if got := SerializeTeamsSearchHit(hit, false); got != nil {
+		t.Errorf("hit with a non-message resource serialized to %v, want nil", got)
+	}
+	if got := SerializeTeamsSearchHit(nil, false); got != nil {
+		t.Errorf("nil hit serialized to %v, want nil", got)
+	}
+}
