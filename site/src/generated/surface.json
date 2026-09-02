@@ -472,6 +472,11 @@
       "description": "Enable draft management, draft attachments, and received-message management, and request the Mail.ReadWrite scope; implies MAIL_ENABLED."
     },
     {
+      "name": "OUTLOOK_MCP_CONTACTS_ENABLED",
+      "default": "false",
+      "description": "Enable the read-only contacts domain and request the Contacts.Read and People.Read scopes; no contact write scope is ever requested."
+    },
+    {
       "name": "OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES",
       "default": "10485760",
       "description": "Maximum attachment size in bytes, both downloaded by get_attachment and uploaded by add_attachment (default 10 MB)."

@@ -935,6 +935,43 @@ func TestMailManageImpliesMailEnabled(t *testing.T) {
 	}
 }
 
+// TestLoadConfig_ContactsEnabled validates that ContactsEnabled defaults to
+// false, is read case-insensitively from OUTLOOK_MCP_CONTACTS_ENABLED, and
+// implies no other flag: the contacts domain gates only its own tool and its
+// own two read scopes.
+func TestLoadConfig_ContactsEnabled(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		set   bool
+		want  bool
+	}{
+		{name: "unset defaults to false", set: false, want: false},
+		{name: "true enables", value: "true", set: true, want: true},
+		{name: "uppercase TRUE enables", value: "TRUE", set: true, want: true},
+		{name: "false disables", value: "false", set: true, want: false},
+		{name: "unrecognised value disables", value: "yes", set: true, want: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			clearOutlookEnvVars(t)
+			if tc.set {
+				t.Setenv(EnvContactsEnabled, tc.value)
+			}
+
+			cfg := LoadConfig()
+
+			if cfg.ContactsEnabled != tc.want {
+				t.Errorf("ContactsEnabled = %v, want %v", cfg.ContactsEnabled, tc.want)
+			}
+			if cfg.MailEnabled || cfg.MailManageEnabled {
+				t.Errorf("contacts must imply no mail flag; MailEnabled=%v MailManageEnabled=%v",
+					cfg.MailEnabled, cfg.MailManageEnabled)
+			}
+		})
+	}
+}
+
 // TestLoadConfig_MailManageEnabledDefault validates that MailManageEnabled
 // defaults to false when OUTLOOK_MCP_MAIL_MANAGE_ENABLED is not set.
 func TestLoadConfig_MailManageEnabledDefault(t *testing.T) {

@@ -637,6 +637,85 @@ func TestScopes_NoMailSend(t *testing.T) {
 	}
 }
 
+// TestScopes_Contacts validates that ContactsEnabled appends both contacts read
+// scopes on top of whatever the mail flags select, and that they are appended
+// rather than substituted for an existing scope.
+func TestScopes_Contacts(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  config.Config
+		want []string
+	}{
+		{
+			name: "contacts alone",
+			cfg:  config.Config{ContactsEnabled: true},
+			want: []string{"Calendars.ReadWrite", "Contacts.Read", "People.Read"},
+		},
+		{
+			name: "contacts with mail read",
+			cfg:  config.Config{MailEnabled: true, ContactsEnabled: true},
+			want: []string{"Calendars.ReadWrite", "Mail.Read", "Contacts.Read", "People.Read"},
+		},
+		{
+			name: "contacts with mail manage",
+			cfg:  config.Config{MailEnabled: true, MailManageEnabled: true, ContactsEnabled: true},
+			want: []string{"Calendars.ReadWrite", "Mail.ReadWrite", "Contacts.Read", "People.Read"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scopes := Scopes(tc.cfg)
+			if len(scopes) != len(tc.want) {
+				t.Fatalf("Scopes() = %v, want %v", scopes, tc.want)
+			}
+			for i, want := range tc.want {
+				if scopes[i] != want {
+					t.Errorf("Scopes()[%d] = %q, want %q (full set %v)", i, scopes[i], want, scopes)
+				}
+			}
+		})
+	}
+}
+
+// TestScopes_NoContactsByDefault validates that neither contacts scope reaches a
+// configuration that did not opt in. A user who never sets the flag must see no
+// new consent prompt, so the scope set must be unchanged in every such config.
+func TestScopes_NoContactsByDefault(t *testing.T) {
+	cases := []config.Config{
+		{},
+		{MailEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true},
+		{MailManageEnabled: true},
+	}
+	for i, cfg := range cases {
+		scopes := Scopes(cfg)
+		for _, s := range scopes {
+			if s == "Contacts.Read" || s == "People.Read" {
+				t.Errorf("case %d: Scopes() must not include %q when ContactsEnabled is false; got %v", i, s, scopes)
+			}
+		}
+	}
+}
+
+// TestScopes_NoContactsWriteEver validates that no configuration requests a
+// contact write scope. The contacts surface is read-only, so Contacts.ReadWrite
+// is never asked for, opted in or not.
+func TestScopes_NoContactsWriteEver(t *testing.T) {
+	cases := []config.Config{
+		{},
+		{ContactsEnabled: true},
+		{MailEnabled: true, ContactsEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true, ContactsEnabled: true},
+	}
+	for i, cfg := range cases {
+		for _, s := range Scopes(cfg) {
+			if s == "Contacts.ReadWrite" || s == "People.ReadWrite" {
+				t.Errorf("case %d: Scopes() must never include the write scope %q; got %v", i, s, Scopes(cfg))
+			}
+		}
+	}
+}
+
 // mockAuthenticator is a test double for the Authenticator interface.
 type mockAuthenticator struct {
 	record azidentity.AuthenticationRecord

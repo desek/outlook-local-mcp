@@ -33,6 +33,19 @@ const mailScope = "Mail.Read"
 // requested: sending remains a user-only action performed in Outlook.
 const mailReadWriteScope = "Mail.ReadWrite"
 
+// contactsReadScope is the OAuth scope requested for read-only access to the
+// user's personal contacts (GET /me/contacts and GET /me/contacts/{id}). It is
+// a read scope: it grants no ability to create, update, or delete a contact.
+// It is requested only when ContactsEnabled is true, so a user who never opts
+// in is never asked to consent to it.
+const contactsReadScope = "Contacts.Read"
+
+// peopleReadScope is the OAuth scope requested for read-only access to the
+// user's relevance-ranked people (GET /me/people and GET /me/people/{id}). It
+// is a read scope and, like contactsReadScope, is requested only when
+// ContactsEnabled is true.
+const peopleReadScope = "People.Read"
+
 // Scopes returns the OAuth scope slice based on the application configuration.
 // The calendar scope is always included. Mail scopes are selected according to
 // configuration:
@@ -44,12 +57,21 @@ const mailReadWriteScope = "Mail.ReadWrite"
 //     appended.
 //   - When both flags are false, no mail scope is requested.
 //
+// Contacts scopes are selected independently of the mail flags:
+//
+//   - When cfg.ContactsEnabled is true, contactsReadScope ("Contacts.Read") and
+//     peopleReadScope ("People.Read") are both appended.
+//   - When it is false, the scope set is unchanged, so a user who has not opted
+//     in sees no additional consent prompt.
+//
 // Scopes never includes "Mail.Send"; sending mail is deliberately outside the
-// server's capability surface.
+// server's capability surface. It likewise never includes a contact write scope
+// such as "Contacts.ReadWrite": the contacts surface is read-only in every
+// configuration.
 //
 // Parameters:
-//   - cfg: the application configuration providing MailEnabled and
-//     MailManageEnabled.
+//   - cfg: the application configuration providing MailEnabled,
+//     MailManageEnabled, and ContactsEnabled.
 //
 // Returns the slice of OAuth scopes to request during authentication and
 // Graph client initialization.
@@ -60,6 +82,9 @@ func Scopes(cfg config.Config) []string {
 		scopes = append(scopes, mailReadWriteScope)
 	case cfg.MailEnabled:
 		scopes = append(scopes, mailScope)
+	}
+	if cfg.ContactsEnabled {
+		scopes = append(scopes, contactsReadScope, peopleReadScope)
 	}
 	return scopes
 }

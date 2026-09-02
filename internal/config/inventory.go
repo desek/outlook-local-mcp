@@ -41,6 +41,7 @@ const (
 	EnvProvenanceTag          = "OUTLOOK_MCP_PROVENANCE_TAG"
 	EnvMailEnabled            = "OUTLOOK_MCP_MAIL_ENABLED"
 	EnvMailManageEnabled      = "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+	EnvContactsEnabled        = "OUTLOOK_MCP_CONTACTS_ENABLED"
 	EnvMaxAttachmentSizeBytes = "OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES"
 )
 
@@ -89,6 +90,7 @@ var inventory = []Variable{
 	{EnvProvenanceTag, "com.github.desek.outlook-local-mcp.created", "Extended-property tag name for MCP-created events; empty disables provenance tagging."},
 	{EnvMailEnabled, "false", "Enable read-only mail access and request the Mail.Read scope."},
 	{EnvMailManageEnabled, "false", "Enable draft management, draft attachments, and received-message management, and request the Mail.ReadWrite scope; implies MAIL_ENABLED."},
+	{EnvContactsEnabled, "false", "Enable the read-only contacts domain and request the Contacts.Read and People.Read scopes; no contact write scope is ever requested."},
 	{EnvMaxAttachmentSizeBytes, "10485760", "Maximum attachment size in bytes, both downloaded by get_attachment and uploaded by add_attachment (default 10 MB)."},
 }
 
