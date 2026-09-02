@@ -972,6 +972,29 @@ func TestLoadConfig_ContactsEnabled(t *testing.T) {
 	}
 }
 
+// TestInventoryNamesContactsFlag validates that the declarative inventory
+// carries a row for the contacts gate, defaulting to false.
+//
+// The inventory is what the published configuration surface is generated from,
+// so a flag the loader reads but the inventory omits is a flag no user is ever
+// told about. Asserting the row directly holds that binding, which a test of
+// LoadConfig alone cannot.
+func TestInventoryNamesContactsFlag(t *testing.T) {
+	for _, v := range Inventory() {
+		if v.Name != EnvContactsEnabled {
+			continue
+		}
+		if v.Default != "false" {
+			t.Errorf("%s default = %q, want %q", v.Name, v.Default, "false")
+		}
+		if v.Description == "" {
+			t.Errorf("%s carries no description", v.Name)
+		}
+		return
+	}
+	t.Errorf("inventory names no %s row", EnvContactsEnabled)
+}
+
 // TestLoadConfig_MailManageEnabledDefault validates that MailManageEnabled
 // defaults to false when OUTLOOK_MCP_MAIL_MANAGE_ENABLED is not set.
 func TestLoadConfig_MailManageEnabledDefault(t *testing.T) {

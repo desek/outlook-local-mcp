@@ -1,5 +1,5 @@
 // Package server — this file exposes a zero-dependency entry point for building
-// the four domain verb slices purely for surface-manifest inspection (CR-0073
+// every domain's verb slice purely for surface-manifest inspection (CR-0073
 // Phase 1).
 //
 // The surface generator needs the built verb sets under several configurations

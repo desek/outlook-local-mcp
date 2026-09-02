@@ -11,8 +11,10 @@
 package tools
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -236,6 +238,37 @@ func TestContactsSearch_TextStatesSourceAndTotal(t *testing.T) {
 	}
 }
 
+// TestContactsSearch_RawTierCarriesDetail validates that the raw tier projects
+// each half through its own full serializer, so a caller that escalated sees
+// the detail the summary deliberately omits rather than the same field set
+// under a different name.
+func TestContactsSearch_RawTierCarriesDetail(t *testing.T) {
+	result, _ := runContactsSearch(t, newContactsSearchRecorder(), map[string]any{
+		"query":  "Alex",
+		"output": "raw",
+	})
+
+	var matches []map[string]any
+	if err := json.Unmarshal([]byte(resultText(t, result)), &matches); err != nil {
+		t.Fatalf("raw output is not JSON: %v", err)
+	}
+	if len(matches) != 3 {
+		t.Fatalf("match count = %d, want 3", len(matches))
+	}
+	if matches[0]["companyName"] != "Northwind" {
+		t.Errorf("saved contact carries no raw-tier detail: %v", matches[0])
+	}
+	if matches[0]["mobilePhone"] != "+1 555 0111" {
+		t.Errorf("saved contact carries no phone detail: %v", matches[0])
+	}
+	if _, ok := matches[1]["scoredEmailAddresses"]; !ok {
+		t.Errorf("ranked person carries no scored addresses: %v", matches[1])
+	}
+	if matches[1]["source"] != contactSourcePerson {
+		t.Errorf("raw tier drops the source label: %v", matches[1]["source"])
+	}
+}
+
 // TestContactsSearch_RequiresQuery validates that a call naming no query is
 // refused before any request, with an error naming the parameter.
 func TestContactsSearch_RequiresQuery(t *testing.T) {
@@ -268,8 +301,18 @@ func TestContactsSearch_RejectsUnconvertibleQuery(t *testing.T) {
 
 // TestContactsSearch_GraphFailureCarriesFix validates that a failed collection
 // fails the verb with a correction, rather than returning the other half as if
-// it were the whole answer.
+// it were the whole answer, and that the same correction reaches the log record.
+//
+// Both channels are asserted because the log record is the only channel a
+// headless caller reading a persisted log has. Grading the tool result alone
+// would leave that channel unheld: a refactor dropping the "fix" attribute from
+// the record would keep every test green.
 func TestContactsSearch_GraphFailureCarriesFix(t *testing.T) {
+	var logged bytes.Buffer
+	restore := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, nil)))
+	defer slog.SetDefault(restore)
+
 	recorder := newContactsSearchRecorder()
 	recorder.status = http.StatusForbidden
 
@@ -280,6 +323,9 @@ func TestContactsSearch_GraphFailureCarriesFix(t *testing.T) {
 	}
 	if !strings.Contains(resultText(t, result), contactsSearchGraphFix) {
 		t.Errorf("error carries no fix instruction: %s", resultText(t, result))
+	}
+	if !strings.Contains(logged.String(), contactsSearchGraphFix) {
+		t.Errorf("log record carries no fix instruction: %q", logged.String())
 	}
 }
 

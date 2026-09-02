@@ -1,5 +1,5 @@
-// Package tools_test contains description-quality tests for the four aggregate
-// MCP domain tools (calendar, mail, account, system). These enforce the
+// Package tools_test contains description-quality tests for the aggregate MCP
+// domain tools (calendar, mail, account, system, and the opt-in contacts). These enforce the
 // structural and completeness requirements CR-0068 adds to the top-level tool
 // descriptions so that an MCP client can select a verb and construct its
 // arguments from tools/list alone:

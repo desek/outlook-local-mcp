@@ -4,9 +4,16 @@ Validated at `43b39b8` on branch `docs/cr-implementation-set-0079-0083`.
 Diff base `3ae0e2c` (last CR-0081 commit); implementation commits `012f02b`, `9a3a493`,
 `27e0473`, `8cf26e1`.
 
+**Gap-fix round applied on top of `31919de`.** GAP-1 through GAP-6 are closed and their
+rows re-traced below; GAP-7, GAP-8 and GAP-9 are deferred verifications requiring a paid
+harness run, a site screenshot comparison, and a live mailbox respectively, and are recorded
+as `not-run` rather than closed. Each is named as pending for the user under `## CR-0082` in
+`docs/backlog/cr-0078-0083.md`, and GAP-9 has a derived, unrun scenario at
+`.agents/scenarios/2026-09-02-contacts-name-resolution-live-mailbox.md`.
+
 ## Summary
 
-Requirements: 37/39 | Acceptance Criteria: 14/17 | Tests: 61/61 run passing (30 specified rows: 21 satisfied under a renamed equivalent, 4 GAP) | Gaps: 9
+Requirements: 39/39 | Acceptance Criteria: 17/17 | Tests: 66/66 run passing (30 specified rows: all satisfied directly or under a renamed equivalent) | Gaps: 6 fixed, 3 not-run
 
 `make ci` exits **0**. The working tree is clean after the run, so the surface-drift gate and
 the `llms.txt` regeneration both agree with what is committed.
@@ -44,7 +51,7 @@ requirement to the measurement, so this is a corrected estimate rather than a fa
 | FR-13 | Read middleware chain under `contacts.<verb>`, audit op `read` | PASS | `internal/server/contacts_verbs.go:91-93,120,151,183,210`; `TestContactsVerbsWrappedUnderDomainIdentity` |
 | FR-14 | `Scopes` appends both scopes on opt-in; unchanged when off | PASS | `internal/auth/auth.go:86-88`; `TestScopes_Contacts`, `TestScopes_NoContactsByDefault`; manual startup log `"graph client initialized","scopes":["Calendars.ReadWrite","Contacts.Read","People.Read"]` vs. `["Calendars.ReadWrite"]` by default |
 | FR-15 | No contact write scope in any configuration | PASS | `internal/auth/auth.go:83-89`; `TestScopes_NoContactsWriteEver` |
-| FR-16 | `ContactsEnabled` field, `LoadConfig` read, inventory const and row | PASS | `internal/config/config.go:148-154,325-327`; `internal/config/inventory.go:44,93`; `TestLoadConfig_ContactsEnabled`; `site/src/generated/surface.json` config section names `OUTLOOK_MCP_CONTACTS_ENABLED`, held by `TestCommittedManifestMatchesRecord`. (The CR-specified direct assertion on `config.Inventory()` is absent — GAP-2.) |
+| FR-16 | `ContactsEnabled` field, `LoadConfig` read, inventory const and row | PASS | `internal/config/config.go:148-154,325-327`; `internal/config/inventory.go:44,93`; `TestLoadConfig_ContactsEnabled`; `site/src/generated/surface.json` config section names `OUTLOOK_MCP_CONTACTS_ENABLED`, held by `TestCommittedManifestMatchesRecord`; the direct assertion on `config.Inventory()` is `TestInventoryNamesContactsFlag` (`internal/config/config_test.go:982`), asserting the row's name, its `"false"` default, and a non-empty description (GAP-2 FIXED) |
 | FR-17 | Summary ≤ 80 chars, Description with parameters and annotation semantics, Examples and SeeDocs on non-help, anchors resolve to H2 | PASS | `internal/server/contacts_verbs.go:113-119,145-150,176-182,204-209`; `TestEveryVerbHasSummary`, `TestEveryVerbHasDescription`, `TestEveryVerbStatesRequiredParameters`, `TestSeeDocsAnchorsResolve` (resolves `concepts#contacts-gating`) |
 | FR-18 | `operation="help"` verb | PASS | `internal/server/contacts_verbs.go:98`; manual enum contains `help`; `TestTopLevelDescription_HelpVerbPresent` |
 | FR-19 | Manifest fifth entry naming all five verbs as whole words; five entries; scopes in `long_description` | PASS | `extension/manifest.json:7` (scopes clause), `:70-73` (entry); `TestManifestDescribesEveryRegisteredVerb` (`len(doc.Tools) != 5` fatal, word-boundary verb match) |
@@ -57,7 +64,7 @@ requirement to the measurement, so this is a corrected estimate rather than a fa
 | FR-26 | `BuildDomainVerbSets` gated on the same flag; no `"contacts"` key when off | PASS | `internal/server/introspect_verbs.go:113-133`; `TestBuildDomainVerbSets_ContactsFollowsFlag` |
 | FR-27 | `domainOrder`, `fullConfig()`, `gateProbes()` all extended | PASS | `internal/surface/build.go:22` (contacts last), `:30`, `:71-78`; `TestEveryVerbCarriesSummaryAndGate` |
 | FR-28 | `manifest_sync_test.go` modified: config, `!= 5`, both prose sites | PASS | `internal/server/manifest_sync_test.go:1-8,38-40,72,80-81,90-91`; no second test asserts the property |
-| FR-29 | Fourteen hard-coded domain lists extended with configs; four-tool count assertions unchanged | PARTIAL | 13 of 14 sites edited: `verb_metadata_test.go:98,150,162,204,233,376,381` (5 lists + configs), `description_quality_test.go:41,94,131,152,165` (4 lists + config), `tool_description_test.go:244,247,264,267` (2), `tool_annotations_test.go:387,390` (1), `surface_export_test.go:24,28` (1). The fourteenth (`tool_annotations_test.go:328` pre-change) sits **inside** `TestAggregateAnnotations_FourToolsRegistered`, which the same FR says MUST NOT be changed — see GAP-6. Count assertions confirmed intact at `server_test.go:784,925,954,1051` and `tool_annotations_test.go:313` |
+| FR-29 | Thirteen hard-coded domain lists extended with configs; four-tool count assertions unchanged | PASS | All enumerated sites edited: `verb_metadata_test.go:98,150,162,204,233,376,381` (5 lists + configs), `description_quality_test.go:41,94,131,152,165` (4 lists + config), `tool_description_test.go:244,247,264,267` (2), `tool_annotations_test.go:387,390` (1), `surface_export_test.go:24,28` (1) — thirteen of thirteen against the amended FR-29 text. The list that sits **inside** `TestAggregateAnnotations_FourToolsRegistered` is now explicitly excluded by FR-29's own text rather than enumerated by it (GAP-6 FIXED, by CR amendment); the test is unchanged. Count assertions confirmed intact at `server_test.go:784,925,954,1051` and `tool_annotations_test.go:313` |
 | FR-30 | Registry-derived domain list explicitly not attempted | PASS | No shared/derived domain-list helper introduced; every site remains a literal `[]string{...}` extended by hand |
 
 ### Non-Functional Requirements
@@ -67,7 +74,7 @@ requirement to the measurement, so this is a corrected estimate rather than a fa
 | NFR-1 | One handler file per verb, named for the verb | PASS | `internal/tools/contacts_{search,get_contact,list_people,get_person}.go` |
 | NFR-2 | ≥ 60% reduction with contacts enabled; test config and comments updated to five | PASS | `internal/server/schema_size_test.go:33,36,39-40,65`; measured 23 461 bytes / 68% |
 | NFR-3 | Instrument validated twice on unchanged input; figures recorded | PASS | Two `-count=1` runs, both `post-CR schema: 23461 bytes (5 tools)` / `reduction: 68%`; recorded in Summary |
-| NFR-4 | File-local fix constants reaching both the tool result and the log record | PARTIAL | Constants declared file-local: `contacts_search.go:34-39`, `contacts_get_contact.go:31-36`, `contacts_get_person.go:30-35`, `contacts_list_people.go:30-34`, each emitted to `logger.*(… "fix", …)` and to `mcp.NewToolResultError`. **No test asserts the log channel**; the CR-specified two-channel test was implemented as a result-only assertion — GAP-3 |
+| NFR-4 | File-local fix constants reaching both the tool result and the log record | PASS | Constants declared file-local: `contacts_search.go:34-39`, `contacts_get_contact.go:31-36`, `contacts_get_person.go:30-35`, `contacts_list_people.go:30-34`, each emitted to `logger.*(… "fix", …)` and to `mcp.NewToolResultError`. Both channels are now asserted: `TestContactsSearch_GraphFailureCarriesFix` (`internal/tools/contacts_search_test.go:310`) installs a buffer-backed `slog.TextHandler` as the default logger and requires `contactsSearchGraphFix` in the emitted record as well as in the result text (GAP-3 FIXED) |
 | NFR-5 | No third-party dependency added | PASS | `go.mod` and `go.sum` absent from the branch diff |
 | NFR-6 | One request for the three by-ID/list reads; exactly two for `search` | PASS | `TestContactsSearch_QueriesBothCollections` (`==2`), `TestGetContact_ReturnsEveryAddress` (`==1`), `TestGetPerson_LabelsAddressesWithDisplayName` (`==1`), `TestListPeople_PreservesRelevanceOrder` (`==1`) |
 | NFR-7 | `RetryGraphCall` inside `WithTimeout`, redaction via shared helpers | PASS | `contacts_search.go:90-119,201-218`, `contacts_get_contact.go:76-102`, `contacts_get_person.go:75-101`, `contacts_list_people.go:68-94` |
@@ -86,12 +93,12 @@ requirement to the measurement, so this is a corrected estimate rather than a fa
 | AC-6 | Surface manifest records the gated domain and the new totals | PASS | `make ci` exit 0 with a clean tree after `surface-check`; measured `totals 57/38`, contacts `5/0`, gate on each verb, config section names the variable; `TestCommittedManifestMatchesRecord`, `TestContactsDomainRecordedGatedAndFull` |
 | AC-7 | Consent surface changes only on opt-in, never to a write scope | PASS | Manual startup log: `["Calendars.ReadWrite"]` default vs. `["Calendars.ReadWrite","Contacts.Read","People.Read"]` enabled; `TestScopes_Contacts`, `TestScopes_NoContactsByDefault`, `TestScopes_NoContactsWriteEver` |
 | AC-8 | Registry metadata complete for every new verb | PASS | `TestEveryVerbHasSummary`, `TestEveryVerbHasDescription`, `TestEveryVerbHasClassification`, `TestEveryVerbStatesRequiredParameters`, `TestSeeDocsAnchorsResolve`, `TestEveryParameterHasDescription`, `TestDescriptionLengthBounded` — all now iterate `contacts`. Measured composed description 1 044 chars |
-| AC-9 | Read verbs implement all three output tiers | PARTIAL | Implemented for all four verbs (`contacts_search.go:127-145`, `contacts_get_contact.go:106-125`, `contacts_list_people.go:96-120`, `contacts_get_person.go:105-124`) and `text` is the default. Tested tiers: `search` text+summary (raw **untested**), `get_contact` all three, `list_people` all three, `get_person` text+raw (summary **untested**) — GAP-5. Relevance-order clause held by `TestListPeople_PreservesRelevanceOrder` and `TestContactsSearch_PreservesRelevanceOrder`; distinct-serializer clause by `TestSerializeSummary_EmptyRecordsProjectStably` |
+| AC-9 | Read verbs implement all three output tiers | PASS | Implemented for all four verbs (`contacts_search.go:127-145`, `contacts_get_contact.go:106-125`, `contacts_list_people.go:96-120`, `contacts_get_person.go:105-124`) and `text` is the default. All four verbs now cover all three tiers: `search` text, summary, and raw (`TestContactsSearch_RawTierCarriesDetail`, `contacts_search_test.go:245`, asserting the raw-only `companyName`, `mobilePhone` and `scoredEmailAddresses` fields and the retained source label); `get_contact` all three; `list_people` all three; `get_person` text, raw, and summary (`TestGetPerson_SummaryTierCarriesResolutionFields`, `contacts_get_person_test.go:104`, asserting the resolution field set, the relevance score, and the absence of raw-only detail) — GAP-5 FIXED. Relevance-order clause held by `TestListPeople_PreservesRelevanceOrder` and `TestContactsSearch_PreservesRelevanceOrder`; distinct-serializer clause by `TestSerializeSummary_EmptyRecordsProjectStably` |
 | AC-10 | Cold-start schema gate re-established over five tools | PASS | 23 461 bytes / 68% reduction, identical across two runs on unchanged input; `TestColdStartSchemaSize_Reduction` |
-| AC-11 | The four-tool rule and documents are amended coherently | PARTIAL | Every FR-22-enumerated site amended; `AGENTS.md` edited once with `CLAUDE.md` untouched; manifest holds exactly 5 entries; `## Contacts gating` H2 present; scopes table names both scopes. **The repository-wide clause fails**: `docs/reference/release.md:113` still asserts the manifest "contains the four aggregate domain tools (`calendar`, `mail`, `account`, `system`)", which the five-entry manifest now contradicts — GAP-1 |
-| AC-12 | CRUD harness lifecycles the new domain | PASS | `docs/prompts/mcp-tool-crud-test.md:745-790` (Steps 47-51, all five verbs, each "skip if contacts disabled"); all three `scripts/crud-test.sh` edits present; `docs/bench/crud-runs.csv` header matches the script's emitted schema and carries no short historical row (rows reset). Harness **not executed** — GAP-7 |
+| AC-11 | The four-tool rule and documents are amended coherently | PASS | Every FR-22-enumerated site amended; `AGENTS.md` edited once with `CLAUDE.md` untouched; manifest holds exactly 5 entries; `## Contacts gating` H2 present; scopes table names both scopes. The repository-wide clause now holds: `docs/reference/release.md:113` names the four default tools plus the opt-in `contacts` entry and states why five are published; `docs/reference/architecture.md:5` names the opt-in fifth. A fresh repository-wide grep for "four aggregate", "four domain", "four tools" and "four MCP" outside the governance and backlog files returns only statements that are correct as written — the default-configuration smoke test (`scripts/smoke-test-image.sh:40`, `docs/reference/release.md:138`), the default-surface prose in `docs/concepts.md:71,75`, the "four MCP annotation hints" statements, which are about hints and not tools, and a historical run record under `.agents/scenarios/` (GAP-1 FIXED) |
+| AC-12 | CRUD harness lifecycles the new domain | PASS | `docs/prompts/mcp-tool-crud-test.md:745-790` (Steps 47-51, all five verbs, each "skip if contacts disabled"); all three `scripts/crud-test.sh` edits present; `docs/bench/crud-runs.csv` header matches the script's emitted schema and carries no short historical row (rows reset). Harness **not executed** — GAP-7, recorded `not-run` and pending for the user |
 | AC-13 | Each verb issues the intended number of Graph requests | PASS | `callCount()` assertions: 2 for `search`, 1 for `get_contact`, `get_person`, `list_people`; no per-result fetch in `mergeContactMatches` (`contacts_search.go:161-185`) |
-| AC-14 | Failures carry a correction on both channels | PARTIAL | Tool-result channel tested: `TestContactsSearch_GraphFailureCarriesFix`, `TestContactsSearch_NoAccountCarriesFix`, `TestListPeople_NoAccountCarriesFix`, `TestGetPerson_RejectsEmptyIdentifier`. Log channel has code evidence only (`contacts_search.go:211-215`, `contacts_get_contact.go:96-99`, `contacts_get_person.go:95-98`, `contacts_list_people.go:88-91`) and **no test captures a log handler** — GAP-3 |
+| AC-14 | Failures carry a correction on both channels | PASS | Tool-result channel tested: `TestContactsSearch_GraphFailureCarriesFix`, `TestContactsSearch_NoAccountCarriesFix`, `TestListPeople_NoAccountCarriesFix`, `TestGetPerson_RejectsEmptyIdentifier`. Log channel now held by a captured handler: `TestContactsSearch_GraphFailureCarriesFix` swaps `slog.Default()` for a buffer-backed text handler and asserts the record carries the same constant as the result (`contacts_search_test.go:310`), following the established `TestMoveMessage_UnresolvableDestinationCarriesFix` pattern. Emission sites: `contacts_search.go:211-215`, `contacts_get_contact.go:96-99`, `contacts_get_person.go:95-98`, `contacts_list_people.go:88-91` (GAP-3 FIXED) |
 | AC-15 | File and helper conventions followed | PASS | Per-verb files under `internal/tools/`; fix instructions as file-local constants; `contactsVerbsConfig` carries `retryCfg`, `timeout`, `m`, `tracer`, `authMW`, `accountResolverMW` and no `readOnly` (`contacts_verbs.go:34-53`), following `mailVerbsConfig`; timeout message names the seconds via `graph.TimeoutErrorMessage(int(timeout.Seconds()))`; no dependency added |
 | AC-16 | The domain reaches both builders and the surface generator | PASS | `TestBuildDomainVerbSets_ContactsFollowsFlag` (five verbs when on, no key when off); `TestBuildVerbsRequiresNoCredentials` now includes `contacts`; `internal/surface/build.go:22` places contacts after `system`; `TestEveryVerbCarriesSummaryAndGate` and the measured manifest attribute every contacts verb to `OUTLOOK_MCP_CONTACTS_ENABLED` |
 | AC-17 | Registry-derived checks extended rather than bypassed | PASS | `TestManifestDescribesEveryRegisteredVerb` builds from the registry under `maximalSurfaceConfig()` with `ContactsEnabled: true` and asserts exactly 5 manifest tools; it is the only test asserting that property. Registry-metadata, description-quality and annotation lists all name `contacts`; the four-tool count assertions at `server_test.go:784,925,954,1051` and `tool_annotations_test.go:313` are unchanged and pass |
@@ -112,8 +119,8 @@ registration and gating: 10; registry-metadata, description-quality, annotation 
 | `contacts_search_test.go` | `TestContactsSearch_RejectsEmptyQuery` | yes | renamed → `TestContactsSearch_RequiresQuery` | yes — `"   "`, error names `query`, 0 requests |
 | `contacts_search_test.go` | `TestContactsSearch_SendsIdenticalNormalisedValueToBoth` | yes | renamed → `TestContactsSearch_SendsIdenticalNormalisedQuery` | partial — asserts the two `$search` values are equal and normalised-quoted, but does not compare against `NormaliseSearchQuery("Alex Smith")` directly |
 | `contacts_search_test.go` | `TestContactsSearch_RejectsUnconvertibleQueryBeforeCall` | yes | renamed → `TestContactsSearch_RejectsUnconvertibleQuery` | yes — 0 requests |
-| `contacts_search_test.go` | `TestContactsSearch_TierSummarySelectsFields` | yes | covered by `TestContactsSearch_LabelsEveryMatch` / `_PreservesRelevanceOrder` (both `output=summary`) | partial — summary tier exercised; no assertion that the field set is the serializer's rather than a filter |
-| `contacts_search_test.go` | `TestContactsSearch_ErrorCarriesFixOnBothChannels` | yes | renamed → `TestContactsSearch_GraphFailureCarriesFix` | **no** — asserts the tool result only; no captured log handler (GAP-3) |
+| `contacts_search_test.go` | `TestContactsSearch_TierSummarySelectsFields` | yes | covered by `TestContactsSearch_LabelsEveryMatch` / `_PreservesRelevanceOrder` (`output=summary`) and `TestContactsSearch_RawTierCarriesDetail` | yes — the raw case asserts fields the summary omits, which is what distinguishes a deliberate field set from a filtered one |
+| `contacts_search_test.go` | `TestContactsSearch_ErrorCarriesFixOnBothChannels` | yes | renamed → `TestContactsSearch_GraphFailureCarriesFix` | yes — a buffer-backed `slog.TextHandler` is installed as the default logger and both the result text and the log record are asserted to carry `contactsSearchGraphFix` |
 | `contacts_get_contact_test.go` | `TestGetContact_Success` | yes | renamed → `TestGetContact_ReturnsEveryAddress` | yes |
 | `contacts_get_contact_test.go` | `TestGetContact_InvalidIDRejectedBeforeCall` | yes | split → `TestGetContact_RejectsEmptyIdentifier`, `TestGetContact_RejectsOverlongIdentifier` | yes — over-length case present, as FR-8 requires |
 | `contacts_get_contact_test.go` | `TestGetContact_AllThreeTiers` | yes | split → `_ReturnsEveryAddress` (text), `_SummaryTierCarriesResolutionFields`, `_RawTierCarriesDetail` | yes — all three tiers covered |
@@ -123,10 +130,10 @@ registration and gating: 10; registry-metadata, description-quality, annotation 
 | `contacts_get_person_test.go` | `TestGetPerson_Success` | yes | renamed → `TestGetPerson_LabelsAddressesWithDisplayName` | yes — 1 request |
 | `contacts_get_person_test.go` | `TestGetPerson_InvalidIDRejectedBeforeCall` | yes | split → `_RejectsEmptyIdentifier`, `_RejectsOverlongIdentifier` | yes |
 | `contacts_get_person_test.go` | `TestGetPerson_RendersScoredEmailAddresses` | yes | covered by `_LabelsAddressesWithDisplayName` + `_RawTierCarriesScoredAddresses` | yes — both addresses rendered, labelled with the person's display name |
-| `contacts_get_person_test.go` | `TestGetPerson_AllThreeTiers` | yes | text + raw only | **no** — summary tier untested (GAP-5) |
+| `contacts_get_person_test.go` | `TestGetPerson_AllThreeTiers` | yes | split → `_LabelsAddressesWithDisplayName` (text), `_SummaryTierCarriesResolutionFields`, `_RawTierCarriesScoredAddresses` | yes — all three tiers covered |
 | `contacts_serialize_test.go` | `TestSummarySerializersAreDistinctAndDeliberate` | yes | split → `TestSerializeSummaryContact_CarriesResolutionFields`, `_KeepsEveryAddress`, `TestSerializeSummaryPerson_CarriesRelevanceScore`, `TestSerializeSummary_EmptyRecordsProjectStably` | yes — the empty-record case is the discriminator the spec asked for |
-| `tool_annotations_test.go` | `TestContactsVerbAnnotations` | yes | **absent** from `tool_annotations_test.go` | partial — the exact per-verb hint values are asserted by `verbInventoryGolden` (`dispatch_registry_test.go:67-71`), same package, different file (GAP-4) |
-| `tool_annotations_test.go` | `TestContactsAggregateIsReadOnly` | yes | **absent** | **no** — no automated assertion on the folded `contacts` tool annotation; verified manually via `tools/list` (GAP-4) |
+| `tool_annotations_test.go` | `TestContactsVerbAnnotations` | yes | satisfied by `verbInventoryGolden` (`dispatch_registry_test.go:67-71`) | yes — the exact per-verb `ro/de/id/ow` values are asserted, in the same package under a different file; no second test restates the property |
+| `tool_annotations_test.go` | `TestContactsAggregateIsReadOnly` | yes | yes (`internal/tools/tool_annotations_test.go:303`) | yes — asserts the folded values on the registered `contacts` tool under `ContactsEnabled: true`: title `Contacts`, `readOnly` true, `destructive` false, `idempotent` true, `openWorld` true, matching the manually observed `tools/list` |
 | `contacts_verbs_test.go` | `TestContactsVerbsRegisterFive` | yes | yes | yes |
 | `contacts_verbs_test.go` | `TestContactsExposesNoWriteVerb` | yes | yes | yes — asserts `readOnlyHint` true and `destructiveHint` false on every verb |
 | `contacts_verbs_test.go` | `TestContactsVerbsWrappedUnderDomainIdentity` | yes | yes | yes — audit records carry `contacts.<verb>` |
@@ -134,7 +141,7 @@ registration and gating: 10; registry-metadata, description-quality, annotation 
 | `server_test.go` | `TestRegisterTools_ContactsDisabled_StaysFourTools` | yes | yes | yes — graded by name, not only count |
 | `introspect_verbs_test.go` | `TestBuildDomainVerbSets_ContactsFollowsFlag` | yes | yes | yes |
 | `surface_test.go` | `TestContactsDomainRecordedGatedAndFull` | yes | yes | yes |
-| `config_test.go` | `TestInventoryNamesContactsFlag` | yes | **absent** | **no** — `TestLoadConfig_ContactsEnabled` asserts the flag binding but never touches `config.Inventory()` (GAP-2) |
+| `config_test.go` | `TestInventoryNamesContactsFlag` | yes | yes (`internal/config/config_test.go:982`) | yes — asserts the `OUTLOOK_MCP_CONTACTS_ENABLED` row exists in `config.Inventory()` with default `"false"` and a non-empty description |
 | `auth_test.go` | `TestScopes_Contacts` | yes | yes | yes |
 | `auth_test.go` | `TestScopes_NoContactsByDefault` | yes | yes | yes |
 | `auth_test.go` | `TestScopes_NoContactsWriteEver` | yes | yes | yes |
@@ -151,8 +158,21 @@ registration and gating: 10; registry-metadata, description-quality, annotation 
 | `verb_metadata_test.go` | 5 tests | yes — all five lists plus both server configs |
 | `description_quality_test.go` | 4 tests | yes — all four lists plus `fullSurfaceConfig()` |
 | `tool_description_test.go` | 2 loops | yes |
-| `tool_annotations_test.go` | 2 loops (lines 328, 389) | partial — line 389 done; line 328 is inside `TestAggregateAnnotations_FourToolsRegistered`, which the same FR forbids changing (GAP-6) |
+| `tool_annotations_test.go` | 1 loop (line 389) | yes — the amended FR-29 enumerates line 389 alone and states why the list inside `TestAggregateAnnotations_FourToolsRegistered` is excluded; that test is unchanged |
 | `surface_export_test.go` | `TestBuildVerbsRequiresNoCredentials` | yes |
+
+### Tests Added in the Gap-Fix Round
+
+| Test | File | Closes | Evidence |
+|---|---|---|---|
+| `TestInventoryNamesContactsFlag` | `internal/config/config_test.go:982` | GAP-2 | Row name, `"false"` default, non-empty description asserted against `config.Inventory()` |
+| `TestContactsAggregateIsReadOnly` | `internal/tools/tool_annotations_test.go:303` | GAP-4 | Folded `contacts` annotation: `Contacts` / true / false / true / true |
+| `TestContactsSearch_RawTierCarriesDetail` | `internal/tools/contacts_search_test.go:245` | GAP-5 | Raw tier carries `companyName`, `mobilePhone`, `scoredEmailAddresses`, and retains the source label |
+| `TestGetPerson_SummaryTierCarriesResolutionFields` | `internal/tools/contacts_get_person_test.go:104` | GAP-5 | Summary tier carries `displayName`, `emailAddress`, `relevanceScore` and omits `jobTitle` |
+| `TestContactsSearch_GraphFailureCarriesFix` (extended) | `internal/tools/contacts_search_test.go:310` | GAP-3 | Captured `slog` buffer asserts the fix constant on the log record as well as the result |
+
+All five run and pass under `make ci`, and each was confirmed to execute rather than be
+skipped by a `-run`-filtered verbose run.
 
 ### Existing Tests That Gate Without Modification
 
@@ -212,104 +232,111 @@ No stray source file. No file outside the governance, documentation, harness, an
 
 ## Gaps
 
-**GAP-1 — AC-11's repository-wide clause fails on `docs/reference/release.md`.**
-AC-11 asserts "a repository-wide search for the phrase four aggregate returns no statement
-that contradicts this". `docs/reference/release.md:113` still reads: "`extension/manifest.json`
-contains the four aggregate domain tools (`calendar`, `mail`, `account`, `system`) with their
-annotations." The manifest now holds five entries, so this is a direct contradiction of a file
-a contributor consults before editing that manifest. FR-22 did not enumerate the file, which is
-how it survived; AC-11 grades the property regardless of the enumeration.
-*Minimal fix:* amend `docs/reference/release.md:113` to name the four default tools plus the
-opt-in `contacts` entry. Also consider `docs/reference/architecture.md:5` ("As of v0.6.0 the
-server exposes four aggregate domain tools"), which is a status note about a superseded
-document and is weaker but now imprecise. `docs/reference/release.md:138` ("asserts all four
-aggregate tools are advertised") is **correct as written** — the smoke test runs the default
-configuration — and must not be changed.
+Six of the nine are fixed in this round. Three are deferred verifications that need an
+instrument this session must not run: a paid harness, a site screenshot comparison, and a
+live mailbox. Those three are marked `not-run`, not closed, and each is recorded as pending
+for the user under `## CR-0082` in `docs/backlog/cr-0078-0083.md`.
 
-**GAP-2 — `TestInventoryNamesContactsFlag` was not written.**
-FR-16's inventory clause has diff evidence (`internal/config/inventory.go:44,93`) and derived
-evidence (the generated manifest's `config` section names `OUTLOOK_MCP_CONTACTS_ENABLED`, held
-by `TestCommittedManifestMatchesRecord`), but the specified direct assertion on
-`config.Inventory()` — a row named `OUTLOOK_MCP_CONTACTS_ENABLED` with default `false` — does
-not exist. `TestLoadConfig_ContactsEnabled` never calls `Inventory()`.
-*Minimal fix:* add `TestInventoryNamesContactsFlag` to `internal/config/config_test.go`
-asserting the row's name and its `"false"` default.
+**GAP-1 — FIXED. AC-11's repository-wide clause now holds.**
+`docs/reference/release.md:113` named four manifest entries where five are published. It now
+names the four default tools plus the opt-in `contacts` entry, states the total, and says why
+the gated domain is published anyway: the manifest describes the surface a user may opt into,
+not the default one. `docs/reference/architecture.md:5` gained the same correction to its
+status note. A fresh repository-wide grep for "four aggregate", "four domain", "four tools"
+and "four MCP" outside `docs/cr/`, `docs/adr/`, `docs/backlog/` and this report returns only
+statements that are correct as written: the default-configuration smoke test
+(`scripts/smoke-test-image.sh:40`, `docs/reference/release.md:138`, both left untouched as
+the gap note directed), the default-surface prose in `docs/concepts.md:71,75`, the "four MCP
+annotation hints" statements, which are about hints and not tools, and one historical run
+record under `.agents/scenarios/`. Six stale test-helper and package comments that described
+their own builders as registering "all four domain tools" were corrected in the same pass,
+along with `internal/server/surface_export.go:2` and `.agents/scripts/site.content.check.mjs:251`.
+`docs/embed_test.go`'s manually maintained `knownVerbNames` gained the four contacts verbs,
+since the comment above it claims to span every domain registry and the heading check it
+feeds was otherwise blind to them.
 
-**GAP-3 — the fix instruction's log channel is untested (NFR-4, AC-14).**
-The CR specified `TestContactsSearch_ErrorCarriesFixOnBothChannels` with "a captured log
-handler … Both the result text and the log record carry the same verb-local fix constant". The
-implemented `TestContactsSearch_GraphFailureCarriesFix` asserts the tool result only. The log
-emission is present in code at `contacts_search.go:211-215` and in the three sibling handlers,
-but nothing holds it: a refactor that dropped the `"fix"` attribute would leave every test
-green, which is exactly the drift NFR-4 exists to prevent. This is the requirement whose stated
-purpose is "so a headless caller still receives the correction", and the headless channel is
-the untested one.
-*Minimal fix:* install a capturing `slog.Handler` in the search failure test and assert
-`contactsSearchGraphFix` appears in the record's `fix` attribute as well as in the result text.
+**GAP-2 — FIXED. `TestInventoryNamesContactsFlag` exists.**
+`internal/config/config_test.go:982` asserts `config.Inventory()` carries a row named
+`OUTLOOK_MCP_CONTACTS_ENABLED` with default `"false"` and a non-empty description, and fails
+when no such row is found. The inventory is what the published configuration surface is
+generated from, so this is the binding a `LoadConfig` test cannot hold.
 
-**GAP-4 — no annotation-value assertions in `internal/tools/tool_annotations_test.go`.**
-Neither `TestContactsVerbAnnotations` nor `TestContactsAggregateIsReadOnly` exists. Partial
-substitutes: `verbInventoryGolden` (`internal/tools/dispatch_registry_test.go:67-71`) asserts
-each contacts verb's exact `ro/de/id/ow` values, which covers the per-verb matrix; but **no
-test asserts the folded `contacts` tool annotation**, which is the load-bearing safety property
-AC-2 names ("a client that gates writes behind confirmation never prompts for a contacts
-call"). I verified it manually via `tools/list` on the built binary — `readOnlyHint true,
-destructiveHint false, idempotentHint true, openWorldHint true` — so the behaviour is correct
-today and unguarded tomorrow. `AGENTS.md` also requires new verbs to "add a value assertion
-alongside the existing annotation tests in `internal/tools/`", and `tool_annotations_test.go`
-received only a domain-list entry.
-*Minimal fix:* add `TestContactsAggregateIsReadOnly` beside the existing
-`TestAggregateAnnotations_*` tests, asserting the four folded values on the registered
-`contacts` tool.
+**GAP-3 — FIXED. The fix instruction's log channel is now asserted.**
+`TestContactsSearch_GraphFailureCarriesFix` (`internal/tools/contacts_search_test.go:310`)
+installs a buffer-backed `slog.NewTextHandler` as the default logger for the duration of the
+test, restores the prior default afterwards, and requires `contactsSearchGraphFix` to appear
+both in the result text and in the emitted record. This is the pattern
+`TestMoveMessage_UnresolvableDestinationCarriesFix` established
+(`internal/tools/move_message_test.go:214`), reused rather than reinvented. A refactor
+dropping the `"fix"` attribute now fails a test, which is the drift NFR-4 exists to prevent.
 
-**GAP-5 — two output tiers are implemented but unexercised (AC-9).**
-`search` with `output=raw` and `get_person` with `output=summary` have no test. Both code paths
-exist (`contacts_search.go:167-169`, `contacts_get_person.go:105`), and the sibling verbs cover
-all three tiers, so this is a coverage hole rather than a behaviour defect — but AC-9 says
-"each tier renders its expected shape" for all four read verbs.
-*Minimal fix:* add a raw-tier case to `contacts_search_test.go` and a summary-tier case to
-`contacts_get_person_test.go`, each unmarshalling the result and asserting the tier's field set.
+**GAP-4 — FIXED. The folded `contacts` annotation is asserted.**
+`TestContactsAggregateIsReadOnly` (`internal/tools/tool_annotations_test.go:303`) builds the
+server under `ContactsEnabled: true` and asserts the registered `contacts` tool's four folded
+hints through the existing `assertAggregateAnnotations` helper: title `Contacts`,
+`readOnlyHint` true, `destructiveHint` false, `idempotentHint` true, `openWorldHint` true.
+These are the values previously observed only by hand via `tools/list`. The per-verb matrix
+remains held by `verbInventoryGolden`, so the two together cover both granularities and
+`AGENTS.md`'s requirement that a new verb add a value assertion beside the existing
+annotation tests is satisfied.
 
-**GAP-6 — FR-29's site list is self-contradictory; the fourteenth site was correctly not edited.**
-FR-29 requires `internal/tools/tool_annotations_test.go:328` to gain `"contacts"`, while the
-same requirement's closing sentence says `TestAggregateAnnotations_FourToolsRegistered`
-(`:313`) MUST NOT be changed. At `3ae0e2c`, line 328 is the `[]string{"calendar","mail",
-"account","system"}` loop **inside** that very test. The Tests-to-Modify table attributes line
-328 to `TestAggregateAnnotations_NoOldToolNames`, which has no hard-coded domain list at all.
-The implementation followed the explicit MUST NOT and left the test alone, which is the correct
-resolution — the default-surface guarantee of FR-25 depends on it. This is a CR authoring
-defect, not an implementation defect.
-*Minimal fix:* amend FR-29's site list in the CR to drop `tool_annotations_test.go:328` and
-state that only line 389 moves. Do **not** touch the test.
+**GAP-5 — FIXED. Both unexercised tiers now have tests.**
+`TestContactsSearch_RawTierCarriesDetail` (`contacts_search_test.go:245`) asserts the raw
+tier carries `companyName` and `mobilePhone` on the saved half and `scoredEmailAddresses` on
+the ranked half, and that the source label survives the escalation. Asserting fields the
+summary deliberately omits is also what distinguishes a dedicated serializer from a filter,
+so it strengthens the FR-11 evidence.
+`TestGetPerson_SummaryTierCarriesResolutionFields` (`contacts_get_person_test.go:104`)
+asserts the summary tier's `displayName`, leading `emailAddress` and `relevanceScore`, and
+the absence of the raw-only `jobTitle`.
 
-**GAP-7 — the CRUD harness was not run (deferred to the user).**
-`make crud-test` is a paid, live-mailbox harness and was deliberately not executed. AC-12 grades
-the prompt, script, and CSV by reading them, which passed; but nothing has yet exercised
-Steps 47-51 against a real mailbox, so the new `mcp_contacts` accounting column and the five
-new prompt steps are unproven end to end. `AGENTS.md` also warns that the harness drives the
-binary named in `.mcp.json` rather than the working tree, so the rebuild step must precede any
-run.
-*Deferred to the user:* rebuild to the configured path, then run `make crud-test` with
-`OUTLOOK_MCP_CONTACTS_ENABLED=true` and confirm the emitted CSV row has the full column count.
+**GAP-6 — FIXED by CR amendment; the test remains unchanged.**
+FR-29 enumerated a domain list inside `TestAggregateAnnotations_FourToolsRegistered` while
+its own closing sentence forbade changing that test. The requirement now enumerates thirteen
+sites rather than fourteen, drops that line from the list, and states why it is excluded:
+the list is that test's own default-surface expectation, which is the guarantee FR-25 rests
+on, so extending it would contradict the same requirement. The Current State bullet, the
+Tests-to-Modify row, FR-30's "fourteen sites", the risk mitigation, the effort table and the
+dependency list were all moved with it. The amendment is recorded under `## CR-0082` in
+`docs/backlog/cr-0078-0083.md`. **The test was not touched**, and the FR-29 row is graded
+PASS against the amended text.
 
-**GAP-8 — the site screenshot comparison was not run (deferred to the user).**
+**GAP-7 — NOT RUN. The CRUD harness is a paid, live-mailbox instrument.**
+`make crud-test` was deliberately not executed here. AC-12 grades the prompt, the script and
+the CSV header by reading them, which passes; nothing has yet exercised Steps 47-51 against a
+real mailbox, so the `mcp_contacts` accounting column and the five new prompt steps remain
+unproven end to end.
+*Pending for the user:* rebuild to the path `.mcp.json` names, then run `make crud-test` with
+`OUTLOOK_MCP_CONTACTS_ENABLED=true` and confirm the emitted CSV row carries the full column
+count. Read the report's own `Server version` line before trusting a row of it. Recorded in
+the backlog, and cross-referenced from the GAP-9 scenario, which is the cheaper instrument
+for the question most likely to fail.
+
+**GAP-8 — NOT RUN. The site screenshot comparison needs a rendered before-and-after.**
 `site/src/generated/surface.json` gained a fifth domain and `site/src/surface.ts` changed, so
-the published site now renders an additional domain and different derived counts. `site/AGENTS.md`
-requires a change claiming to leave rendering untouched to be verified by screenshot comparison
-rather than assumed; this change does not claim that, but the rendering delta is unverified.
-*Deferred to the user:* run the site's screenshot comparison against `main` and confirm the
-only visual delta is the added contacts domain and the moved totals.
+the published site renders an additional domain and different derived counts. That is an
+intended content change rather than a claim that rendering is untouched, but the delta is
+unverified.
+*Pending for the user:* run the site's screenshot comparison against a build of `main` and
+confirm the only visual delta is the added contacts domain and the moved totals. Recorded in
+the backlog.
 
-**GAP-9 — `$search` on `/me/contacts` is proved only at the SDK layer (Open Question 6).**
-The tests assert the outgoing request, exactly as the shipped `search_messages` verb is graded.
-Kiota generates the `Search` field uniformly, so its presence is not evidence Graph v1.0 honours
-`$search` for the personal-contacts collection, and no `ConsistencyLevel: eventual` header is
-set on this path. The CR explicitly routes a live rejection to a follow-on change rather than an
-in-flight redesign, so this is recorded, not raised as a defect.
-*Deferred to the user:* one live `contacts.search` call against a real mailbox with contacts
-enabled. If Graph rejects `$search` on `/me/contacts`, open a follow-on CR; do not patch here.
+**GAP-9 — NOT RUN. `$search` on `/me/contacts` is still proved only at the SDK layer.**
+Kiota generates the `Search` field uniformly across collections, so its presence is not
+evidence Graph v1.0 honours `$search` for the personal-contacts collection, and no
+`ConsistencyLevel: eventual` header is set on this path. A derived, not-yet-run scenario is
+written at `.agents/scenarios/2026-09-02-contacts-name-resolution-live-mailbox.md`, in the
+format of the existing scenarios there and marked `outcome: not-run`. It drives the five
+verbs at the MCP surface against a live mailbox, and its step 3 is the single call that
+settles the question.
+*Pending for the user:* run that scenario. If Graph rejects `$search` on `/me/contacts`,
+record the verbatim error, mark the scenario `reproduced`, and open a follow-on change
+request; do not patch the verb from that run, as the CR directs. Recorded in the backlog.
 
 ---
 
-No FAIL. The five PARTIAL rows (FR-29, NFR-4, AC-9, AC-11, AC-14) are each traceable to one of
-GAP-1 through GAP-6; GAP-7 through GAP-9 are deferred verifications, not implementation defects.
+No FAIL, no GAP, no unresolved PARTIAL. GAP-1 through GAP-6 are fixed with the evidence
+traced above; GAP-7 through GAP-9 are deferred verifications rather than implementation
+defects, carried as `not-run` with a named owner action each. `make ci` exits **0** and the
+working tree is clean after the checkpoint, so the surface-drift gate and the `llms.txt`
+regeneration both still agree with what is committed.

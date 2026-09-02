@@ -97,6 +97,34 @@ func TestGetPerson_RawTierCarriesScoredAddresses(t *testing.T) {
 	}
 }
 
+// TestGetPerson_SummaryTierCarriesResolutionFields validates that the summary
+// tier projects the person onto the same resolution field set as a contact
+// summary, carrying the leading address and its relevance score, so a merged
+// result reads uniformly whichever resource a match came from.
+func TestGetPerson_SummaryTierCarriesResolutionFields(t *testing.T) {
+	result, _ := runGetPerson(t, map[string]any{
+		"person_id": "person-1",
+		"output":    "summary",
+	})
+
+	var record map[string]any
+	if err := json.Unmarshal([]byte(resultText(t, result)), &record); err != nil {
+		t.Fatalf("summary output is not JSON: %v", err)
+	}
+	if record["displayName"] != "Alex Ranked" {
+		t.Errorf("displayName = %v, want %q", record["displayName"], "Alex Ranked")
+	}
+	if record["emailAddress"] != "alex.ranked@example.com" {
+		t.Errorf("emailAddress = %v, want the leading address", record["emailAddress"])
+	}
+	if record["relevanceScore"] != 12.5 {
+		t.Errorf("relevanceScore = %v, want 12.5", record["relevanceScore"])
+	}
+	if _, ok := record["jobTitle"]; ok {
+		t.Errorf("summary tier carries raw-only detail: %v", record)
+	}
+}
+
 // TestGetPerson_RejectsEmptyIdentifier validates that a call naming no person
 // is refused before any request, with a correction naming where the identifier
 // comes from.

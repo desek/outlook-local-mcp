@@ -2,7 +2,7 @@
 
 Reference documentation for the server's component layout, middleware chain, MCP transport, tool registration, error handling, pagination, configuration, startup sequence, and Claude Desktop integration.
 
-> **Status note:** The tool definitions in this document describe the original tool-per-operation surface that predates CR-0060. As of v0.6.0 the server exposes four aggregate domain tools (`calendar`, `mail`, `account`, `system`) dispatched by an `operation` verb. The verb-level semantics described below remain accurate; only the registration shape changed.
+> **Status note:** The tool definitions in this document describe the original tool-per-operation surface that predates CR-0060. As of v0.6.0 the server exposes four aggregate domain tools by default (`calendar`, `mail`, `account`, `system`), plus an opt-in fifth (`contacts`) registered only when `OUTLOOK_MCP_CONTACTS_ENABLED` is set, each dispatched by an `operation` verb. The verb-level semantics described below remain accurate; only the registration shape changed.
 
 ---
 

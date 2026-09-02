@@ -1,6 +1,6 @@
-// Package tools_test contains cross-cutting annotation tests for the four
-// aggregate MCP domain tools (calendar, mail, account, system). Each test
-// verifies that the five MCP annotations (Title, ReadOnlyHint, DestructiveHint,
+// Package tools_test contains cross-cutting annotation tests for the aggregate
+// MCP domain tools (calendar, mail, account, system, and the opt-in contacts).
+// Each test verifies that the five MCP annotations (Title, ReadOnlyHint, DestructiveHint,
 // IdempotentHint, OpenWorldHint) on the aggregate tool use the most conservative
 // value across all verbs it hosts, per CR-0060 AC-9 and FR-9.
 //
@@ -38,8 +38,9 @@ type aggregateAnnotationExpectation struct {
 	openWorld   bool
 }
 
-// buildTestServer registers all four domain tools and returns the server for
-// inspection. Uses no-op metrics, tracer, and identity middleware.
+// buildTestServer registers every domain tool the given config enables and
+// returns the server for inspection. Uses no-op metrics, tracer, and identity
+// middleware.
 func buildTestServer(t *testing.T, cfg config.Config) *mcpserver.MCPServer {
 	t.Helper()
 
@@ -287,6 +288,33 @@ func TestSystemAnnotationsOpenWorldWithAuthCode(t *testing.T) {
 	if !*tool.Annotations.OpenWorldHint {
 		t.Errorf("system OpenWorldHint = false, want true when complete_auth is registered")
 	}
+}
+
+// TestContactsAggregateIsReadOnly verifies the folded annotation on the
+// "contacts" domain tool under the configuration that registers it.
+//
+// Every registered contacts verb is a read, so the conservative fold must
+// report readOnly=true, destructive=false and idempotent=true; openWorld is
+// true because four of the five verbs reach Graph. This is the safety property
+// the domain's read-only guarantee rests on: a client that gates writes behind
+// a confirmation prompt reads these four values and nothing else, so a write
+// verb reaching the domain would have to move them before it could reach a
+// user unprompted.
+func TestContactsAggregateIsReadOnly(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath:  "/tmp/test",
+		CacheName:       "test",
+		AuthMethod:      "browser",
+		ContactsEnabled: true,
+	})
+	tool := getRegisteredTool(t, s, "contacts")
+	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
+		title:       "Contacts",
+		readOnly:    true,
+		destructive: false,
+		idempotent:  true,
+		openWorld:   true,
+	})
 }
 
 // TestAggregateAnnotations_NoOldToolNames verifies that no old

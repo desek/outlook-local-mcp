@@ -110,7 +110,7 @@ make mcpb-local
 
 ### Manifest
 
-`extension/manifest.json` contains the four aggregate domain tools (`calendar`, `mail`, `account`, `system`) with their annotations. When a new verb is added or a tool annotation changes, the manifest **MUST** be updated to match. The manifest is validated by `make mcpb-validate`, which is wired into `make ci`.
+`extension/manifest.json` contains the four default aggregate domain tools (`calendar`, `mail`, `account`, `system`) plus the opt-in `contacts` tool, five entries in total, with their annotations. The `contacts` entry is published even though the domain is registered only when `OUTLOOK_MCP_CONTACTS_ENABLED` is set, because the manifest describes the full tool surface a user may opt into rather than the default one. When a new verb is added or a tool annotation changes, the manifest **MUST** be updated to match. The manifest is validated by `make mcpb-validate`, which is wired into `make ci`.
 
 ---
 

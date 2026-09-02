@@ -96,8 +96,8 @@ func TestRootQuickstartIsPointerOnly(t *testing.T) {
 	}
 }
 
-// knownVerbNames is the combined set of verb names across all four domain
-// registries. This list is maintained manually and must be updated when verbs
+// knownVerbNames is the combined set of verb names across every domain
+// registry, including the opt-in contacts domain. This list is maintained manually and must be updated when verbs
 // are added or removed. The TestNoVerbNamesInEmbeddedHeadings test uses this
 // to ensure embedded markdown headings never enumerate verb names.
 var knownVerbNames = []string{
@@ -115,6 +115,8 @@ var knownVerbNames = []string{
 	"add", "remove", "list", "login", "logout", "refresh",
 	// system
 	"status", "list_docs", "search_docs", "get_docs", "complete_auth",
+	// contacts
+	"search", "get_contact", "list_people", "get_person",
 }
 
 // TestNoVerbNamesInEmbeddedHeadings asserts that no embedded markdown heading

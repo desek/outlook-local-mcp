@@ -167,7 +167,9 @@ CR-0078 through CR-0081 landed, rather than assumed:
   silently skip a fifth domain: `internal/tools/verb_metadata_test.go` lines 100, 159, 204,
   230, 377; `internal/tools/description_quality_test.go` lines 93, 130, 151, 164;
   `internal/tools/tool_description_test.go` lines 246, 265;
-  `internal/tools/tool_annotations_test.go` lines 328 and 389;
+  `internal/tools/tool_annotations_test.go` line 389 (the list inside
+  `TestAggregateAnnotations_FourToolsRegistered` is that test's own default-surface
+  expectation and is excluded, see FR-29);
   `internal/server/surface_export_test.go:23`. Their server builders
   (`buildMetadataTestServer`, `buildDescriptionTestServer`, `buildTestServer`) take or set
   a config with no contacts flag.
@@ -535,14 +537,19 @@ flowchart TD
     sites are `internal/tools/verb_metadata_test.go` (lines 100, 159, 204, 230, 377),
     `internal/tools/description_quality_test.go` (lines 93, 130, 151, 164),
     `internal/tools/tool_description_test.go` (lines 246, 265),
-    `internal/tools/tool_annotations_test.go` (lines 328, 389), and
-    `internal/server/surface_export_test.go` (line 23). The four-tool *count* assertions
+    `internal/tools/tool_annotations_test.go` (line 389), and
+    `internal/server/surface_export_test.go` (line 23), thirteen sites in all. The list in
+    `internal/tools/tool_annotations_test.go` that sits inside
+    `TestAggregateAnnotations_FourToolsRegistered` is deliberately **not** among them: it is
+    that test's own default-surface expectation, which the closing sentence of this
+    requirement forbids changing, so extending it would contradict the same requirement and
+    break the guarantee FR-25 rests on. The four-tool *count* assertions
     listed in Current State (`internal/server/server_test.go` lines 784, 925, 954, 1051 and
     `TestAggregateAnnotations_FourToolsRegistered`) **MUST NOT** be changed: their
     configurations leave contacts off, so they continue to prove the default surface is four
     tools, which is exactly what FR-25 needs.
 30. Deriving the domain list from the registry rather than restating it at each of the
-    fourteen sites FR-29 enumerates is **out of scope** for this change and **MUST NOT** be
+    thirteen sites FR-29 enumerates is **out of scope** for this change and **MUST NOT** be
     attempted here. FR-29 is an instance-level fix, and `AGENTS.md` records that instance
     fixes do not close a class; the class-closing remedy is recorded as follow-on work
     rather than silently treated as done.
@@ -1101,7 +1108,7 @@ so their removal is deliberate rather than an omission:
 | `internal/tools/verb_metadata_test.go` | `TestEveryVerbHasDescription`, `TestEveryVerbHasSummary`, `TestEveryVerbHasClassification`, `TestSeeDocsAnchorsResolve`, `TestWriteVerbsDeclareNoOutputParameter` | Iterate a hard-coded `[]string{"calendar","mail","account","system"}` (lines 100, 159, 204, 230, 377) against `buildMetadataTestServer`, whose config sets no contacts flag | `"contacts"` added to each list; `buildMetadataTestServer` sets `ContactsEnabled: true` | FR-29. Without this the checks pass while covering none of the five new verbs, which would make AC-8 vacuous |
 | `internal/tools/description_quality_test.go` | `TestDescriptionsListVerbsOnSeparateLines`, `TestEveryVerbStatesRequiredParameters`, `TestDescriptionLengthBounded`, `TestEveryParameterHasDescription` | Iterate the same hard-coded four-domain list (lines 93, 130, 151, 164) | `"contacts"` added to each list; the callers' configs set `ContactsEnabled: true` | FR-29, NFR-8 |
 | `internal/tools/tool_description_test.go` | The two loops at lines 246 and 265 | Iterate the same hard-coded four-domain list | `"contacts"` added; `buildDescriptionTestServer` callers set `ContactsEnabled: true` | FR-29 |
-| `internal/tools/tool_annotations_test.go` | `TestAggregateAnnotations_NoOldToolNames` (line 328), `TestPerVerbAnnotations_DocumentedInHelp` (line 389) | Iterate the same hard-coded four-domain list | `"contacts"` added to both lists, with the enabling config | FR-29, FR-12 |
+| `internal/tools/tool_annotations_test.go` | `TestPerVerbAnnotations_DocumentedInHelp` (line 389) | Iterates the same hard-coded four-domain list | `"contacts"` added, with the enabling config | FR-29, FR-12. `TestAggregateAnnotations_NoOldToolNames` has no domain list and needs no edit; the list inside `TestAggregateAnnotations_FourToolsRegistered` is excluded by FR-29 |
 | `internal/server/surface_export_test.go` | `TestBuildVerbsRequiresNoCredentials` | Iterates `[]string{"calendar","account","system","mail"}` at line 23 | `"contacts"` added, exercised under the contacts-enabled configuration | FR-29, FR-26 |
 
 ### Tests to Remove
@@ -1486,7 +1493,7 @@ regenerated manifest as evidence of exactly this omission rather than as a gener
 
 **Likelihood:** high without the mitigation
 **Impact:** medium
-**Mitigation:** Fourteen test sites restate the domain list as
+**Mitigation:** Thirteen test sites restate the domain list as
 `[]string{"calendar", "mail", "account", "system"}` rather than deriving it, so the summary,
 description, classification, `SeeDocs`-anchor, parameter-documentation, and per-verb
 annotation checks would all pass while iterating past the contacts domain entirely, making
@@ -1534,7 +1541,7 @@ configuration widened, which is the difference the follow-on work would generali
 | Phase 1, the `ContactsEnabled` flag, its env binding, and the two-scope branch, with tests | 2 hours |
 | Phase 2, the contact and person serializers and the four read handlers, with tests | 4 to 5 hours |
 | Phase 3, `buildContactsVerbs`, conditional registration in both builders, the three `internal/surface/build.go` edits, and the computed `toolCount` | 3 to 4 hours |
-| Phase 4, extension manifest and manifest-sync test, surface regeneration, four-tool amendments across eleven sites, the fourteen test domain lists, CRUD harness, verb-inventory golden, and the re-measured schema-size gate | 5 to 6 hours |
+| Phase 4, extension manifest and manifest-sync test, surface regeneration, four-tool amendments across eleven sites, the thirteen test domain lists, CRUD harness, verb-inventory golden, and the re-measured schema-size gate | 5 to 6 hours |
 | Total | 14 to 17 hours |
 
 ## Decision Outcome
@@ -1668,7 +1675,7 @@ drift (24)
   D6  CLAUDE.md is a symbolic link to AGENTS.md; the document listed both as files to amend
   D7  accountVerbsConfig carries no retryCfg, timeout, or accountResolverMW, so it cannot be
       the model for a Graph-reading domain; the field list given matches mailVerbsConfig
-  D8  fourteen hard-coded four-domain lists across five test files
+  D8  thirteen hard-coded four-domain lists across five test files
   D9  internal/docs/llmstxt.go lines 69 and 153 carry four-tool prose; absent from the document
   D10 README.md line 35 carries four-tool prose; the document named only docs/readme.md
   D11 AGENTS.md line 30 ("The 4 aggregate domain tools") not enumerated

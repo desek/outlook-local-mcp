@@ -27,8 +27,8 @@ import (
 	server "github.com/desek/outlook-local-mcp/internal/server"
 )
 
-// buildMetadataTestServer builds a server with all four domain tools registered
-// and all mail features enabled so that every verb is present.
+// buildMetadataTestServer builds a server with every domain tool registered and
+// all optional features enabled so that every verb is present.
 func buildMetadataTestServer(t *testing.T) *mcpserver.MCPServer {
 	t.Helper()
 

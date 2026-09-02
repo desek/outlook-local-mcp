@@ -2,8 +2,8 @@
 // description lists every supported operation verb, satisfying CR-0060 AC-4
 // and FR-3.
 //
-// After CR-0060, the four aggregate tools (calendar, mail, account, system)
-// replace the former individual tools. Their top-level descriptions must
+// After CR-0060, the aggregate tools (calendar, mail, account, system, and the
+// opt-in contacts) replace the former individual tools. Their top-level descriptions must
 // enumerate every verb so LLM clients can discover operations without calling
 // help.
 package tools_test
@@ -28,8 +28,8 @@ import (
 	server "github.com/desek/outlook-local-mcp/internal/server"
 )
 
-// buildDescriptionTestServer registers all four domain tools with the given
-// config and returns the server for description inspection.
+// buildDescriptionTestServer registers every domain tool the given config
+// enables and returns the server for description inspection.
 func buildDescriptionTestServer(t *testing.T, cfg config.Config) *mcpserver.MCPServer {
 	t.Helper()
 
