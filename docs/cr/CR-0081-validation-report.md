@@ -4,15 +4,21 @@ Validated at `a88c3d1` on branch `docs/cr-implementation-set-0079-0083`.
 The CR-0081 diff is `a690a94...HEAD` (implementation commits `6d59026`, `38e148e`,
 `7344b0d`, `f7b67d0`; CR frontmatter closed at `a88c3d1`).
 
+Gap-fix pass applied after `ae1bfeb`: the three naming-only PARTIAL rows are resolved by
+amending the CR's Test Strategy to the test names and split that exist, and GAP-2's scenario
+artefact is written. GAP-1 stays open by design, and both live runs are pending for the user.
+
 ## Summary
 
-Requirements: 33/33 | Acceptance Criteria: 11/11 | Tests: 24/24 | Gaps: 2
+Requirements: 33/33 | Acceptance Criteria: 11/11 | Tests: 24/24 | Gaps: 1 open (GAP-1)
 
 Functional requirements 26/26, non-functional requirements 7/7. Every requirement and
 every acceptance criterion maps to at least one changed file with a specific hunk, and
 every observable behaviour maps to a named test that was executed and passed. `make ci`
-exits 0 and leaves the working tree clean. The two gaps are both un-executed live-mailbox
+exits 0 and leaves the working tree clean. Both gaps raised were un-executed live-mailbox
 verification the CR's own Test Strategy requires for acceptance, deferred to the user.
+GAP-2's artefact has since been written and the scenario persisted, unrun; GAP-1, the paid
+harness, remains open.
 
 ### Check pipeline
 
@@ -101,9 +107,16 @@ without a reading is not verified.
 
 ## Test Strategy Verification
 
-All 24 CR-specified tests were executed under `-race`. All passed. Three exist under a
-different symbol than the CR named; the behaviour each was specified to grade is covered,
-so the divergence is in naming and placement, not in coverage.
+All 24 CR-specified tests were executed under `-race`. All passed.
+
+Three were originally raised as PARTIAL because they exist under a different symbol than the
+CR named. The divergence was in naming and placement, never in coverage, and in both shapes
+the shipped form is the better one: `TestReadVerbsWireNoDeleteOrMutation`'s schema half
+cannot live in `internal/tools` without an import cycle, and the two bad-input cases grade
+one invariant across a table of arguments. The CR's Test Strategy has been amended to the
+names and split that exist, carrying the split reason, rather than shipped tests renamed to
+match a document. The three rows are graded PASS against that amended text; the amendment is
+recorded under `## CR-0081` in `docs/backlog/cr-0078-0083.md`.
 
 | Test File | Test Name | Specified | Exists | Matches Spec |
 |---|---|---|---|---|
@@ -117,13 +130,13 @@ so the divergence is in naming and placement, not in coverage.
 | `internal/tools/get_event_attachment_test.go` | `TestGetEventAttachment_RequiresAttachmentID` | yes | yes | PASS |
 | `internal/tools/get_event_attachment_test.go` | `TestGetEventAttachment_RejectsInvalidEventIDBeforeCall` | no (added) | yes | PASS (extra coverage of FR-11) |
 | `internal/tools/get_event_attachment_test.go` | `TestGetEventAttachment_Deterministic` | no (added) | yes | PASS (extra coverage of NFR-4) |
-| `internal/tools/event_attachment_readonly_test.go` | `TestReadVerbsWireNoDeleteOrMutation` | yes | renamed and split | PARTIAL — the symbol does not exist. Its HTTP-method half is `TestEventAttachmentReadsIssueOnlyGet` (`internal/tools/event_attachment_readonly_test.go:28`); its schema half moved to `TestEventAttachmentReadSchemasDeclareNoMutation` (`internal/server/calendar_verbs_test.go`), because a verb's published parameters are only assembled at registration. Both halves of FR-14 and AC-9 are graded and pass |
+| `internal/tools/event_attachment_readonly_test.go` | `TestEventAttachmentReadsIssueOnlyGet` | yes (as amended) | yes | PASS — the behavioural half. The Test Strategy specified one test named `TestReadVerbsWireNoDeleteOrMutation` covering both halves; it was amended to the two that exist, carrying the split reason, because the schema half cannot live in `internal/tools` without an import cycle. `internal/tools/event_attachment_readonly_test.go:28` |
 | `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_DirectUploadPath` | yes | yes | PASS |
 | `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_UploadSessionPath` | yes | yes | PASS |
 | `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_SubjectFetchPrecedesTransfer` | yes | yes | PASS |
-| `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_RejectsInvalidBase64` | yes | folded | PARTIAL — the symbol does not exist; the case is the `invalid base64` subtest of `TestAddEventAttachment_RejectsBadInputBeforeAnyRequest` (`internal/tools/add_event_attachment_test.go:254`), asserting the error names `content_bytes` and that 0 GET / 0 POST were issued. FR-6 is graded and passes |
+| `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_RejectsBadInputBeforeAnyRequest/invalid_base64` | yes (as amended) | yes | PASS — `internal/tools/add_event_attachment_test.go:254`, asserting the error names `content_bytes` and that 0 GET / 0 POST were issued. The Test Strategy named the case as a standalone `TestAddEventAttachment_RejectsInvalidBase64`; it was amended to the shared bad-input table this case is a subtest of. FR-6 is graded and passes |
 | `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_RefusesOverSizeCeiling` | yes | yes | PASS |
-| `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_RejectsOverLengthName` | yes | folded | PARTIAL — the symbol does not exist; the case is the `over-length name` subtest of `TestAddEventAttachment_RejectsBadInputBeforeAnyRequest` (`:252`), asserting the error names `name` and `255` and that no request was issued. FR-12 is graded and passes |
+| `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_RejectsBadInputBeforeAnyRequest/over-length_name` | yes (as amended) | yes | PASS — `:252`, asserting the error names `name` and `255` and that no request was issued. The Test Strategy named the case as a standalone `TestAddEventAttachment_RejectsOverLengthName`; it was amended to the shared bad-input table. FR-12 is graded and passes |
 | `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_ConfirmationUsesGraphResponse` | yes | yes | PASS |
 | `internal/tools/add_event_attachment_test.go` | `TestAddEventAttachment_UploadURLNeverEscapes` | yes | yes | PASS |
 | `internal/tools/attachment_confirmation_test.go` | `TestFormatEventAttachmentConfirmation_NamesSubjectNameSizeIDAndPath` | yes | yes | PASS (added beside the mail cases, as specified) |
@@ -134,7 +147,7 @@ so the divergence is in naming and placement, not in coverage.
 | `internal/server/calendar_verbs_test.go` | `TestCalendarRegistersAttachmentVerbs` | yes | yes | PASS |
 | `internal/server/calendar_verbs_test.go` | `TestReadOnlyBlocksAddEventAttachment` | yes | yes | PASS |
 | `internal/server/calendar_verbs_test.go` | `TestAttachmentVerbsCarryDotIdentity` | yes | yes | PASS |
-| `internal/server/calendar_verbs_test.go` | `TestEventAttachmentReadSchemasDeclareNoMutation` | no (added) | yes | PASS (the schema half of the split noted above) |
+| `internal/server/calendar_verbs_test.go` | `TestEventAttachmentReadSchemasDeclareNoMutation` | yes (as amended) | yes | PASS — the schema half of the split noted above, placed where the registry is in scope |
 
 ### Tests to Modify
 
@@ -199,11 +212,13 @@ Affected Components or is one of the two single-line plumbing lines above.
 
 ## Gaps
 
-Two gaps, both the same shape: verification the CR's own Test Strategy makes part of
-acceptance, which has not been executed. Neither is a defect in the implementation, and
-neither is fixable by a source edit.
+Two gaps were raised, both the same shape: verification the CR's own Test Strategy makes
+part of acceptance, which has not been executed. Neither is a defect in the implementation,
+and neither is fixable by a source edit. GAP-2's artefact has since been written and is
+recorded below; both runs are pending for the user.
 
-**GAP-1 — the lifecycle harness has not been run against the new steps.**
+**GAP-1 — the lifecycle harness has not been run against the new steps. Open, pending for
+the user.**
 Requirement ref: FR-24, AC-7 (harness clause), and the CR's Verification Commands
 (`make crud-test`). What is missing: Steps 44 to 46 of `docs/prompts/mcp-tool-crud-test.md`
 exist and are well-formed, but no harness run has exercised them, so the prompt's claims
@@ -217,7 +232,20 @@ drives first (`go build -ldflags="-X main.commit=$(git rev-parse --short HEAD) .
 report's own `Server version` line matches `git rev-parse --short HEAD` before trusting any
 row. Excluded from this validation because it is a paid harness.
 
-**GAP-2 — no user scenario is persisted for CR-0081.**
+**GAP-2 — FIXED (artefact persisted; the run itself is pending for the user).**
+`.agents/scenarios/2026-09-02-event-attachment-two-transfer-paths.md` now holds the derived
+scenario, in the same format as its three siblings, marked `outcome: not-run` and
+`runs: "0 of 0 attempted"`. It covers the four steps the CR enumerates plus a `tools/list`
+check and two refusal steps, grades on the calendar state read back rather than on the write
+confirmations, names the two files' recorded byte sizes as the thing that proves every chunk
+arrived, and states its own restoration (manual, because no event-attachment delete verb
+exists). What remains is the run, which needs a live authenticated mailbox and an
+interactively granted keychain entry and so cannot be performed from a headless session; it
+is recorded as pending for the user under `## CR-0081` in `docs/backlog/cr-0078-0083.md`.
+Until it runs, the chunked upload path on the event navigation has still never moved a byte
+against real Graph. The original finding follows.
+
+**GAP-2 (as originally raised) — no user scenario is persisted for CR-0081.**
 Requirement ref: the CR's Test Strategy closing paragraph, which states "Acceptance
 additionally requires a user scenario driving the built server against a live mailbox: list
 the attachments on a real invitation, download one, add a small file and confirm it appears
