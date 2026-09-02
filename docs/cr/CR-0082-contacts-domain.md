@@ -9,8 +9,8 @@ stakeholders:
   - desek
 priority: "medium"
 target-version: "0.14.0"
-source-branch: main
-source-commit: 78a3bb3
+source-branch: docs/cr-implementation-set-0079-0083
+source-commit: 3ae0e2c
 ---
 
 # Contacts Domain: Read and Search
@@ -30,7 +30,8 @@ relevance-ranked people), `get_contact`, `list_people`, `get_person`, and the ma
 introduced; the feature-gap matrix marks every one of those `Manage=3` (out of scope), and
 this change respects that boundary without exception.
 
-This CR follows **CR-0081** in the implementation sequence. It targets **v0.14.0**.
+This CR follows **CR-0081** in the implementation sequence, which has landed. It targets
+**v0.14.0**.
 
 The central design decision is not the verbs; it is that a contacts domain is a **fifth
 top-level MCP tool**. CR-0060 fixed the surface at four aggregate domain tools (`calendar`,
@@ -98,50 +99,144 @@ new consent prompt, and no fifth tool.
 ## Current State
 
 The server registers exactly four aggregate domain tools, unconditionally, in
-`RegisterTools` (`internal/server/server.go:54`): `calendar`, `mail`, `account`, and
-`system`. The count is hard-coded (`toolCount := 4`, `internal/server/server.go`) and
+`RegisterTools` (`internal/server/server.go:53`): `calendar`, `mail`, `account`, and
+`system`. The count is hard-coded (`toolCount := 4`, `internal/server/server.go:190`) and
 asserted by `TestRegisterTools_MailEnabled` (`internal/server/server_test.go:784`,
 `expectedTotal = 4`). Each domain is built by a `build<Domain>Verbs` constructor and
-registered with `tools.RegisterDomainTool`; `account` is the smallest and is the model this
-change mirrors (`internal/server/account_verbs.go`).
+registered with `tools.RegisterDomainTool`.
+
+**The domain set is built in two places, not one.** `RegisterTools` builds and registers
+the four domains inline, and `BuildDomainVerbSets` (`internal/server/introspect_verbs.go:47`)
+builds the same four domains again for inspection, returning a hard-coded four-key map
+(`"calendar"`, `"account"`, `"system"`, `"mail"`). `BuildVerbsForInspection`
+(`internal/server/surface_export.go:41`) is a thin wrapper over it, and it is the entry
+point `internal/surface` and `internal/server/manifest_sync_test.go` both depend on. A
+domain added only to `RegisterTools` is invisible to the surface manifest and to the
+manifest-sync check.
+
+`internal/surface/build.go` additionally hard-codes the domain set three times:
+`domainOrder` (line 22, four names), `fullConfig()` (no contacts flag to set), and
+`gateProbes()` (three probes: `EnvMailEnabled`, `EnvMailManageEnabled`, `EnvAuthMethod`).
+`BuildRecord` iterates `domainOrder`, so a domain absent from that slice is silently
+omitted from `site/src/generated/surface.json` however it is registered, and a gated verb
+with no matching probe gets no gate attribution, which
+`TestEveryVerbCarriesSummaryAndGate` (`internal/surface/surface_test.go:93`) fails on.
 
 There is no contacts domain, no contacts handler, and no contacts scope. `auth.Scopes`
 (`internal/auth/auth.go:56`) returns only `Calendars.ReadWrite` plus, conditionally, one
 mail scope; it never requests `Contacts.Read` or `People.Read`. `config.Config`
-(`internal/config/config.go`) has `MailEnabled` and `MailManageEnabled` but no contacts
-flag.
+(`internal/config/config.go:136`, `:146`) has `MailEnabled` and `MailManageEnabled` but no
+contacts flag, and `internal/config/inventory.go` (const block at line 42, `inventory`
+slice at line 90) has no contacts environment variable.
 
-Measured facts about the surface as it stands, read from the repository at the source
-commit rather than assumed:
+Measured facts about the surface as it stands, read from the repository at `3ae0e2c` after
+CR-0078 through CR-0081 landed, rather than assumed:
 
-* `site/src/generated/surface.json` records four domains — calendar 15, mail 13, account 7,
-  system 7 verbs — for `totals.fullCount` 42 and `totals.defaultCount` 33.
+* `site/src/generated/surface.json` records four domains — calendar 20/20, mail 18/5,
+  account 7/7, system 7/6 (full/default) — for `totals.fullCount` **52** and
+  `totals.defaultCount` **38**.
 * `extension/manifest.json` enumerates exactly four entries in its `tools` array:
-  `calendar`, `mail`, `account`, `system`.
+  `calendar`, `mail`, `account`, `system`. Its `long_description` states "Delegated
+  permissions only: Calendars.ReadWrite, Mail.Read, User.Read".
 * `TestColdStartSchemaSize_Reduction` (`internal/server/schema_size_test.go`) serialises the
   registered tools under the **maximum** feature-flag configuration and asserts the byte
   count is at least 60% below the documented 74 000-byte pre-CR-0060 baseline
-  (`minRequiredReductionPct = 60`). Its config enables `MailEnabled` and `MailManageEnabled`
-  but has no contacts flag to set.
-* The four-tool count is stated as a rule in `AGENTS.md` and `CLAUDE.md` (line 82, "the MCP
-  surface is four aggregate domain tools"), in `docs/readme.md` (line 39), in
-  `docs/concepts.md` (line 71 and line 163), and in `docs/cr/CR-0060-...md`.
+  (`preCRBaselineBytes = 74_000`, `minRequiredReductionPct = 60`). Its config (line 62)
+  enables `MailEnabled` and `MailManageEnabled` but has no contacts flag to set.
+* `internal/server/manifest_sync_test.go` **exists** at this commit; it was landed by an
+  earlier change in this sequence, not left as a draft. Its
+  `TestManifestDescribesEveryRegisteredVerb` (line 84) derives its cases from the registry
+  under `maximalSurfaceConfig()` (line 68, mail flags and `auth_code` only) and
+  `t.Fatalf`s when `len(doc.Tools) != 4` (line 88). It therefore fails the moment a fifth
+  entry is added to the extension manifest, and it silently skips the contacts verbs unless
+  its configuration is extended.
+* **Every four-tool statement in the tree**, enumerated so none is left to contradict this
+  change. Load-bearing code: `internal/server/introspect_verbs.go` (the four-key map),
+  `internal/surface/build.go:22` (`domainOrder`), `internal/server/server.go:188` (comment)
+  and `:190` (`toolCount := 4`). Rules and user-facing prose: `AGENTS.md:30` (project-tree
+  comment "The 4 aggregate domain tools") and `AGENTS.md:82` ("the MCP surface is four
+  aggregate domain tools") — note **`CLAUDE.md` is a symbolic link to `AGENTS.md`**, so
+  these are one file, not two; `README.md:35`; `docs/readme.md:43`; `docs/concepts.md:71`
+  (annotation semantics) and `:163` (container runtime). Generated text:
+  `internal/docs/llmstxt.go:69` and `:153`. Source doc comments:
+  `internal/tools/aggregate_annotations.go:6`, `internal/server/surface_export.go:25`.
+  Site prose: `site/src/surface.ts` lines 37, 63, and 81 (`domainCount` itself is derived
+  from `surface.domains.length` and needs no edit).
+* **Test-side four-domain lists**, which are hard-coded rather than derived and would
+  silently skip a fifth domain: `internal/tools/verb_metadata_test.go` lines 100, 159, 204,
+  230, 377; `internal/tools/description_quality_test.go` lines 93, 130, 151, 164;
+  `internal/tools/tool_description_test.go` lines 246, 265;
+  `internal/tools/tool_annotations_test.go` lines 328 and 389;
+  `internal/server/surface_export_test.go:23`. Their server builders
+  (`buildMetadataTestServer`, `buildDescriptionTestServer`, `buildTestServer`) take or set
+  a config with no contacts flag.
+* **Four-tool count assertions that stay at four** because their configuration leaves
+  contacts off, and are therefore re-confirmed rather than amended:
+  `internal/server/server_test.go` lines 784, 925, 954, and 1051, and
+  `TestAggregateAnnotations_FourToolsRegistered`
+  (`internal/tools/tool_annotations_test.go:313`).
+
+The established idioms this change reuses, read from the tree rather than invented:
+
+* **`$search` on a Graph collection**: `internal/tools/search_messages.go:148` and `:168`
+  set `Search: &normalised` on the generated query-parameter struct, where `normalised`
+  comes from `NormaliseSearchQuery` (`internal/tools/search_messages_query.go:62`). That
+  helper is the project's one place for turning a caller's free-text query into a value
+  Graph accepts as a `$search` value, and it refuses a query it cannot convert with a fix
+  instruction rather than letting Graph fail on a character position. No `ConsistencyLevel`
+  header is set on that path.
+* **Verb-local fix-instruction constants**: `internal/tools/get_schedule.go:43-45`
+  (`getScheduleTimeoutFix`, `getScheduleGraphFix`, `getScheduleAddressFix`), emitted to both
+  the log record (`"fix", …`) and the tool result text.
+* **Graph call wrapping**: `graph.WithTimeout` (`internal/graph/timeout.go:27`),
+  `graph.RetryGraphCall` (`internal/graph/retry.go:103`), `graph.IsTimeoutError`
+  (`timeout.go:42`), `graph.TimeoutErrorMessage` (`timeout.go:54`),
+  `graph.RedactGraphError` (`internal/graph/errors.go:131`).
+* **Identifier validation**: `validate.ValidateResourceID` (`internal/validate/validate.go:128`).
+* **`SeeDocs` anchor form**: `"concepts#output-tiers"` and similar
+  (`internal/server/calendar_verbs.go:168`). `TestSeeDocsAnchorsResolve` resolves an anchor
+  only against an **H2** heading of one of the four embedded files, so a new anchor requires
+  a new `## ` heading, not a table row.
+* **`client.Me()`**: 49 call sites across `internal/tools/`; `ByUserId` appears nowhere in
+  the repository. Example: `internal/tools/list_calendars.go:94`.
 
 The Graph SDK request builders this change needs all exist in the pinned
-`msgraph-sdk-go v1.100.0` in the module cache, confirmed by reading the installed source,
-not documentation, and all are v1.0 GA (their URL templates resolve under
-`{+baseurl}/users/{user-id}/...` with no `/beta` segment):
+`msgraph-sdk-go v1.100.0` in the module cache (`msgraph-sdk-go-core v1.4.1`), confirmed by
+reading the installed source, not documentation, and all are v1.0 GA (no `/beta` segment
+appears in any of the four files):
 
-| Builder file (under `msgraph-sdk-go@v1.100.0/users/`) | Method | v1.0 URL template |
-|---|---|---|
-| `item_contacts_request_builder.go` | `Get` (returns `ContactCollectionResponseable`); a `Search *string` query option maps to `$search` | `/users/{user-id}/contacts{?...$search...}` |
-| `item_contacts_contact_item_request_builder.go` | `Get` (returns `Contactable`) | `/users/{user-id}/contacts/{contact-id}` |
-| `item_people_request_builder.go` | `Get` (returns `PersonCollectionResponseable`); a `Search *string` query option maps to `$search` | `/users/{user-id}/people{?...$search...}` |
-| `item_people_person_item_request_builder.go` | `Get` (returns `Personable`) | `/users/{user-id}/people/{person-id}` |
+| Builder file (under `msgraph-sdk-go@v1.100.0/users/`) | Accessor and method | Returns | URL template |
+|---|---|---|---|
+| `item_contacts_request_builder.go` | `client.Me().Contacts().Get` | `models.ContactCollectionResponseable` | `{+baseurl}/users/{user%2Did}/contacts{?%24count,%24expand,%24filter,%24orderby,%24search,%24select,%24skip,%24top}` |
+| `item_contacts_contact_item_request_builder.go` | `client.Me().Contacts().ByContactId(id).Get` | `models.Contactable` | `{+baseurl}/users/{user%2Did}/contacts/{contact%2Did}{?%24expand,%24select}` |
+| `item_people_request_builder.go` | `client.Me().People().Get` | `models.PersonCollectionResponseable` | `{+baseurl}/users/{user%2Did}/people{?%24count,%24expand,%24filter,%24orderby,%24search,%24select,%24skip,%24top}` |
+| `item_people_person_item_request_builder.go` | `client.Me().People().ByPersonId(id).Get` | `models.Personable` | `{+baseurl}/users/{user%2Did}/people/{person%2Did}{?%24expand,%24select}` |
+
+`client.Me()` supplies `user%2Did` as `me-token-to-replace`, which
+`msgraph-sdk-go-core@v1.4.1/graph_client_factory.go:9` rewrites to `/me`, so these
+templates resolve to `/me/contacts`, `/me/contacts/{id}`, `/me/people`, and
+`/me/people/{id}` on the wire.
+
+Both collection builders expose `Search *string` tagged `uriparametername:"%24search"` on
+their `…GetQueryParameters` struct: `ItemContactsRequestBuilderGetQueryParameters` (line 28)
+and `ItemPeopleRequestBuilderGetQueryParameters`. Neither item builder has a `Search` option;
+each takes only `Expand` and `Select`.
+
+Two model facts that decide the serializer shape, because the two resources return
+**unrelated** email types:
+
+* `models.Contactable` exposes `GetDisplayName() *string` and
+  `GetEmailAddresses() []models.EmailAddressable`, whose elements carry `GetAddress()` and
+  `GetName()`. It also exposes `GetPrimaryEmailAddress()`, `GetSecondaryEmailAddress()`, and
+  `GetTertiaryEmailAddress()`.
+* `models.Personable` exposes `GetDisplayName() *string` and
+  `GetScoredEmailAddresses() []models.ScoredEmailAddressable`, whose elements carry
+  `GetAddress()` and `GetRelevanceScore()` but **no** `GetName()`.
 
 The same item-contact builder also exposes `Patch` and `Delete`, and the contacts
-collection builder exposes `Post`. This change wires **none** of them; the contact write,
-create, and delete rows are all `Manage=3` in the matrix.
+collection builder exposes `Post`, `Count()`, and `Delta()`. The people collection builder
+exposes no `Post`. This change wires **none** of them; the contact write, create, delete,
+and delta rows are all `Manage=3` in the matrix.
 
 ### Current State Diagram
 
@@ -162,10 +257,18 @@ flowchart TD
 ## Proposed Change
 
 Add a fifth aggregate domain tool, `contacts`, built by a new `buildContactsVerbs`
-constructor in `internal/server/contacts_verbs.go` and registered by `RegisterTools` **only
-when `cfg.ContactsEnabled` is true**. The default configuration continues to register the
+constructor in `internal/server/contacts_verbs.go` and registered **only when
+`cfg.ContactsEnabled` is true**. The default configuration continues to register the
 same four tools it does today. A caller that has not set `OUTLOOK_MCP_CONTACTS_ENABLED`
 sees no fifth tool and is asked for no new scope.
+
+The same conditional branch is added in **two** places, because the repository builds the
+domain set twice: `RegisterTools` (which serves the running server) and
+`BuildDomainVerbSets` (which serves the surface generator and the manifest-sync check).
+`internal/surface/build.go`'s `domainOrder`, `fullConfig()`, and `gateProbes()` are extended
+alongside them. A domain added to `RegisterTools` alone passes every handler and
+registration test while the published manifest keeps describing four domains, which is why
+this is stated in the proposal rather than left to the implementation phase.
 
 ### Verb inventory
 
@@ -274,21 +377,38 @@ flowchart TD
    writes, creates, updates, deletes, or moves a contact, person, or folder, nor any verb
    for photos, directory or organizational contacts, or delta/sync.
 4. `search` **MUST** require a `query` string, **MUST** issue `GET /me/contacts` with the
-   value supplied as the `$search` query option, **MUST** also issue `GET /me/people` with
-   the value supplied as its `$search` query option, and **MUST** return the union of the two
-   result sets with each result labelled by its source (personal contact or ranked person).
-5. `get_contact` **MUST** require a `contact_id`, **MUST** issue `GET /me/contacts/{id}`, and
-   **MUST** return the contact's display name and every email address on the record.
+   normalised value set on `ItemContactsRequestBuilderGetQueryParameters.Search`, **MUST**
+   also issue `GET /me/people` with the same normalised value set on
+   `ItemPeopleRequestBuilderGetQueryParameters.Search`, and **MUST** return the union of the
+   two result sets with each result labelled by its source (personal contact or ranked
+   person). Both requests **MUST** carry the identical normalised value, so the two answer
+   sets cannot diverge on the query.
+5. `get_contact` **MUST** require a `contact_id`, **MUST** issue `GET /me/contacts/{id}` via
+   `client.Me().Contacts().ByContactId(...)`, and **MUST** return the contact's
+   `displayName` and every entry of its `emailAddresses` collection
+   (`Contactable.GetEmailAddresses()`). It **MUST NOT** issue a further request to populate
+   `primaryEmailAddress`, `secondaryEmailAddress`, or `tertiaryEmailAddress`.
 6. `list_people` **MUST** issue `GET /me/people` and **MUST** return the people in the
    relevance order Graph returns them, most relevant first, without re-sorting.
-7. `get_person` **MUST** require a `person_id`, **MUST** issue `GET /me/people/{id}`, and
-   **MUST** return the person's display name and addresses.
+7. `get_person` **MUST** require a `person_id`, **MUST** issue `GET /me/people/{id}` via
+   `client.Me().People().ByPersonId(...)`, and **MUST** return the person's `displayName`
+   and every entry of its `scoredEmailAddresses` collection
+   (`Personable.GetScoredEmailAddresses()`). `Personable` exposes no per-address name, so
+   the rendered label for an address **MUST** be the person's own display name, not a
+   per-address name.
 8. Every verb that accepts an identifier (`get_contact`, `get_person`) **MUST** validate it
    with `validate.ValidateResourceID` and **MUST** reject an invalid identifier before any
-   Graph request is issued.
-9. `search` **MUST** validate `query` for non-emptiness and length before issuing either
-   Graph request, and **MUST** reject an empty or whitespace-only query with an error that
-   names the `query` parameter.
+   Graph request is issued. `validate.ValidateResourceID` bounds emptiness and length only
+   and rejects no character set, so a test exercising this requirement **MUST** use an empty
+   or over-length identifier and **MUST NOT** be written as though a character-set check
+   existed.
+9. `search` **MUST** normalise `query` with the existing
+   `tools.NormaliseSearchQuery` helper (`internal/tools/search_messages_query.go:62`) and
+   **MUST NOT** introduce a second query-normalisation path. The normalisation **MUST** run
+   once, before the timeout context and before either Graph request is issued, so a query it
+   refuses causes no request at all. `search` **MUST** additionally reject an empty or
+   whitespace-only `query` before normalisation, with an error that names the `query`
+   parameter and states what to supply.
 10. Every read verb (`search`, `get_contact`, `list_people`, `get_person`) **MUST** implement
     all three output tiers via an `output` parameter accepting `text`, `summary`, and `raw`,
     with `text` the default. `help` **MUST NOT** declare an `output` parameter.
@@ -309,45 +429,122 @@ flowchart TD
     configuration; the contacts surface is read-only.
 16. `config.Config` **MUST** gain a `ContactsEnabled` boolean, and `LoadConfig` **MUST** read
     it from `OUTLOOK_MCP_CONTACTS_ENABLED`, defaulting to false, following the exact pattern
-    of `MailEnabled`.
-17. Every verb **MUST** carry a non-empty `Summary` of at most eighty characters, a non-empty
-    `Description` stating its parameters and its annotation semantics, at least one `Examples`
-    entry, and at least one `SeeDocs` reference that resolves to an existing heading in the
-    embedded documentation bundle.
+    of `MailEnabled`. `internal/config/inventory.go` **MUST** gain an `EnvContactsEnabled`
+    constant in its const block and a matching row in its `inventory` slice, because
+    `config.Inventory()` is what the surface manifest's `config` section and the site's
+    configuration reference derive from; a flag absent from the inventory is invisible to
+    both.
+17. Every verb **MUST** carry a non-empty `Summary` of at most eighty characters and a
+    non-empty `Description` stating its parameters and its annotation semantics. Every verb
+    except `help` **MUST** carry at least one `Examples` entry and at least one `SeeDocs`
+    reference. Every `SeeDocs` reference **MUST** resolve to an **H2** heading of one of the
+    four embedded files (`readme`, `quickstart`, `concepts`, `troubleshooting`) in the
+    `slug#anchor` form `TestSeeDocsAnchorsResolve` accepts, for example
+    `concepts#contacts-gating`; a table row added to an existing section is not an anchor
+    and does not satisfy this.
 18. The `contacts` domain **MUST** expose an `operation="help"` verb documenting every
     registered verb, per the domain rule.
-19. `extension/manifest.json`'s `tools` array **MUST** gain a fifth entry, `contacts`,
-    enumerating the five verbs, and the array **MUST** hold exactly five entries after this
-    change.
+19. `extension/manifest.json`'s `tools` array **MUST** gain a fifth entry, `contacts`, whose
+    `description` names all five verbs, and the array **MUST** hold exactly five entries
+    after this change. The entry's description **MUST** name each verb as a whole word,
+    because `TestManifestDescribesEveryRegisteredVerb` matches on word boundaries. The
+    manifest's `long_description` **MUST** name `Contacts.Read` and `People.Read` in its
+    delegated-permissions line, stating that both are requested only under
+    `OUTLOOK_MCP_CONTACTS_ENABLED`.
 20. `site/src/generated/surface.json` **MUST** be regenerated with `make surface-manifest`
     and committed in the same change. The regenerated manifest **MUST** record the `contacts`
-    domain with five full verbs and zero default verbs (the whole domain is gated), so
-    `totals.fullCount` **MUST** rise by exactly five (the five new gated verbs) from the
-    then-current full count, and `totals.defaultCount` **MUST** be unchanged. The absolute
-    figures are deliberately not pinned to a literal here: CR-0080 and CR-0081 also add
-    calendar verbs ahead of this change and move the full count before it lands, so the
-    +5 delta is the invariant this CR asserts. The regenerating surface-drift gate that
-    fails `make ci` on any mismatch, not a number written in this document, is the real
-    check that the committed manifest matches the live registry.
-21. The hard-coded `toolCount` in `internal/server/server.go` **MUST** be computed as four
-    plus one when `cfg.ContactsEnabled` is true, and the completion log line **MUST** report
-    the actual number registered.
-22. The four-tool rule text in `AGENTS.md`, `CLAUDE.md`, `docs/readme.md`, and
-    `docs/concepts.md` **MUST** be amended to state that the surface is four aggregate domain
-    tools by default plus an opt-in fifth (`contacts`) enabled by
-    `OUTLOOK_MCP_CONTACTS_ENABLED`, and the "Tool Naming Convention" list of aggregate tools
-    **MUST** add `contacts` as an opt-in domain.
-23. `docs/concepts.md` **MUST** gain a contacts gating row (mirroring the mail gating table)
-    and a contacts row in the OAuth-scopes-per-feature table naming `Contacts.Read` and
+    domain with five full verbs and zero default verbs (the whole domain is gated), each of
+    the five carrying `OUTLOOK_MCP_CONTACTS_ENABLED` as its gate. `totals.fullCount`
+    **MUST** rise from **52** to **57** and `totals.defaultCount` **MUST** remain **38**.
+    CR-0080 and CR-0081 have landed, so these absolute figures are now knowable and are
+    pinned rather than left as a delta; should a further change land ahead of this one, the
+    binding invariant is the +5 full and +0 default delta from the then-current committed
+    manifest. The regenerating surface-drift gate that fails `make ci` on any mismatch, not
+    a number written in this document, remains the real check that the committed manifest
+    matches the live registry.
+21. The hard-coded `toolCount` in `internal/server/server.go:190` **MUST** be computed as
+    four plus one when `cfg.ContactsEnabled` is true, and the completion log line at `:192`
+    **MUST** report the actual number registered.
+22. Every four-tool statement enumerated in Current State **MUST** be amended to state that
+    the surface is four aggregate domain tools by default plus an opt-in fifth (`contacts`)
+    enabled by `OUTLOOK_MCP_CONTACTS_ENABLED`. This is one edit per site across:
+    `AGENTS.md` line 30 and line 82 — and **only** `AGENTS.md`, since `CLAUDE.md` is a
+    symbolic link to it and editing both would be editing one file twice; `README.md:35`;
+    `docs/readme.md:43`; `docs/concepts.md:71` and `:163`; `internal/docs/llmstxt.go:69` and
+    `:153`; `internal/tools/aggregate_annotations.go:6`;
+    `internal/server/surface_export.go:25`; and the prose comments in `site/src/surface.ts`
+    at lines 37, 63, and 81. The "Tool Naming Convention" list of aggregate tools in
+    `AGENTS.md` **MUST** add `contacts` as an opt-in domain. `site/src/surface.ts`'s
+    `domainCount` export **MUST NOT** be changed to a literal: it derives from
+    `surface.domains.length` and is already correct.
+23. `docs/concepts.md` **MUST** gain a new `## Contacts gating` H2 section, mirroring the
+    `## Mail gating` section's table shape, stating that the domain is off by default, that
+    `OUTLOOK_MCP_CONTACTS_ENABLED=true` registers the fifth tool and requests
+    `Contacts.Read` and `People.Read`, and that no contact write scope is ever requested. It
+    **MUST** be an H2 so `concepts#contacts-gating` resolves as a `SeeDocs` anchor (FR-17).
+    `docs/concepts.md` **MUST** additionally gain two rows in the
+    "OAuth scopes used per feature" table: `OUTLOOK_MCP_CONTACTS_ENABLED=false` (default)
+    naming no scope, and `OUTLOOK_MCP_CONTACTS_ENABLED=true` naming `Contacts.Read` and
     `People.Read`.
-24. `docs/prompts/mcp-tool-crud-test.md` and `scripts/crud-test.sh` **MUST** be lifecycled
-    for the new top-level domain: the prompt gains steps exercising the five verbs, the
-    script's per-domain tool-call accounting gains an `mcp_contacts` counter per its own
-    comments, `docs/bench/crud-runs.csv`'s header **MUST** stay consistent with the script's
-    output schema, and the new steps **MUST** be skipped when `CONTACTS_ENABLED` is off.
-25. The change **MUST NOT** alter the default four-tool surface: with `cfg.ContactsEnabled`
-    false, the set of registered tools and their published schemas **MUST** be byte-identical
-    to the surface before this change.
+24. `docs/prompts/mcp-tool-crud-test.md`, `scripts/crud-test.sh`, and
+    `docs/bench/crud-runs.csv` **MUST** be lifecycled for the new top-level domain:
+    * the prompt **MUST** gain steps exercising all five verbs, numbered from **Step 47**
+      (the prompt currently ends at Step 46), each marked "skip if contacts disabled" in the
+      style the mail steps already use;
+    * `scripts/crud-test.sh` **MUST** receive all three matching edits its own MAINTENANCE
+      comment (lines 102-108) names, or the CSV rows go malformed and contacts calls are
+      silently counted as `other`: (a) an `mcp_contacts` column in the CSV header emitted at
+      line 97, (b) an `/^mcp__outlook-local-mcp__contacts$/` pattern and counter in the awk
+      block with the counter added to its `END` `printf`, and (c) the counter added to the
+      `read -r` variable list and to the `jq` `--arg`/output array;
+    * `docs/bench/crud-runs.csv` **MUST** gain the matching `mcp_contacts` column in its
+      header, and its historical rows **MUST** be reset rather than left short, per the
+      harness-maintenance rule in `AGENTS.md`.
+25. The change **MUST NOT** alter the default four-tool surface. With `cfg.ContactsEnabled`
+    false: the set of registered top-level tool names **MUST** remain exactly `calendar`,
+    `mail`, `account`, `system`; the regenerated `site/src/generated/surface.json`
+    `totals.defaultCount` **MUST** remain 38 and no default-configuration verb entry **MUST**
+    change; and the requested OAuth scope set **MUST** be unchanged (FR-14). "Byte-identical"
+    is graded by these three observable properties, not asserted as prose.
+26. `BuildDomainVerbSets` (`internal/server/introspect_verbs.go:47`) **MUST** build and
+    return the `contacts` domain under the same `cfg.ContactsEnabled` condition
+    `RegisterTools` uses, and **MUST NOT** include a `"contacts"` key when the flag is false.
+    Registering the domain in `RegisterTools` alone is insufficient: `BuildVerbsForInspection`
+    wraps `BuildDomainVerbSets`, and it is the only entry point `internal/surface` and
+    `internal/server/manifest_sync_test.go` read, so a domain missing here is invisible to
+    the surface manifest and to the manifest-sync check however it is registered.
+27. `internal/surface/build.go` **MUST** be extended in all three places its four-domain
+    assumption is written, or the contacts domain never reaches the generated manifest:
+    `domainOrder` (line 22) **MUST** gain `"contacts"` in last position, matching the
+    Tool Naming Convention order; `fullConfig()` **MUST** set `ContactsEnabled: true`; and
+    `gateProbes()` **MUST** gain a fourth probe pairing `config.EnvContactsEnabled` with the
+    default configuration plus `ContactsEnabled: true`, so each contacts verb is attributed
+    to its gate and `TestEveryVerbCarriesSummaryAndGate` passes.
+28. `internal/server/manifest_sync_test.go` **MUST** be modified, not created: it exists at
+    the source commit. Its `maximalSurfaceConfig()` **MUST** set `ContactsEnabled: true` so
+    the registry-derived cases cover the contacts verbs, its `len(doc.Tools) != 4` assertion
+    (line 88) **MUST** become `!= 5`, and its `manifestDocument.Tools` doc comment and the
+    file's package comment **MUST** be updated from four to five. No second test asserting
+    the same property **MUST** be added; the existing derived check is extended rather than
+    duplicated.
+29. Every hard-coded four-domain list in the test suite **MUST** gain `"contacts"`, and every
+    test server builder feeding those lists **MUST** be given a configuration with
+    `ContactsEnabled: true`, or the registry-metadata, description-quality, and
+    annotation checks silently skip the five new verbs and AC-8 is graded vacuously. The
+    sites are `internal/tools/verb_metadata_test.go` (lines 100, 159, 204, 230, 377),
+    `internal/tools/description_quality_test.go` (lines 93, 130, 151, 164),
+    `internal/tools/tool_description_test.go` (lines 246, 265),
+    `internal/tools/tool_annotations_test.go` (lines 328, 389), and
+    `internal/server/surface_export_test.go` (line 23). The four-tool *count* assertions
+    listed in Current State (`internal/server/server_test.go` lines 784, 925, 954, 1051 and
+    `TestAggregateAnnotations_FourToolsRegistered`) **MUST NOT** be changed: their
+    configurations leave contacts off, so they continue to prove the default surface is four
+    tools, which is exactly what FR-25 needs.
+30. Deriving the domain list from the registry rather than restating it at each of the
+    fourteen sites FR-29 enumerates is **out of scope** for this change and **MUST NOT** be
+    attempted here. FR-29 is an instance-level fix, and `AGENTS.md` records that instance
+    fixes do not close a class; the class-closing remedy is recorded as follow-on work
+    rather than silently treated as done.
 
 ### Non-Functional Requirements
 
@@ -355,10 +552,11 @@ flowchart TD
    verb (`contacts_search.go`, `contacts_get_contact.go`, `contacts_list_people.go`,
    `contacts_get_person.go`), mirroring the one-file-per-verb layout of the existing domains.
 2. The cold-start schema reduction asserted by `TestColdStartSchemaSize_Reduction` **MUST**
-   stay at or above 60% against the documented 74 000-byte baseline **with the contacts
-   domain enabled**. The test's configuration **MUST** be extended to set
-   `ContactsEnabled: true`, so it measures the true five-tool maximum rather than a
-   four-tool subset.
+   stay at or above 60% against the documented 74 000-byte baseline (`preCRBaselineBytes`)
+   **with the contacts domain enabled**. The test's configuration (`internal/server/schema_size_test.go:62`)
+   **MUST** be extended to set `ContactsEnabled: true`, so it measures the true five-tool
+   maximum rather than a four-tool subset, and its "four aggregate tools" comments at lines
+   33 and 36 **MUST** be updated to five.
 3. Because the schema-size figure is a measured gate, the implementer **MUST** validate the
    instrument before trusting the result — run the measurement twice on unchanged input and
    confirm it agrees with itself — and **MUST** record the measured five-tool byte count and
@@ -369,7 +567,11 @@ flowchart TD
    is the measured value, not this estimate.
 4. Every error raised by the domain **MUST** carry a fix instruction naming what to supply or
    correct, and **MUST** reach both the tool result and the log record, so a headless caller
-   still receives the correction.
+   still receives the correction. The fix instructions **MUST** be declared as verb-local
+   `const` strings at the top of each handler file and referenced from both channels,
+   following `internal/tools/get_schedule.go:43-45` (`getScheduleTimeoutFix`,
+   `getScheduleGraphFix`, `getScheduleAddressFix`), rather than written inline at each
+   emission site where the two channels can drift apart.
 5. The change **MUST NOT** add a third-party dependency; the four request builders already
    exist in the pinned SDK.
 6. `get_contact`, `list_people`, and `get_person` **MUST** each issue exactly one Graph
@@ -379,58 +581,127 @@ flowchart TD
    `graph.WithTimeout`, and **MUST** redact Graph errors with the existing helpers, so retry,
    timeout, and redaction behaviour is identical to the verbs already registered.
 8. The `contacts` tool's composed description **MUST** stay below the 4 000-character bound
-   asserted by `TestDescriptionLengthBounded`; a five-verb read domain is far below it, but
-   the bound is asserted, not assumed.
+   asserted by `TestDescriptionLengthBounded` (`maxLen = 4000`,
+   `internal/tools/description_quality_test.go:148`); a five-verb read domain is far below
+   it, but the bound is asserted, not assumed. The measured character count **MUST** be
+   recorded in the validation report alongside the bound.
+9. The contact and person serializers **MUST** be two distinct functions, not one
+   parameterised over a shared interface. `Contactable.GetEmailAddresses()` returns
+   `[]models.EmailAddressable` and `Personable.GetScoredEmailAddresses()` returns
+   `[]models.ScoredEmailAddressable`; the two element types are unrelated in the SDK and
+   share no address interface, so a single serializer cannot type-check over both.
 
 ## Affected Components
 
-* `internal/server/contacts_verbs.go` (new): `buildContactsVerbs`, the domain verb slice
-  constructor, mirroring `internal/server/account_verbs.go`. Carries the five `Verb`
+### Source (new)
+
+* `internal/server/contacts_verbs.go`: `buildContactsVerbs`, the domain verb slice
+  constructor, and the `contactsVerbsConfig` dependency struct declared in the same file
+  (no separate `_config.go`, matching every existing domain). Carries the five `Verb`
   descriptors with `Summary`, `Description`, `Examples`, `SeeDocs`, `Annotations`, and
   `Schema`, each `Handler` wrapped under the identity `contacts.<verb>` with audit op `read`.
-* `internal/server/contacts_verbs_config.go` (new, or a struct in `contacts_verbs.go`): the
-  `contactsVerbsConfig` dependency struct (retry config, timeout, metrics, tracer, authMW,
-  accountResolverMW), following `accountVerbsConfig`.
-* `internal/tools/contacts_search.go` (new): the `search` handler, issuing the two `$search`
+  **The model is `mailVerbsConfig` / `buildMailVerbs`
+  (`internal/server/mail_verbs.go`), not `accountVerbsConfig`.** `accountVerbsConfig` has
+  only `registry`, `cfg`, `m`, `tracer`, and `authMW`: it carries no `retryCfg`, no
+  `timeout`, and no `accountResolverMW`, because account verbs deliberately bypass account
+  resolution and Graph. Contacts verbs are Graph reads that require a resolved account, so
+  `contactsVerbsConfig` carries `retryCfg`, `timeout`, `m`, `tracer`, `authMW`, and
+  `accountResolverMW`. This is the same distinction the Alternative Approaches section uses
+  to reject folding contacts into `account`.
+* `internal/tools/contacts_search.go`: the `search` handler, issuing the two `$search`
   Graph calls and merging the results with source labels.
-* `internal/tools/contacts_get_contact.go` (new): the `get_contact` handler.
-* `internal/tools/contacts_list_people.go` (new): the `list_people` handler.
-* `internal/tools/contacts_get_person.go` (new): the `get_person` handler.
-* `internal/tools/contacts_serialize.go` (new) or `internal/graph/contacts_serialize.go`: the
-  raw and summary serializers for a contact and a person, including `SerializeSummaryContact`
-  and `SerializeSummaryPerson` (NFR-11).
+* `internal/tools/contacts_get_contact.go`: the `get_contact` handler.
+* `internal/tools/contacts_list_people.go`: the `list_people` handler.
+* `internal/tools/contacts_get_person.go`: the `get_person` handler.
+* `internal/tools/contacts_serialize.go`: the raw and summary serializers for a contact and
+  a person, including `SerializeSummaryContact` and `SerializeSummaryPerson` (FR-11, NFR-9).
+  It lives in `internal/tools/`, not `internal/graph/`, so the two serializers sit beside
+  the four handlers that are their only callers.
+
+### Source (modified)
+
+* `internal/server/server.go`: the conditional `buildContactsVerbs` +
+  `tools.RegisterDomainTool` block gated on `cfg.ContactsEnabled`, the computed `toolCount`
+  (FR-21, line 190), the completion log line (line 192), the four-tool comment (line 188),
+  and the domain `Intro` naming the five verbs and the gate.
+* `internal/server/introspect_verbs.go`: the same conditional contacts branch in
+  `BuildDomainVerbSets`, so the domain reaches the surface generator and the manifest-sync
+  check (FR-26). **This is the second of two places the domain set is built; omitting it is
+  the single most likely way for this change to pass its own unit tests and still ship a
+  manifest with four domains.**
+* `internal/surface/build.go`: `domainOrder`, `fullConfig()`, and `gateProbes()` (FR-27).
+* `internal/config/config.go`: the `ContactsEnabled` field and the `LoadConfig` read (FR-16).
+* `internal/config/inventory.go`: the `EnvContactsEnabled` constant and its `inventory` row
+  (FR-16).
+* `internal/auth/auth.go`: the `contactsReadScope` and `peopleReadScope` constants and the
+  `cfg.ContactsEnabled` branch in `Scopes` (FR-14, FR-15).
 * `internal/tools/text_format.go`: contacts text formatters following the established
   patterns (numbered lists for collections, labelled fields for a single record, a total
   count at the end).
-* `internal/server/server.go`: the conditional `buildContactsVerbs` +
-  `tools.RegisterDomainTool` block gated on `cfg.ContactsEnabled`, the computed `toolCount`
-  (FR-21), and the domain `Intro` naming the five verbs and the gate.
-* `internal/config/config.go`: the `ContactsEnabled` field, its `EnvContactsEnabled`
-  constant, and the `LoadConfig` read (FR-16).
-* `internal/auth/auth.go`: the `contactsReadScope` and `peopleReadScope` constants and the
-  `cfg.ContactsEnabled` branch in `Scopes` (FR-14, FR-15).
-* `extension/manifest.json`: a fifth `tools` entry, `contacts` (FR-19). Its
-  `long_description` scope enumeration should also name the two new scopes when contacts is
-  described.
-* `site/src/generated/surface.json`: regenerated, not hand-edited (FR-20).
-* `AGENTS.md`, `CLAUDE.md`, `docs/readme.md`, `docs/concepts.md`: the four-tool rule
-  amendments and the contacts gating and scope rows (FR-22, FR-23).
+* `internal/tools/aggregate_annotations.go`: the four-tool doc comment at line 6 (FR-22).
+* `internal/server/surface_export.go`: the four-domain doc comment at line 25 (FR-22).
+* `internal/docs/llmstxt.go`: the generated `llms.txt` text at lines 69 and 153 (FR-22).
+
+### Unchanged but load-bearing
+
+* `internal/tools/dispatch_registry.go`: the `Verb` registry and `RegisterDomainTool` are
+  reused as-is; a fifth domain needs no dispatch change.
+* `internal/tools/search_messages_query.go`: `NormaliseSearchQuery` is reused unchanged by
+  `search` (FR-9).
+* `internal/graph/{timeout,retry,errors}.go` and `internal/validate/validate.go`: reused
+  unchanged (FR-8, NFR-7).
+* `site/src/surface.ts`: `domainCount` already derives from `surface.domains.length` and
+  needs no edit; only its prose comments at lines 37, 63, and 81 change (FR-22).
+
+### Published surface and documentation
+
+* `extension/manifest.json`: a fifth `tools` entry, `contacts`, and the two new scopes named
+  in `long_description` (FR-19).
+* `site/src/generated/surface.json`: regenerated with `make surface-manifest`, never
+  hand-edited (FR-20). Expected `totals`: `fullCount` 52 → 57, `defaultCount` 38 unchanged.
+* `AGENTS.md` (lines 30 and 82), `README.md` (line 35), `docs/readme.md` (line 43),
+  `docs/concepts.md` (lines 71 and 163, plus the new `## Contacts gating` section and the
+  two OAuth-scope rows): FR-22 and FR-23. `CLAUDE.md` is a symbolic link to `AGENTS.md` and
+  **MUST NOT** be edited separately.
 * `docs/prompts/mcp-tool-crud-test.md`, `scripts/crud-test.sh`, `docs/bench/crud-runs.csv`:
   the harness lifecycle for a new top-level domain (FR-24).
-* `internal/tools/dispatch_registry_test.go`: the `verbInventoryGolden` list gains five
-  contacts identities.
-* `internal/server/schema_size_test.go`: `ContactsEnabled: true` added to the max-config, and
-  the "four aggregate tools" comment updated to five (NFR-2).
-* `internal/server/server_test.go`: a new test asserting five tools under `ContactsEnabled`,
-  and `TestRegisterTools_MailEnabled` re-confirmed to still assert four under the default
-  (contacts-off) config.
-* `internal/server/manifest_sync_test.go` (new here unless a prior change has already added
-  it): the manifest-sync assertion gating FR-19, that the `extension/manifest.json` `tools`
-  array holds exactly five entries and carries a `contacts` entry enumerating the five verbs.
-  CR-0078 proposes a file of this name, but at the source commit that is an **unmerged CR
-  draft**, so this change **MUST NOT** assume the file exists: it creates the file if absent,
-  and if a prior change has landed it, extends it so the expected count under the
-  contacts-enabled configuration is five rather than four.
+
+### Tests
+
+* `internal/tools/dispatch_registry_test.go`: the `verbInventoryGolden` list (line 39) gains
+  five contacts identities.
+* `internal/server/schema_size_test.go`: `ContactsEnabled: true` added to the max-config at
+  line 62, and the "four aggregate tools" comments at lines 33 and 36 updated to five (NFR-2).
+* `internal/server/server_test.go`: two new tests asserting five tools under
+  `ContactsEnabled` and four without it. The four existing `expectedTotal = 4` assertions
+  (lines 784, 925, 954, 1051) are re-confirmed and **left unchanged** (FR-29).
+* `internal/server/manifest_sync_test.go`: **modified, not created** — the file exists at the
+  source commit. `maximalSurfaceConfig()` gains `ContactsEnabled: true`, the `!= 4` assertion
+  becomes `!= 5`, and the four-tool prose in the package comment and the
+  `manifestDocument.Tools` field comment is updated (FR-28).
+* `internal/tools/verb_metadata_test.go`, `internal/tools/description_quality_test.go`,
+  `internal/tools/tool_description_test.go`, `internal/tools/tool_annotations_test.go`,
+  `internal/server/surface_export_test.go`: the hard-coded four-domain lists gain
+  `"contacts"` and the test server builders gain `ContactsEnabled: true` (FR-29).
+  `TestAggregateAnnotations_FourToolsRegistered`
+  (`internal/tools/tool_annotations_test.go:313`) is **left unchanged**: its configuration
+  sets no contacts flag, so it keeps proving the default surface is four tools.
+* `internal/surface/surface_test.go`: a case asserting the contacts domain is recorded with
+  five full and zero default verbs, each gated on `OUTLOOK_MCP_CONTACTS_ENABLED`.
+* New test files: `internal/tools/contacts_{search,get_contact,list_people,get_person}_test.go`,
+  `internal/tools/contacts_serialize_test.go`, `internal/server/contacts_verbs_test.go`,
+  `internal/server/introspect_verbs_test.go` (no such file exists today), and cases appended
+  to `internal/auth/auth_test.go`, `internal/config/config_test.go`, and
+  `internal/surface/surface_test.go`.
+
+### Deliberately unchanged
+
+* `internal/server/readonly.go` and `ReadOnlyGuard`. Every contacts verb is read-only, so no
+  contacts handler is wrapped by the guard, and `readOnly` is not a field of
+  `contactsVerbsConfig`. This is a consequence of the read-only domain, and it is stated so a
+  reviewer does not read the guard's absence as an omission.
+* `docs/quickstart.md` and `docs/troubleshooting.md`: neither states a tool count nor a
+  contacts failure mode this change introduces.
 
 ## Scope Boundaries
 
@@ -556,86 +827,211 @@ flowchart LR
         B2 --> B3["list_people"]
         B3 --> B4["search over contacts and people"]
     end
-    subgraph P3["Phase 3: Domain registration"]
+    subgraph P3["Phase 3: Domain registration and inspection"]
         C1["buildContactsVerbs with five verbs"] --> C2["Conditional register in RegisterTools"]
-        C2 --> C3["Computed toolCount"]
+        C2 --> C3["Same branch in BuildDomainVerbSets"]
+        C3 --> C4["surface build: domainOrder, fullConfig, gateProbe"]
+        C4 --> C5["Computed toolCount"]
     end
     subgraph P4["Phase 4: Surface, docs, harness"]
-        D1["Extension manifest fifth entry"] --> D2["Regenerate surface manifest"]
+        D1["Extension manifest fifth entry and manifest sync test"] --> D2["Regenerate surface manifest"]
         D2 --> D3["Amend four-tool rule and docs"]
-        D3 --> D4["CRUD harness and verb-inventory golden"]
+        D3 --> D4["Test domain lists, CRUD harness, verb-inventory golden"]
         D4 --> D5["Re-measure cold-start schema size"]
     end
     P1 --> P2 --> P3 --> P4
 ```
 
+Phase 3 leaves three registry-derived checks deliberately red, and Phase 4 closes them.
+This is expected and is recorded here so an implementor does not mistake a red build at the
+end of Phase 3 for a defect and patch around it:
+
+* `TestVerbInventoryUnchangedAfterUpgrade` (`internal/tools/dispatch_registry_test.go:153`)
+  fails because five identities are registered that `verbInventoryGolden` does not list.
+  Closed by Phase 4 step 6.
+* `TestCommittedManifestMatchesRecord` (`internal/surface/manifest_test.go:21`), and with it
+  `make surface-check` inside `make ci`, fails because the live registry now records a fifth
+  domain that the committed `site/src/generated/surface.json` does not. Closed by Phase 4
+  step 2.
+* `TestManifestDescribesEveryRegisteredVerb` (`internal/server/manifest_sync_test.go:84`)
+  fails because the registry registers a `contacts` domain that `extension/manifest.json`
+  does not describe. Closed by Phase 4 step 1.
+
+Run `make build`, `make vet`, and the package-scoped tests at the end of Phases 1 through 3;
+`make ci` is expected to pass only at the end of Phase 4.
+
 ### Phase 1: Config and scopes
 
-1. Add `ContactsEnabled bool` to `config.Config` and an `EnvContactsEnabled` constant
-   `"OUTLOOK_MCP_CONTACTS_ENABLED"`, read in `LoadConfig` with a `false` default, following
-   `MailEnabled` exactly.
-2. Add `contactsReadScope = "Contacts.Read"` and `peopleReadScope = "People.Read"` to
-   `internal/auth/auth.go`, and append both in `Scopes` when `cfg.ContactsEnabled` is true.
-   Document that neither is a write scope and that they are requested only on opt-in.
+1. Add `ContactsEnabled bool` to `config.Config` (beside `MailManageEnabled`, line 146) and
+   read it in `LoadConfig` (beside line 307) with a `false` default, following `MailEnabled`
+   exactly. Unlike `MailManageEnabled`, it implies no other flag.
+2. Add `EnvContactsEnabled = "OUTLOOK_MCP_CONTACTS_ENABLED"` to the const block in
+   `internal/config/inventory.go` (after `EnvMailManageEnabled`, line 43) and a matching row
+   to the `inventory` slice (after the `EnvMailManageEnabled` row, line 91), so the flag
+   reaches the surface manifest's `config` section and the site's configuration reference
+   (FR-16).
+3. Add `contactsReadScope = "Contacts.Read"` and `peopleReadScope = "People.Read"` to
+   `internal/auth/auth.go` beside `mailScope` (line 27), and append both in `Scopes` when
+   `cfg.ContactsEnabled` is true. Document that neither is a write scope and that they are
+   requested only on opt-in.
 
-**Affected components:** `internal/config/config.go`, `internal/auth/auth.go`, and their tests.
+**Affected components:**
+
+* `internal/config/config.go` — `ContactsEnabled` field, `LoadConfig` read.
+* `internal/config/inventory.go` — `EnvContactsEnabled` const, `inventory` row.
+* `internal/config/config_test.go` — `TestLoadConfig_ContactsEnabled`.
+* `internal/auth/auth.go` — two scope constants, the `Scopes` branch.
+* `internal/auth/auth_test.go` — `TestScopes_Contacts`, `TestScopes_NoContactsByDefault`,
+  `TestScopes_NoContactsWriteEver`.
+
+**Verification:** `make build`, `make vet`, `go test ./internal/config/... ./internal/auth/...`.
 
 ### Phase 2: Serializers and handlers
 
-1. Add contact and person serializers (raw and summary). `SerializeSummaryContact` selects
-   display name and the primary email address; `SerializeSummaryPerson` the same for a
-   person (NFR-11).
-2. `internal/tools/contacts_get_contact.go`: resolve the Graph client, validate `contact_id`,
-   `GET /me/contacts/{id}` through the retry/timeout helpers, and render the requested tier.
-3. `internal/tools/contacts_get_person.go`: the same shape against `/me/people/{id}`.
-4. `internal/tools/contacts_list_people.go`: `GET /me/people`, preserve relevance order,
-   render the requested tier as a numbered list with a total count.
-5. `internal/tools/contacts_search.go`: validate `query`, issue `GET /me/contacts` with the
-   `Search` query option set and `GET /me/people` with its `Search` option set, merge the two
+1. Add `internal/tools/contacts_serialize.go` with two independent pairs of serializers,
+   because `Contactable` and `Personable` expose unrelated address types (NFR-9).
+   `SerializeSummaryContact` selects `displayName` and the first entry of `emailAddresses`;
+   `SerializeSummaryPerson` selects `displayName` and the first entry of
+   `scoredEmailAddresses`. Both select a deliberate field set rather than filtering empties
+   out of the raw payload (FR-11).
+2. `internal/tools/contacts_get_contact.go`: resolve the Graph client, validate `contact_id`
+   with `validate.ValidateResourceID`, call
+   `client.Me().Contacts().ByContactId(id).Get(...)` through the retry/timeout helpers, and
+   render the requested tier.
+3. `internal/tools/contacts_get_person.go`: the same shape against
+   `client.Me().People().ByPersonId(id).Get(...)`.
+4. `internal/tools/contacts_list_people.go`: `client.Me().People().Get(...)`, preserve
+   relevance order, render the requested tier as a numbered list with a total count.
+5. `internal/tools/contacts_search.go`: reject an empty or whitespace-only `query` by name,
+   normalise it once with `NormaliseSearchQuery`, then issue
+   `client.Me().Contacts().Get(...)` with `ItemContactsRequestBuilderGetQueryParameters.Search`
+   set and `client.Me().People().Get(...)` with
+   `ItemPeopleRequestBuilderGetQueryParameters.Search` set to the same value, merge the two
    result sets with a source label per result, and render the requested tier. Exactly two
-   Graph requests, no per-result fetch (NFR-6).
+   Graph requests, no per-result fetch (NFR-6). Follow `internal/tools/search_messages.go:104-115`
+   in running the normalisation before the timeout context and the retry wrapper, so a
+   refused query issues no request.
 6. Every handler goes through `graph.RetryGraphCall` inside `graph.WithTimeout`, with
    `graph.IsTimeoutError`, `graph.TimeoutErrorMessage`, and `graph.RedactGraphError` handled
-   as the existing read verbs handle them (NFR-7).
+   as `internal/tools/get_schedule.go:150-170` handles them, and with the per-verb fix
+   instructions declared as file-local constants in that file's style (NFR-4, NFR-7).
+7. Add the contacts text formatters to `internal/tools/text_format.go`: a numbered list with
+   a total count for `search` and `list_people`, labelled fields for `get_contact` and
+   `get_person`.
 
-**Affected components:** the four handler files, the serializer file, and `text_format.go`,
-plus their tests.
+**Affected components:**
 
-### Phase 3: Domain registration
+* `internal/tools/contacts_serialize.go` (new) and `internal/tools/contacts_serialize_test.go` (new).
+* `internal/tools/contacts_get_contact.go`, `contacts_get_person.go`,
+  `contacts_list_people.go`, `contacts_search.go` (all new), each with a matching
+  `_test.go`.
+* `internal/tools/text_format.go` — contacts formatters.
+* Reused unchanged: `internal/tools/search_messages_query.go` (`NormaliseSearchQuery`),
+  `internal/validate/validate.go`, `internal/graph/{timeout,retry,errors}.go`.
 
-1. Add `buildContactsVerbs` in `internal/server/contacts_verbs.go`, mirroring
-   `buildAccountVerbs`: an empty `VerbRegistry`, a `wrap` closure applying authMW,
-   observability, and audit under `contacts.<verb>` with op `read`, and the five `Verb`
+**Verification:** `make build`, `make vet`, `go test -race ./internal/tools/...`.
+
+### Phase 3: Domain registration and inspection
+
+1. Add `buildContactsVerbs` and `contactsVerbsConfig` in
+   `internal/server/contacts_verbs.go`, mirroring `buildMailVerbs` **and not
+   `buildAccountVerbs`**: `contactsVerbsConfig` carries `retryCfg`, `timeout`, `m`,
+   `tracer`, `authMW`, and `accountResolverMW`, because contacts verbs are Graph reads that
+   need a resolved account. It carries no `readOnly`, because the domain has no write verb
+   for `ReadOnlyGuard` to block. Build an empty `VerbRegistry`, a `wrap` closure applying
+   authMW, account resolution, observability, and audit under `contacts.<verb>` with op
+   `read` (the read-verb chain of `internal/server/calendar_verbs.go`, without the
+   `ReadOnlyGuard` layer that the write chain at line 100 adds), and the five `Verb`
    descriptors with full metadata, annotations, and schema.
-2. In `RegisterTools`, add a block that builds and registers the contacts domain **only when
-   `cfg.ContactsEnabled` is true**, with an `Intro` naming the five verbs and the gate.
-3. Compute `toolCount` as `4 + 1` when contacts is enabled, and log the actual count (FR-21).
+2. In `RegisterTools` (`internal/server/server.go:53`), add a block after the mail block
+   that builds and registers the contacts domain **only when `cfg.ContactsEnabled` is
+   true**, with an `Intro` naming the five verbs and the gate.
+3. Add the identical conditional branch to `BuildDomainVerbSets`
+   (`internal/server/introspect_verbs.go:47`), adding a `"contacts"` key to the returned map
+   only when the flag is true (FR-26). This is the twin of step 2; a domain registered in
+   step 2 alone is invisible to the surface generator and to the manifest-sync check.
+4. Extend `internal/surface/build.go` (FR-27): `domainOrder` gains `"contacts"` last,
+   `fullConfig()` sets `ContactsEnabled: true`, and `gateProbes()` gains a fourth probe
+   pairing `config.EnvContactsEnabled` with the default config plus `ContactsEnabled: true`.
+5. Compute `toolCount` as `4 + 1` when contacts is enabled, log the actual count, and update
+   the four-tool comment above it (FR-21).
 
-**Affected components:** `internal/server/contacts_verbs.go` (new), `internal/server/server.go`.
+At the end of this phase the three registry-derived checks listed above are red by design.
+
+**Affected components:**
+
+* `internal/server/contacts_verbs.go` (new) and `internal/server/contacts_verbs_test.go` (new).
+* `internal/server/server.go` — the conditional registration block, `toolCount` (line 190),
+  the log line (line 192), the comment (line 188).
+* `internal/server/introspect_verbs.go` — the conditional `"contacts"` key.
+* `internal/surface/build.go` — `domainOrder`, `fullConfig()`, `gateProbes()`.
+* `internal/server/server_test.go` — `TestRegisterTools_ContactsEnabled_RegistersFifthTool`,
+  `TestRegisterTools_ContactsDisabled_StaysFourTools`.
+* `internal/surface/surface_test.go` — `TestContactsDomainRecordedGatedAndFull`.
+
+**Verification:** `make build`, `make vet`,
+`go test ./internal/server/... ./internal/surface/...` — expecting
+`TestCommittedManifestMatchesRecord` and `TestManifestDescribesEveryRegisteredVerb` to fail
+until Phase 4.
 
 ### Phase 4: Surface, documentation, and harness
 
-1. Add the fifth `tools` entry to `extension/manifest.json`, enumerating the five verbs.
-2. Run `make surface-manifest` and commit `site/src/generated/surface.json`; confirm the
-   contacts domain records five full and zero default, so the total full count rises by
-   exactly five from the then-current count with the default count unchanged (FR-20). The
-   absolute total is not pinned here, since CR-0080 and CR-0081 move it ahead of this change;
-   `make ci` fails on a stale manifest, so the regenerated figure is the check, not a literal.
-3. Amend the four-tool rule text in `AGENTS.md`, `CLAUDE.md`, `docs/readme.md`, and
-   `docs/concepts.md`, and add the contacts gating and scope rows (FR-22, FR-23).
-4. Add lifecycle steps to `docs/prompts/mcp-tool-crud-test.md`, add the `mcp_contacts`
-   accounting to `scripts/crud-test.sh` per its own comments, keep `docs/bench/crud-runs.csv`
-   consistent with the script's schema, and gate the new steps behind `CONTACTS_ENABLED`.
-5. Regenerate `verbInventoryGolden` and add the five contacts identities.
-6. Extend `schema_size_test.go` to set `ContactsEnabled: true`, re-measure with the
-   instrument validated (twice on unchanged input), and record the five-tool byte count and
-   reduction (NFR-2, NFR-3).
+1. Add the fifth `tools` entry to `extension/manifest.json`, whose `description` names all
+   five verbs as whole words, and name `Contacts.Read` and `People.Read` in
+   `long_description` (FR-19). In the same step, modify
+   `internal/server/manifest_sync_test.go` (FR-28): `maximalSurfaceConfig()` gains
+   `ContactsEnabled: true`, the `len(doc.Tools) != 4` assertion becomes `!= 5`, and the
+   four-tool prose in the package comment and the `manifestDocument.Tools` field comment is
+   updated. The manifest edit and the test edit must land together; either alone leaves the
+   check red.
+2. Run `make surface-manifest` and commit `site/src/generated/surface.json`. Confirm the
+   contacts domain records five full and zero default verbs, each gated on
+   `OUTLOOK_MCP_CONTACTS_ENABLED`, and that `totals.fullCount` reads 57 and
+   `totals.defaultCount` reads 38 (FR-20). Confirm the new configuration variable appears in
+   the manifest's `config` section, which proves the Phase 1 inventory row landed. If the
+   regenerated file records four domains, the Phase 3 step 3 or step 4 edit is missing;
+   re-check those before touching anything else.
+3. Amend every four-tool statement enumerated in FR-22 — `AGENTS.md` (lines 30 and 82) only,
+   never `CLAUDE.md` separately; `README.md:35`; `docs/readme.md:43`; `docs/concepts.md:71`
+   and `:163`; `internal/docs/llmstxt.go:69` and `:153`;
+   `internal/tools/aggregate_annotations.go:6`; `internal/server/surface_export.go:25`; and
+   the three prose comments in `site/src/surface.ts`. Add the new `## Contacts gating`
+   section and the two OAuth-scope rows to `docs/concepts.md` (FR-23).
+4. Add lifecycle steps 47 onward to `docs/prompts/mcp-tool-crud-test.md`, each marked "skip
+   if contacts disabled"; make all three `scripts/crud-test.sh` edits its MAINTENANCE
+   comment names (CSV header, awk pattern and `END` printf, `read -r` list and `jq`
+   arguments); add the `mcp_contacts` column to `docs/bench/crud-runs.csv` and reset its
+   historical rows rather than leaving them short (FR-24).
+5. Extend the hard-coded four-domain lists and their test server configurations (FR-29):
+   `internal/tools/verb_metadata_test.go`, `internal/tools/description_quality_test.go`,
+   `internal/tools/tool_description_test.go`, `internal/tools/tool_annotations_test.go`, and
+   `internal/server/surface_export_test.go`. Leave
+   `TestAggregateAnnotations_FourToolsRegistered` and the four `expectedTotal = 4` sites in
+   `internal/server/server_test.go` unchanged.
+6. Regenerate `verbInventoryGolden` and add the five contacts identities. The failing
+   `TestVerbInventoryUnchangedAfterUpgrade` prints the regenerated literal
+   (`internal/tools/dispatch_registry_test.go:179`); paste it rather than hand-editing.
+7. Extend `internal/server/schema_size_test.go` to set `ContactsEnabled: true`, update its
+   four-tool comments, re-measure with the instrument validated (run twice on unchanged
+   input and confirm the two byte counts agree exactly), and record the five-tool byte count
+   and reduction percentage (NFR-2, NFR-3). Record the measured `contacts` description
+   length against the 4 000-character bound in the same pass (NFR-8).
 
-**Affected components:** `extension/manifest.json`, `site/src/generated/surface.json`,
-`AGENTS.md`, `CLAUDE.md`, `docs/readme.md`, `docs/concepts.md`,
-`docs/prompts/mcp-tool-crud-test.md`, `scripts/crud-test.sh`, `docs/bench/crud-runs.csv`,
-`internal/tools/dispatch_registry_test.go`, `internal/server/schema_size_test.go`,
-`internal/server/server_test.go`.
+**Affected components:**
+
+* `extension/manifest.json`, `internal/server/manifest_sync_test.go`.
+* `site/src/generated/surface.json` (regenerated), `site/src/surface.ts` (comments only).
+* `AGENTS.md`, `README.md`, `docs/readme.md`, `docs/concepts.md`.
+* `internal/docs/llmstxt.go`, `internal/tools/aggregate_annotations.go`,
+  `internal/server/surface_export.go`.
+* `docs/prompts/mcp-tool-crud-test.md`, `scripts/crud-test.sh`, `docs/bench/crud-runs.csv`.
+* `internal/tools/dispatch_registry_test.go`, `internal/tools/verb_metadata_test.go`,
+  `internal/tools/description_quality_test.go`, `internal/tools/tool_description_test.go`,
+  `internal/tools/tool_annotations_test.go`, `internal/server/surface_export_test.go`,
+  `internal/server/schema_size_test.go`.
+
+**Verification:** `make ci` (which runs `make surface-check`) **MUST** exit 0 at the end of
+this phase.
 
 ## Test Strategy
 
@@ -651,28 +1047,47 @@ substring checks on the returned text and on `result.IsError`. No test issues a 
 | `internal/tools/contacts_search_test.go` | `TestContactsSearch_QueriesBothResources` | Search hits contacts and people | `query` of `Alex` | Two requests observed, one to `/me/contacts`, one to `/me/people`, each carrying `$search` |
 | `internal/tools/contacts_search_test.go` | `TestContactsSearch_LabelsSource` | Each match is labelled by source | Canned contact and person responses | Output distinguishes saved contacts from ranked people |
 | `internal/tools/contacts_search_test.go` | `TestContactsSearch_RejectsEmptyQuery` | Empty query is refused before any call | `query` of `"  "` | Error naming `query`; no request issued |
+| `internal/tools/contacts_search_test.go` | `TestContactsSearch_SendsIdenticalNormalisedValueToBoth` | Both requests carry the same normalised value, and it is what `NormaliseSearchQuery` returns (FR-4, FR-9) | `query` of `Alex Smith` | The `$search` value on the contacts request equals the value on the people request and equals `NormaliseSearchQuery("Alex Smith")` |
+| `internal/tools/contacts_search_test.go` | `TestContactsSearch_RejectsUnconvertibleQueryBeforeCall` | The reused normaliser's refusal path issues no request (FR-9) | A query `NormaliseSearchQuery` refuses | Error carrying the normaliser's fix instruction; no request issued |
 | `internal/tools/contacts_search_test.go` | `TestContactsSearch_TierSummarySelectsFields` | Summary tier is a deliberate field set | `output=summary` | Display name and primary address only, from the serializer not an empty-filter |
 | `internal/tools/contacts_get_contact_test.go` | `TestGetContact_Success` | A contact is fetched by ID | `contact_id` | Display name and all email addresses returned; one GET observed |
-| `internal/tools/contacts_get_contact_test.go` | `TestGetContact_InvalidIDRejectedBeforeCall` | ID validation precedes Graph | Malformed `contact_id` | Error returned, no request issued |
+| `internal/tools/contacts_get_contact_test.go` | `TestGetContact_InvalidIDRejectedBeforeCall` | ID validation precedes Graph (FR-8) | An **over-length** `contact_id`, since `validate.ValidateResourceID` bounds emptiness and length only and rejects no character set | Error returned, no request issued; the test comment says why an over-length value is used |
 | `internal/tools/contacts_get_contact_test.go` | `TestGetContact_AllThreeTiers` | Text, summary, raw all render | `output` of each value | Each tier produces its expected shape |
 | `internal/tools/contacts_list_people_test.go` | `TestListPeople_PreservesRelevanceOrder` | People are not re-sorted | Canned people in relevance order | Output order matches the response order |
 | `internal/tools/contacts_list_people_test.go` | `TestListPeople_AllThreeTiers` | Text, summary, raw all render | `output` of each value | Each tier produces its expected shape, the summary tier coming from the dedicated serializer rather than an empty-filter |
 | `internal/tools/contacts_get_person_test.go` | `TestGetPerson_Success` | A person is fetched by ID | `person_id` | Display name and addresses returned; one GET observed |
-| `internal/tools/contacts_get_person_test.go` | `TestGetPerson_InvalidIDRejectedBeforeCall` | ID validation precedes Graph | Malformed `person_id` | Error returned, no request issued |
+| `internal/tools/contacts_get_person_test.go` | `TestGetPerson_InvalidIDRejectedBeforeCall` | ID validation precedes Graph (FR-8) | An over-length `person_id`, for the reason recorded on the `get_contact` row | Error returned, no request issued |
+| `internal/tools/contacts_get_person_test.go` | `TestGetPerson_RendersScoredEmailAddresses` | The person path reads `scoredEmailAddresses`, not `emailAddresses` (FR-7) | A canned person carrying two scored addresses | Both addresses rendered, each labelled with the person's display name since `ScoredEmailAddressable` carries no name |
+| `internal/tools/contacts_get_contact_test.go` | `TestGetContact_RendersEveryEmailAddress` | The contact path reads the `emailAddresses` collection and issues no follow-up (FR-5) | A canned contact carrying three addresses | All three rendered; exactly one GET observed |
+| `internal/tools/contacts_serialize_test.go` | `TestSummarySerializersAreDistinctAndDeliberate` | The two summary serializers are separate functions selecting a named field set (FR-11, NFR-9) | A contact with empty optional fields and a person with empty optional fields | Each returns exactly its declared field set; an empty declared field is present rather than filtered away, which an empty-filter implementation could not produce |
+| `internal/tools/contacts_search_test.go` | `TestContactsSearch_ErrorCarriesFixOnBothChannels` | A Graph failure yields a fix instruction in the tool result and the log record (NFR-4) | A canned Graph 403 with a captured log handler | Both the result text and the log record carry the same verb-local fix constant |
 | `internal/tools/contacts_get_person_test.go` | `TestGetPerson_AllThreeTiers` | Text, summary, raw all render | `output` of each value | Each tier produces its expected shape, the summary tier coming from the dedicated serializer rather than an empty-filter |
 | `internal/tools/tool_annotations_test.go` | `TestContactsVerbAnnotations` | Every verb's four hints match the matrix | The contacts registry | All verbs read-only, non-destructive, idempotent; open-world true except `help` |
 | `internal/tools/tool_annotations_test.go` | `TestContactsAggregateIsReadOnly` | The folded tool annotation is read-only | The registered contacts tool | `readOnlyHint` true, `destructiveHint` false at tool granularity |
 | `internal/server/contacts_verbs_test.go` | `TestContactsVerbsRegisterFive` | The domain registers exactly five verbs | `buildContactsVerbs` | `help`, `search`, `get_contact`, `list_people`, `get_person`, and nothing else |
 | `internal/server/contacts_verbs_test.go` | `TestContactsExposesNoWriteVerb` | No write, folder, photo, or directory verb is present | The contacts registry | No verb whose `readOnlyHint` is false |
 | `internal/server/contacts_verbs_test.go` | `TestContactsVerbsWrappedUnderDomainIdentity` | Every verb is wrapped under `contacts.<verb>` with audit operation `read` | The built contacts registry | Each verb's audit and telemetry identity is `contacts.<verb>` and its audit operation is `read`, carrying the same `{domain}.{operation}` identity every other verb carries (FR-13) |
-| `internal/server/server_test.go` | `TestRegisterTools_ContactsEnabled_RegistersFifthTool` | The fifth tool appears only when enabled | `ContactsEnabled` true | `contacts` present; tool count 5 |
-| `internal/server/server_test.go` | `TestRegisterTools_ContactsDisabled_StaysFourTools` | Default surface is four tools | `ContactsEnabled` false | `contacts` absent; tool count 4 |
+| `internal/server/server_test.go` | `TestRegisterTools_ContactsEnabled_RegistersFifthTool` | The fifth tool appears only when enabled (FR-2) | `ContactsEnabled` true | `contacts` present; tool count 5 |
+| `internal/server/server_test.go` | `TestRegisterTools_ContactsDisabled_StaysFourTools` | Default surface is four tools, by name not only by count (FR-1, FR-25) | `ContactsEnabled` false | `contacts` absent; the registered set is exactly `calendar`, `mail`, `account`, `system` |
+| `internal/server/introspect_verbs_test.go` | `TestBuildDomainVerbSets_ContactsFollowsFlag` | The inspection builder gates contacts on the same flag as registration (FR-26) | `BuildDomainVerbSets` under both configurations | A `contacts` key with five verbs when enabled; no `contacts` key when disabled |
+| `internal/surface/surface_test.go` | `TestContactsDomainRecordedGatedAndFull` | The built record carries the gated domain and attributes its gate (FR-20, FR-27) | `BuildRecord()` | `contacts` present in `domainOrder` position five, `FullCount` 5, `DefaultCount` 0, every verb's gate `OUTLOOK_MCP_CONTACTS_ENABLED` |
+| `internal/config/config_test.go` | `TestInventoryNamesContactsFlag` | The flag reaches the surface manifest's config section (FR-16) | `config.Inventory()` | A row whose `Name` is `OUTLOOK_MCP_CONTACTS_ENABLED` with default `false` |
 | `internal/auth/auth_test.go` | `TestScopes_Contacts` | Contacts scopes are requested on opt-in | `ContactsEnabled` true | `Contacts.Read` and `People.Read` present |
 | `internal/auth/auth_test.go` | `TestScopes_NoContactsByDefault` | No contacts scope by default | `ContactsEnabled` false | Neither contacts scope present |
 | `internal/auth/auth_test.go` | `TestScopes_NoContactsWriteEver` | The read-only property holds | Every configuration | `Contacts.ReadWrite` never present |
 | `internal/config/config_test.go` | `TestLoadConfig_ContactsEnabled` | The env flag binds | `OUTLOOK_MCP_CONTACTS_ENABLED=true` | `cfg.ContactsEnabled` true; default false |
-| `internal/server/surface_export_test.go` | `TestContactsDomainInSurfaceManifest` | The manifest records the gated domain | The built manifest under max config | Contacts recorded five full, zero default |
-| `internal/server/manifest_sync_test.go` | `TestManifestHoldsFiveToolsWithContacts` | The extension manifest gains the fifth entry and holds exactly five | `extension/manifest.json` and the registry under the contacts-enabled configuration | A `contacts` entry is present enumerating the five verbs, and the `tools` array holds exactly five entries (FR-19) |
+
+Two tests proposed at authoring time have been withdrawn as duplicates and are recorded here
+so their removal is deliberate rather than an omission:
+
+* `internal/server/surface_export_test.go` / `TestContactsDomainInSurfaceManifest`. That file
+  holds only `TestBuildVerbsRequiresNoCredentials`; the surface **record** is built by
+  `internal/surface`, so the assertion belongs in `internal/surface/surface_test.go` and is
+  listed above as `TestContactsDomainRecordedGatedAndFull`.
+* `internal/server/manifest_sync_test.go` / `TestManifestHoldsFiveToolsWithContacts`. The
+  file already contains `TestManifestDescribesEveryRegisteredVerb`, which derives its cases
+  from the registry and already asserts both properties. It is extended (see Tests to
+  Modify) rather than joined by a second test asserting the same thing.
 
 ### Tests to Modify
 
@@ -681,6 +1096,12 @@ substring checks on the returned text and on `result.IsError`. No test issues a 
 | `internal/server/schema_size_test.go` | `TestColdStartSchemaSize_Reduction` | Max config enables mail flags only, over four tools | Max config also sets `ContactsEnabled: true`, over five tools; comment updated to five | The gate must measure the true maximum, which now includes the fifth tool (NFR-2) |
 | `internal/tools/dispatch_registry_test.go` | `TestVerbInventoryUnchangedAfterUpgrade` | Golden holds the then-current identities across four domains | Golden gains exactly the five contacts identities with their hints, five more than before | The verb surface changes intentionally; the golden is the record of that intent, and its absolute size moves with CR-0080 and CR-0081 landing ahead of this change, so the +5 delta is the invariant, not a fixed total |
 | `internal/server/server_test.go` | `TestRegisterTools_MailEnabled` | Asserts exactly four tools with mail enabled | Unchanged assertion, re-confirmed: with contacts off the count is still four | The default-surface guarantee of FR-25 needs the four-tool count re-affirmed under contacts-off |
+| `internal/server/manifest_sync_test.go` | `TestManifestDescribesEveryRegisteredVerb` | Derives cases from the registry under `maximalSurfaceConfig()` (mail flags and `auth_code`), and `t.Fatalf`s when the manifest declares other than 4 tools | `maximalSurfaceConfig()` sets `ContactsEnabled: true`; the count assertion becomes 5; the four-tool prose in the package comment and the `Tools` field comment becomes five | FR-28. The file **exists** at the source commit; it is modified, not created. Left as-is it fails the moment the manifest gains a fifth entry, and it silently skips the contacts verbs |
+| `internal/tools/verb_metadata_test.go` | `TestEveryVerbHasDescription`, `TestEveryVerbHasSummary`, `TestEveryVerbHasClassification`, `TestSeeDocsAnchorsResolve`, `TestWriteVerbsDeclareNoOutputParameter` | Iterate a hard-coded `[]string{"calendar","mail","account","system"}` (lines 100, 159, 204, 230, 377) against `buildMetadataTestServer`, whose config sets no contacts flag | `"contacts"` added to each list; `buildMetadataTestServer` sets `ContactsEnabled: true` | FR-29. Without this the checks pass while covering none of the five new verbs, which would make AC-8 vacuous |
+| `internal/tools/description_quality_test.go` | `TestDescriptionsListVerbsOnSeparateLines`, `TestEveryVerbStatesRequiredParameters`, `TestDescriptionLengthBounded`, `TestEveryParameterHasDescription` | Iterate the same hard-coded four-domain list (lines 93, 130, 151, 164) | `"contacts"` added to each list; the callers' configs set `ContactsEnabled: true` | FR-29, NFR-8 |
+| `internal/tools/tool_description_test.go` | The two loops at lines 246 and 265 | Iterate the same hard-coded four-domain list | `"contacts"` added; `buildDescriptionTestServer` callers set `ContactsEnabled: true` | FR-29 |
+| `internal/tools/tool_annotations_test.go` | `TestAggregateAnnotations_NoOldToolNames` (line 328), `TestPerVerbAnnotations_DocumentedInHelp` (line 389) | Iterate the same hard-coded four-domain list | `"contacts"` added to both lists, with the enabling config | FR-29, FR-12 |
+| `internal/server/surface_export_test.go` | `TestBuildVerbsRequiresNoCredentials` | Iterates `[]string{"calendar","account","system","mail"}` at line 23 | `"contacts"` added, exercised under the contacts-enabled configuration | FR-29, FR-26 |
 
 ### Tests to Remove
 
@@ -689,12 +1110,16 @@ obsolete.
 
 ### Existing Tests That Gate This Change Without Modification
 
+Only tests that derive their cases from the registry or the committed artefact belong here.
+A test that restates the domain list is in Tests to Modify above, because it would otherwise
+pass while covering none of this change.
+
 | Test File | Test Name | Criterion it grades |
 |-----------|-----------|---------------------|
-| `internal/tools/verb_metadata_test.go` | `TestEveryVerbHasDescription`, `TestEveryVerbHasSummary`, `TestEveryVerbHasClassification`, `TestSeeDocsAnchorsResolve` | AC-8: registry metadata completeness and anchor resolution for each new verb |
-| `internal/tools/description_quality_test.go` | `TestDescriptionLengthBounded`, `TestEveryVerbStatesRequiredParameters`, `TestEveryParameterHasDescription` | AC-8: description bounds and parameter documentation for each new verb |
-| `internal/surface/manifest_test.go` | `TestCommittedManifestMatchesRecord` | AC-6: the committed surface manifest matches the registry |
-| `internal/surface/surface_test.go` | `TestDefaultCountExcludesGatedVerbs`, `TestEveryVerbCarriesSummaryAndGate` | AC-6: derived counts and gate attribution for the gated contacts verbs |
+| `internal/surface/manifest_test.go` | `TestCommittedManifestMatchesRecord` | AC-6: the committed surface manifest matches the live registry. Fails from the end of Phase 3 until Phase 4 step 2 regenerates the manifest |
+| `internal/surface/surface_test.go` | `TestRecordCountsMatchBuiltVerbs`, `TestDefaultCountExcludesGatedVerbs`, `TestEveryVerbCarriesSummaryAndGate` | AC-6: derived counts and gate attribution for the gated contacts verbs. `TestEveryVerbCarriesSummaryAndGate` is what fails if FR-27's `gateProbes()` entry is omitted |
+| `internal/tools/dispatch_registry_test.go` | `TestVerbInventoryUnchangedAfterUpgrade` | AC-2: the registered verb identities are exactly the golden set. Fails from the end of Phase 3 until Phase 4 step 6 |
+| `internal/docs/llmstxt_test.go` | `TestLLMsTxt_MatchesCatalog`, `TestLLMsTxt_StructureCompliesWithStandard`, `TestLLMsTxt_LinksAreAbsolute` | That the FR-22 edits to `internal/docs/llmstxt.go` leave the generated file structurally valid. These assert structure, catalogue agreement, and link form — **not** the four-tool prose, so they do not by themselves prove the prose was amended; AC-11's prose clause is graded by review, not by this test |
 
 ## Acceptance Criteria
 
@@ -704,11 +1129,18 @@ obsolete.
 Given a server configured with contacts disabled
 When the registered tools are listed
 Then exactly four top-level tools are registered
+  And they are exactly calendar, mail, account, and system
   And no contacts tool is present
+  And the registration completion log line reports four
 Given instead a server configured with contacts enabled
 When the registered tools are listed
 Then exactly five top-level tools are registered
   And the fifth tool is named contacts
+  And the registration completion log line reports five
+Given the environment variable OUTLOOK_MCP_CONTACTS_ENABLED set to true
+When the configuration is loaded
+Then the contacts flag reads true, and it reads false when the variable is unset
+  And the configuration inventory names the variable with a default of false
 ```
 
 ### AC-2: The contacts domain is read-only and has exactly five verbs
@@ -717,8 +1149,12 @@ Then exactly five top-level tools are registered
 Given a server with contacts enabled
 When the contacts tool's operation enum is read
 Then it contains exactly help, search, get_contact, list_people, and get_person
+  And a help verb is among them, rendering the domain's registered verbs
   And every one of those verbs declares readOnlyHint true and destructiveHint false
+  And every one declares all four hints explicitly, matching the annotation matrix, with openWorldHint false only for help
   And no verb writes, creates, updates, deletes, or moves a contact, person, or folder
+  And the folded tool annotation carries readOnlyHint true, destructiveHint false, idempotentHint true, and openWorldHint true
+  And every verb is wrapped under the identity contacts followed by its verb name, with audit operation read, matching the identity every other verb carries
 ```
 
 ### AC-3: Search resolves a name across both resources
@@ -728,6 +1164,7 @@ Given contacts enabled and a query naming a person
 When search is called
 Then one request is issued to the personal contacts collection carrying the query as a search option
   And one request is issued to the people collection carrying the query as a search option
+  And both requests carry the identical value, produced by the shared search-query normaliser the mail search verb already uses
   And the results are returned as a union, each labelled by whether it is a saved contact or a ranked person
 ```
 
@@ -737,7 +1174,11 @@ Then one request is issued to the personal contacts collection carrying the quer
 Given contacts enabled
 When search is called with an empty or whitespace-only query
 Then the call is rejected before any request is sent
-  And the error names the query parameter
+  And the error names the query parameter and states what to supply
+Given instead a query the shared normaliser cannot convert
+When search is called with it
+Then the call is rejected before any request is sent
+  And the error carries the normaliser's own fix instruction, not a second one written for this verb
 ```
 
 ### AC-5: A record is fetched by identifier, and an invalid one never reaches Graph
@@ -746,7 +1187,12 @@ Then the call is rejected before any request is sent
 Given contacts enabled and a valid contact identifier
 When get_contact is called
 Then a single request fetches that contact
-  And the confirmation returns the display name and every email address on the record
+  And the result returns the display name and every entry of the contact's email addresses collection, with no follow-up request for the primary, secondary, or tertiary singletons
+Given contacts enabled and a valid person identifier
+When get_person is called
+Then a single request fetches that person
+  And the result returns the display name and every entry of the person's scored email addresses collection
+  And each address is labelled with the person's own display name, since a scored address carries none
 Given instead a malformed identifier
 When get_contact or get_person is called with it
 Then the call is rejected by identifier validation
@@ -760,7 +1206,10 @@ Given the implemented change
 When make ci is run
 Then the surface drift check passes without modifying the working tree
   And the manifest records the contacts domain at five full verbs and zero default verbs
-  And the total full count is exactly five higher than it was before this change, with the default count unchanged
+  And each of those five verbs records OUTLOOK_MCP_CONTACTS_ENABLED as its gate
+  And totals.fullCount reads 57, five higher than the 52 recorded before this change
+  And totals.defaultCount reads 38, unchanged
+  And the manifest config section names OUTLOOK_MCP_CONTACTS_ENABLED
 ```
 
 ### AC-7: The consent surface changes only on opt-in, and never to a write scope
@@ -779,10 +1228,12 @@ Then it additionally contains Contacts.Read and People.Read
 
 ```gherkin
 Given each of the five contacts verbs
-When its registry entry is inspected
+When its registry entry is inspected by the registry-metadata checks, with contacts included in their domain lists
 Then it carries a non-empty summary of at most eighty characters
   And a non-empty description stating its parameters and its annotation semantics
-  And, for every verb except help, at least one example and at least one documentation reference resolving to an existing heading in the embedded bundle
+  And, for every verb except help, at least one example and at least one documentation reference
+  And every documentation reference resolves to an H2 heading of one of the four embedded files
+  And the contacts tool's composed description is under four thousand characters
 ```
 
 ### AC-9: The read verbs implement all three output tiers
@@ -792,6 +1243,9 @@ Given contacts enabled
 When search, get_contact, list_people, or get_person is called with output set to text, summary, or raw
 Then each tier renders its expected shape
   And the summary tier is produced by a dedicated serializer rather than by filtering empty values from the raw payload
+  And the contact and person summary tiers come from two distinct serializers, because the two resources return unrelated address types
+  And text is the tier used when output is omitted
+  And list_people renders the people in the order Graph returned them, most relevant first, with no re-sorting in any tier
   And help declares no output parameter
 ```
 
@@ -807,10 +1261,13 @@ Then the reduction against the documented baseline is at least sixty percent
 ### AC-11: The four-tool rule and documents are amended coherently
 
 ```gherkin
-Given the project rules and user-facing documentation after this change
-When the four-tool statements are read
+Given the project rules, source comments, generated text, site prose, and user-facing documentation after this change
+When every four-tool statement enumerated in the requirements is read
 Then each states the surface is four aggregate domain tools by default plus an opt-in fifth contacts domain enabled by OUTLOOK_MCP_CONTACTS_ENABLED
+  And a repository-wide search for the phrase four aggregate returns no statement that contradicts this
+  And AGENTS.md was edited once, with CLAUDE.md left untouched because it is a symbolic link to it
   And the extension manifest tools array holds exactly five entries
+  And the concepts document carries a Contacts gating H2 section
   And the concepts document names Contacts.Read and People.Read in its scopes-per-feature table
 ```
 
@@ -819,8 +1276,10 @@ Then each states the surface is four aggregate domain tools by default plus an o
 ```gherkin
 Given the lifecycle prompt and harness after this change
 When they are read
-Then the prompt contains steps exercising each of the five contacts verbs
-  And the harness script accounts for a contacts domain in its per-domain tool-call tally
+Then the prompt contains steps exercising each of the five contacts verbs, numbered from forty-seven
+  And the harness script carries all three edits its maintenance comment requires: the CSV header column, the awk pattern and counter, and the read and jq output pair
+  And the benchmark CSV header matches the schema the script emits
+  And the benchmark CSV carries no historical row shorter than that header
   And the new steps are skipped when contacts is disabled
 ```
 
@@ -853,7 +1312,38 @@ Then the timeout message names the configured timeout in seconds
 Given the same change
 When the source tree is reviewed
 Then each verb's handler lives in its own file under the tools package, named for the verb
+  And the fix instructions are declared as file-local constants and emitted to both the tool result and the log record
+  And the domain verb config carries retry, timeout, and account resolution, following the mail domain rather than the account domain
   And no third-party dependency has been added
+```
+
+### AC-16: The domain reaches both builders, and the surface generator sees it
+
+```gherkin
+Given contacts enabled
+When the inspection builder is asked for the domain verb sets
+Then it returns a contacts entry holding the five verbs
+Given instead contacts disabled
+When the inspection builder is asked for the domain verb sets
+Then it returns no contacts entry
+Given the implemented change
+When the surface record is built
+Then contacts appears in the fixed domain order after system
+  And every contacts verb is attributed to the OUTLOOK_MCP_CONTACTS_ENABLED gate rather than left unattributed
+```
+
+### AC-17: The registry-derived checks are extended rather than bypassed
+
+```gherkin
+Given the implemented change
+When the manifest-sync check runs
+Then it builds its cases from the registry under a configuration that enables contacts
+  And it asserts the extension manifest declares exactly five tools
+  And exactly one test in the repository asserts that property
+Given the registry-metadata, description-quality, and annotation checks
+When their domain lists are read
+Then each names contacts alongside calendar, mail, account, and system
+  And the four-tool count assertions whose configuration leaves contacts off are unchanged and still pass
 ```
 
 ## Quality Standards Compliance
@@ -893,8 +1383,13 @@ Then each verb's handler lives in its own file under the tools package, named fo
 verb, not a tool" the standing rule, so raising the count to five is the one decision in
 this change with a blast radius beyond its own package. The radius is bounded by enumerating
 every place the four-tool count is asserted and amending all of them in one change rather
-than leaving a contradiction for a later reader to disprove: the rule text in `AGENTS.md`,
-`CLAUDE.md`, `docs/readme.md`, and `docs/concepts.md` (FR-22); the `extension/manifest.json`
+than leaving a contradiction for a later reader to disprove. Current State enumerates the
+sites, and they are more numerous than the four documents this CR named at authoring time:
+the rule text in `AGENTS.md` (lines 30 and 82; `CLAUDE.md` is a symbolic link to it and is
+not edited separately), `README.md`, `docs/readme.md`, and `docs/concepts.md`; the generated
+`llms.txt` text in `internal/docs/llmstxt.go`; the source doc comments in
+`internal/tools/aggregate_annotations.go` and `internal/server/surface_export.go`; and the
+site prose in `site/src/surface.ts` (FR-22); the `extension/manifest.json`
 `tools` array (FR-19); the hard-coded `toolCount` and its completion log line
 (FR-21); and the `TestRegisterTools_MailEnabled` four-tool assertion, which is re-confirmed
 rather than deleted so the default surface still proves four (FR-25). Conditional
@@ -957,15 +1452,51 @@ the default surface stays exactly four tools.
 
 ### Risk 5: The surface totals drift because sibling change requests land in a different order
 
-**Likelihood:** medium
+**Likelihood:** low
 **Impact:** low
-**Mitigation:** CR-0080 and CR-0081 also add verbs ahead of this change and move the full
-count before it lands, so this change asserts the contacts delta (five more full verbs, zero
-more default verbs) rather than a fixed four-domain total (FR-20). `site/src/generated/surface.json`
-is regenerated with `make surface-manifest`, and the regenerating surface-drift gate in
-`make ci` fails on any mismatch, so the committed figure is derived from the live registry at
-merge time rather than pinned in this document. AC-6 grades the +5 delta and the unchanged
-default count, not an absolute number.
+**Mitigation:** CR-0080 and CR-0081 have **landed**, so the four-domain totals are settled at
+52 full and 38 default and FR-20 now pins 57 and 38 rather than asserting a bare delta. The
+delta (+5 full, +0 default) remains the invariant should a further change land ahead of this
+one. `site/src/generated/surface.json` is regenerated with `make surface-manifest`, and the
+regenerating surface-drift gate in `make ci` fails on any mismatch, so the committed figure
+is derived from the live registry at merge time rather than trusted from this document. AC-6
+grades both the absolute figures and the gate attribution.
+
+### Risk 6: The domain is registered in one of the two places that build it, and the manifest silently stays at four domains
+
+**Likelihood:** high without the mitigation
+**Impact:** high
+**Mitigation:** This is the sharpest failure mode in the change, because it produces a green
+package test suite and a wrong published artefact. The domain set is built twice: inline in
+`RegisterTools` (`internal/server/server.go:53`) and again in `BuildDomainVerbSets`
+(`internal/server/introspect_verbs.go:47`), whose hard-coded four-key return map is the only
+thing `internal/surface` and `internal/server/manifest_sync_test.go` read. A third and fourth
+statement of the same assumption sit in `internal/surface/build.go`: `domainOrder` (which
+`BuildRecord` iterates, so a domain missing from it is dropped whatever the builder returns)
+and `gateProbes()` (without which the contacts verbs are gated but unattributed).
+`RegisterTools` alone would satisfy AC-1, AC-2, and every handler test while
+`site/src/generated/surface.json` kept recording four domains. FR-26 and FR-27 require all
+four edits, Phase 3 steps 3 and 4 sequence them, AC-16 grades them directly, and
+`TestCommittedManifestMatchesRecord` and `TestEveryVerbCarriesSummaryAndGate` fail if either
+is skipped. Phase 4 step 2 additionally instructs the implementor to treat a four-domain
+regenerated manifest as evidence of exactly this omission rather than as a generator bug.
+
+### Risk 7: The registry-metadata checks pass while covering none of the new verbs
+
+**Likelihood:** high without the mitigation
+**Impact:** medium
+**Mitigation:** Fourteen test sites restate the domain list as
+`[]string{"calendar", "mail", "account", "system"}` rather than deriving it, so the summary,
+description, classification, `SeeDocs`-anchor, parameter-documentation, and per-verb
+annotation checks would all pass while iterating past the contacts domain entirely, making
+AC-8 vacuous for exactly the verbs it exists to grade. FR-29 enumerates every site and
+requires the list and the test server configuration to move together, and AC-17 grades it.
+This is an instance-level fix, and `AGENTS.md` records that instance fixes do not close a
+class: the class-closing remedy is a shared domain list derived from the registry, which
+FR-30 places explicitly out of scope here and records as follow-on work rather than letting
+a clean run be read as a closed class. The one check in this family that already derives its
+cases from the registry, `TestManifestDescribesEveryRegisteredVerb`, needs only its
+configuration widened, which is the difference the follow-on work would generalise.
 
 ## Dependencies
 
@@ -978,15 +1509,19 @@ default count, not an absolute number.
   `item_people_person_item_request_builder.go` (Get). All four are v1.0 GA.
 * Two new OAuth scopes, `Contacts.Read` and `People.Read`, requested only when
   `cfg.ContactsEnabled` is true. Both are delegated read scopes; no write scope is added.
-* Follows **CR-0081** in the implementation sequence, and reuses the conditional-gating
-  idiom that `MAIL_ENABLED` established for a scoped, opt-in domain.
-* The "+5 full verbs" totals invariant depends on **CR-0080** and **CR-0081** landing first:
-  both move the four-domain full count ahead of this change, which is why FR-20 asserts a
-  delta rather than a literal and leaves the absolute figure to the regenerated manifest.
+* Follows **CR-0081** in the implementation sequence, which has landed at `3ae0e2c`, and
+  reuses the conditional-gating idiom that `MAIL_ENABLED` established for a scoped, opt-in
+  domain.
+* **CR-0080** and **CR-0081** have both landed, settling the four-domain totals at 52 full
+  and 38 default, which is why FR-20 now pins 57 and 38 rather than deferring to a delta.
+* Reuses `tools.NormaliseSearchQuery` (`internal/tools/search_messages_query.go`), landed by
+  the mail search work, rather than adding a second query-normalisation path (FR-9).
 * Assumes the fifth-tool baseline: the surface is exactly four aggregate tools at the source
   commit (`site/src/generated/surface.json`, `extension/manifest.json`, and the
   `TestRegisterTools_MailEnabled` `expectedTotal = 4` assertion all confirm it), so this
   change is the first increase in top-level tool count since CR-0060.
+* Depends on `internal/server/manifest_sync_test.go` existing, which it does at the source
+  commit; FR-28 modifies it rather than creating it.
 * Builds on the verb registry and dispatch model of CR-0060, the registry-owned documentation
   rule of CR-0065, the computed annotation fold of CR-0068, and the generated surface manifest
   and its drift check from CR-0073, all completed.
@@ -997,9 +1532,9 @@ default count, not an absolute number.
 |---|---|
 | Phase 1, the `ContactsEnabled` flag, its env binding, and the two-scope branch, with tests | 2 hours |
 | Phase 2, the contact and person serializers and the four read handlers, with tests | 4 to 5 hours |
-| Phase 3, `buildContactsVerbs`, conditional registration, and the computed `toolCount` | 2 to 3 hours |
-| Phase 4, extension manifest, surface regeneration, four-tool rule and doc amendments, CRUD harness, verb-inventory golden, and the re-measured schema-size gate | 3 to 4 hours |
-| Total | 11 to 14 hours |
+| Phase 3, `buildContactsVerbs`, conditional registration in both builders, the three `internal/surface/build.go` edits, and the computed `toolCount` | 3 to 4 hours |
+| Phase 4, extension manifest and manifest-sync test, surface regeneration, four-tool amendments across eleven sites, the fourteen test domain lists, CRUD harness, verb-inventory golden, and the re-measured schema-size gate | 5 to 6 hours |
+| Total | 14 to 17 hours |
 
 ## Decision Outcome
 
@@ -1038,17 +1573,32 @@ discover it in the diff.
    well under 20 000 bytes. The requirement is the measured value recorded after validating
    the instrument twice on unchanged input (NFR-3, AC-10), not this estimate, so the estimate
    is only a sanity bound and is expected to be replaced by a measurement.
-3. **`internal/server/manifest_sync_test.go` may or may not exist at implementation time.**
-   CR-0078 proposes a file of that name, but at the source commit it is an unmerged CR draft,
-   so this change creates the file if absent and extends it if a prior change has landed it,
-   asserting five entries under the contacts-enabled configuration rather than four.
-4. **Summary serializer field sets.** `SerializeSummaryContact` and `SerializeSummaryPerson`
-   are assumed to select display name and the primary email address, the fields a resolution
-   flow actually needs (NFR-11). A reviewer who wants phone or postal fields in the summary
-   tier can widen the deliberate set; it is not derived by filtering empties.
+3. ~~**`internal/server/manifest_sync_test.go` may or may not exist at implementation
+   time.**~~ **Resolved at review.** The file exists at `3ae0e2c`, landed by an earlier
+   change in this sequence. FR-28 modifies it: `maximalSurfaceConfig()` gains the contacts
+   flag and the `!= 4` assertion becomes `!= 5`. No file is created, and the duplicate test
+   this question anticipated has been withdrawn.
+4. **Summary serializer field sets.** `SerializeSummaryContact` selects display name and the
+   first entry of `emailAddresses`; `SerializeSummaryPerson` selects display name and the
+   first entry of `scoredEmailAddresses` (FR-11, NFR-9). These are the fields a resolution
+   flow actually needs. A reviewer who wants phone, postal, relevance-score, or job-title
+   fields in the summary tier can widen the deliberate set; it is not derived by filtering
+   empties.
 5. **Target version 0.14.0.** Assumed from the sequence position after CR-0081. The released
    version at the source commit is earlier, so the target is a placeholder to be reconciled at
    release-planning time rather than a commitment.
+6. **`$search` on `/me/contacts` is proved at the SDK layer, not at the service layer.** The
+   pinned SDK exposes `Search *string` tagged `%24search` on both collection builders, so the
+   value marshals into `$search` on the wire; that was confirmed by reading the module cache.
+   Kiota generates that field uniformly, so its presence is not evidence that Graph v1.0
+   honours `$search` for the personal-contacts collection, and `$search` on mailbox
+   collections sometimes requires a `ConsistencyLevel: eventual` header that the existing
+   `search_messages` path does not set. **Chosen reading:** specify `$search` as designed and
+   grade it with the canned-response handler tests, which assert the outgoing request rather
+   than the service's answer, exactly as `search_messages` is graded. If a live run shows
+   Graph rejecting `$search` on `/me/contacts`, that is a finding to record and route to a
+   follow-on change, not a licence to swap in a `$filter` fallback inside this one. Recorded
+   in the review backlog.
 
 ## Related Items
 
@@ -1090,3 +1640,197 @@ and `/me/people` with the same `$search` value and labels each result by its sou
 caller can tell a saved contact from an inferred correspondent before acting on the returned
 address in `mail` or `calendar`, or fetching the full record by ID through `get_contact` or
 `get_person`.
+
+<!-- review-summary -->
+Reviewed at `3ae0e2c` on branch `docs/cr-implementation-set-0079-0083`, after CR-0078,
+CR-0079, CR-0080, and CR-0081 landed. Every path, symbol, line number, count, and SDK claim
+the document cited was re-read against the tree and against the pinned module cache rather
+than carried forward. 62 findings, 62 fixes applied, 0 unresolved.
+
+The two findings worth reading first: the repository builds the domain set in four places,
+of which the document named one; and six registry-metadata checks the document listed as
+gating this change "without modification" restate the domain list rather than deriving it,
+so unmodified they would pass while covering none of the five new verbs.
+
+FINDINGS BY CATEGORY
+
+drift (24)
+  D1  frontmatter source-branch/source-commit stale (main, 78a3bb3)
+  D2  surface.json counts: calendar 15 -> 20, mail 13 -> 18, totals 42/33 -> 52/38
+  D3  internal/server/introspect_verbs.go BuildDomainVerbSets (line 47) returns a hard-coded
+      four-key map and is the only entry point internal/surface and manifest_sync_test read.
+      Absent from the document entirely
+  D4  internal/surface/build.go states the four-domain assumption twice more, in domainOrder
+      (line 22, iterated by BuildRecord) and gateProbes(), plus fullConfig(). Absent entirely
+  D5  internal/server/manifest_sync_test.go exists at the source commit; the document treated
+      it as an unmerged CR-0078 draft and proposed creating it
+  D6  CLAUDE.md is a symbolic link to AGENTS.md; the document listed both as files to amend
+  D7  accountVerbsConfig carries no retryCfg, timeout, or accountResolverMW, so it cannot be
+      the model for a Graph-reading domain; the field list given matches mailVerbsConfig
+  D8  fourteen hard-coded four-domain lists across five test files
+  D9  internal/docs/llmstxt.go lines 69 and 153 carry four-tool prose; absent from the document
+  D10 README.md line 35 carries four-tool prose; the document named only docs/readme.md
+  D11 AGENTS.md line 30 ("The 4 aggregate domain tools") not enumerated
+  D12 internal/tools/aggregate_annotations.go:6 and internal/server/surface_export.go:25
+      carry four-domain doc comments; absent
+  D13 site/src/surface.ts carries four-domain prose at lines 37, 63, 81; domainCount is
+      already derived and must not be turned into a literal. Absent
+  D14 RegisterTools cited at internal/server/server.go:54; it is at :53, and toolCount is
+      at :190 with its comment at :188 and its log line at :192
+  D15 docs/readme.md four-tool line cited at 39; it is at 43
+  D16 internal/config/inventory.go needs the EnvContactsEnabled const and an inventory row,
+      or the flag is invisible to the surface manifest and the site config reference. Absent
+  D17 extension/manifest.json long_description states the delegated-permission set; the
+      document mentioned it only as a "should" with no location
+  D18 internal/server/surface_export_test.go holds only TestBuildVerbsRequiresNoCredentials;
+      the proposed surface test belongs in internal/surface/surface_test.go
+  D19 docs/prompts/mcp-tool-crud-test.md ends at Step 46, so new steps start at 47
+  D20 scripts/crud-test.sh requires three matching edits per its own MAINTENANCE comment
+      (lines 102-108), not "a counter"
+  D21 SDK, read from msgraph-sdk-go@v1.100.0 in the module cache: Contactable exposes
+      GetEmailAddresses() []EmailAddressable while Personable exposes
+      GetScoredEmailAddresses() []ScoredEmailAddressable, which carries no per-address name.
+      The two element types are unrelated, so one serializer cannot serve both. Accessors are
+      client.Me().Contacts() / .ByContactId(), client.Me().People() / .ByPersonId(); neither
+      item builder exposes a Search option; the people collection exposes no Post
+  D22 tools.NormaliseSearchQuery (internal/tools/search_messages_query.go:62) is the shipped
+      $search normaliser; FR-9 specified new validation beside it
+  D23 four further expectedTotal = 4 sites (server_test.go 925, 954, 1051) and
+      TestAggregateAnnotations_FourToolsRegistered were not enumerated; all four correctly
+      stay at four and are now recorded as deliberately unchanged
+  D24 TestSeeDocsAnchorsResolve resolves an anchor only against an H2 heading of the four
+      embedded files, which FR-23's table row could not satisfy
+
+contradictions (8)
+  C1  FR-20 and AC-6 refused to pin totals because CR-0080 and CR-0081 were expected to move
+      them. Both have landed. Resolved toward the tree: 52 -> 57 full, 38 default unchanged,
+      with the +5/+0 delta kept as the fallback invariant
+  C2  six checks were listed under "Existing Tests That Gate This Change Without
+      Modification" while hard-coding the four-domain list, so they would pass while grading
+      none of the new verbs. Resolved: moved to Tests to Modify, AC-8 rewritten to say the
+      checks run with contacts in their domain lists
+  C3  Affected Components and Open Question 3 both hedged on manifest_sync_test.go existing.
+      Resolved toward the tree: it exists and is modified
+  C4  NFR-11 was cross-referenced three times; the Non-Functional list ended at 8. Resolved
+      to FR-11, with a new NFR-9 carrying the two-serializer requirement the SDK forces
+  C5  Phase 3 registered the domain in RegisterTools only, which makes FR-20 and AC-6
+      unreachable. Resolved toward the Implementation Approach being made correct: both
+      builders plus the three internal/surface/build.go edits
+  C6  contactsVerbsConfig was said to follow accountVerbsConfig while listing fields
+      accountVerbsConfig does not have. Resolved toward mailVerbsConfig, which is the shape
+      the CR's own rejection of folding contacts into account already implies
+  C7  FR-17 required a resolvable SeeDocs anchor while FR-23 added only a table row.
+      Resolved: FR-23 now requires a "## Contacts gating" H2, giving concepts#contacts-gating
+  C8  the proposed TestManifestHoldsFiveToolsWithContacts duplicated the existing
+      registry-derived TestManifestDescribesEveryRegisteredVerb. Withdrawn, with the
+      withdrawal recorded so it is not read as an omission
+
+ambiguity (13)
+  A1  "should also name the two new scopes" -> MUST, with the field named
+  A2  serializer file "internal/tools/... or internal/graph/..." -> internal/tools/
+  A3  "contacts_verbs_config.go (new, or a struct in contacts_verbs.go)" -> the struct, in
+      contacts_verbs.go, matching every existing domain
+  A4  crud-runs.csv "stay consistent with the script's output schema" -> reset the historical
+      rows, per the harness-maintenance rule in AGENTS.md
+  A5  "gains an mcp_contacts counter per its own comments" -> the three edits named
+  A6  FR-5 "every email address on the record" -> the emailAddresses collection, with no
+      follow-up request for the three singletons
+  A7  FR-7 "the person's display name and addresses" -> scoredEmailAddresses, each labelled
+      with the person's own display name since the element type carries none
+  A8  FR-9 "validate query for non-emptiness and length" -> reuse NormaliseSearchQuery, and
+      MUST NOT introduce a second normalisation path
+  A9  FR-25 "byte-identical" -> three observable properties (tool-name set, manifest default
+      count and default entries, scope set)
+  A10 Phase 2 "as the existing read verbs handle them" -> get_schedule.go:150-170
+  A11 FR-8 "an invalid identifier" -> an over-length one, with the reason stated, because
+      ValidateResourceID rejects no character set
+  A12 FR-17 "an existing heading in the embedded documentation bundle" -> an H2 of the four
+      embedded files, in the slug#anchor form the test accepts
+  A13 NFR-4 "carry a fix instruction" -> declared as file-local constants and emitted to both
+      channels, following the get_schedule pattern
+
+coverage (9)
+  V1  FR-6 (relevance order) had no AC -> clause added to AC-9
+  V2  FR-7 (get_person return shape) had no AC -> two clauses added to AC-5
+  V3  FR-13 (contacts.<verb> identity, audit op read) had no AC -> clause added to AC-2
+  V4  FR-16 (flag binding and inventory row) had no AC -> clauses added to AC-1 and AC-6
+  V5  FR-18 (the help verb) had no AC -> clause added to AC-2
+  V6  FR-21 (the completion log line) had no AC -> clauses added to AC-1
+  V7  NFR-4 had an AC but no test -> TestContactsSearch_ErrorCarriesFixOnBothChannels added
+  V8  NFR-8 (the 4000-character bound) had no AC clause -> added to AC-8, with the measured
+      value required in the validation report
+  V9  new FR-26 through FR-30 and NFR-9 each carry an AC (AC-16, AC-17, AC-9, AC-15) and a
+      test row; nine test rows added in all, including the two-request and normalised-value
+      assertions FR-4 and FR-9 needed
+
+scope (6)
+  S1  every phase now carries an explicit affected-components list and a verification line
+      naming the make targets to run
+  S2  Phase 3 now records that TestVerbInventoryUnchangedAfterUpgrade,
+      TestCommittedManifestMatchesRecord, and TestManifestDescribesEveryRegisteredVerb are
+      red by design until Phase 4, naming the step that closes each
+  S3  Affected Components restructured into Source (new) / Source (modified) / Unchanged but
+      load-bearing / Published surface and documentation / Tests / Deliberately unchanged
+  S4  seven files referenced by no section were added: introspect_verbs.go,
+      internal/surface/build.go, config/inventory.go, docs/llmstxt.go,
+      aggregate_annotations.go, README.md, site/src/surface.ts
+  S5  ReadOnlyGuard's non-involvement is now stated, so its absence from the middleware chain
+      is not read as an omission
+  S6  estimated effort raised from 11-14 to 14-17 hours, concentrated in Phases 3 and 4
+
+diagrams (2)
+  G1  the Implementation Flow's Phase 3 showed a single registration step; it now shows both
+      builders and the internal/surface/build.go edits, which is where the change's sharpest
+      failure mode lives
+  G2  Phase 4's first node named the extension manifest alone; it now names the manifest and
+      its sync test, which must land together or the check stays red
+
+FIXES APPLIED
+
+Every finding above was fixed in this document. The path, symbol, and count corrections are:
+  main / 78a3bb3                        -> docs/cr-implementation-set-0079-0083 / 3ae0e2c
+  calendar 15, mail 13, totals 42/33    -> calendar 20, mail 18, totals 52/38
+  totals after the change: unstated     -> 57 full, 38 default
+  RegisterTools at server.go:54         -> :53 (toolCount :190, comment :188, log :192)
+  docs/readme.md:39                     -> :43
+  accountVerbsConfig / buildAccountVerbs -> mailVerbsConfig / buildMailVerbs
+  (omitted)                             -> internal/server/introspect_verbs.go (FR-26)
+  (omitted)                             -> internal/surface/build.go (FR-27)
+  (omitted)                             -> internal/config/inventory.go (FR-16)
+  (omitted)                             -> internal/docs/llmstxt.go, README.md,
+                                           aggregate_annotations.go, surface_export.go,
+                                           site/src/surface.ts (FR-22)
+  manifest_sync_test.go "created if absent" -> modified (FR-28)
+  TestManifestHoldsFiveToolsWithContacts -> withdrawn as a duplicate
+  TestContactsDomainInSurfaceManifest    -> TestContactsDomainRecordedGatedAndFull, moved to
+                                           internal/surface/surface_test.go
+  "AGENTS.md, CLAUDE.md"                 -> AGENTS.md only (CLAUDE.md is a symlink to it)
+  new query validation                   -> tools.NormaliseSearchQuery, reused
+  "every email address on the record"    -> the emailAddresses collection
+  "display name and addresses"           -> scoredEmailAddresses
+  one serializer implied                 -> two, required by the unrelated SDK element types
+  crud prompt "new steps"                -> Step 47 onward
+  crud-test.sh "a counter"               -> the three edits its MAINTENANCE comment names
+  NFR-11 (does not exist)                -> FR-11 and the new NFR-9
+  Requirements extended: 25 FRs -> 30 FRs and 8 NFRs -> 9 NFRs; Acceptance Criteria 15 -> 17.
+  Existing numbering was preserved and the new requirements appended, so every cross-
+  reference already in the phases, tests, risks, and open questions stays valid.
+
+Two risks were added rather than adjusted, because neither failure mode was represented:
+Risk 6 (the domain registered in one of the four places that build it, producing a green
+suite and a four-domain published manifest) and Risk 7 (the registry-metadata checks passing
+while covering none of the new verbs). Risk 5 was downgraded from medium to low likelihood,
+since the sibling change requests it hedged against have landed.
+
+UNRESOLVED
+
+None. Thirteen items would ordinarily have needed an author decision; each was decided on the
+most conservative reading consistent with the codebase as it stands and recorded under
+`## CR-0082` in docs/backlog/cr-0078-0083.md, with the chosen reading, so it can be
+overturned on the record rather than rediscovered in a diff. The one carrying residual
+technical risk is recorded as Open Question 6: the pinned SDK proves `$search` marshals onto
+both collection requests, but Kiota generates that field uniformly, so it is not evidence
+that Graph v1.0 honours `$search` for `/me/contacts`. The chosen reading grades the outgoing
+request with canned-response tests, exactly as the shipped mail search verb is graded, and
+routes a live rejection to a follow-on change rather than to an in-flight redesign.
+<!-- /review-summary -->
