@@ -1,12 +1,13 @@
 # CR-0083 Validation Report
 
 Validated at `9a9ff99` on branch `docs/cr-implementation-set-0079-0083`.
+Gaps closed at `c9e048c`; this revision records the fixed state.
 Diff range: `85c6450..HEAD` (the CR-0083 slice; `85c6450` is the last CR-0082 commit).
 Merge base with `origin/main`: `2cce019`.
 
 ## Summary
 
-Requirements: 30/34 | Acceptance Criteria: 11/14 | Tests: 29/36 | Gaps: 8
+Requirements: 34/34 | Acceptance Criteria: 14/14 | Tests: 36/36 | Gaps: 8 (6 FIXED, 2 not-run)
 
 Requirements counted as 27 Functional plus 7 Non-Functional. Tests counted as the
 26 rows of "Tests to Add" plus the 10 rows of "Tests to Modify".
@@ -23,7 +24,10 @@ Package results: every package `ok`, no `FAIL` line. Coverage: `internal/server`
 `go.mod` and `go.sum` are unchanged in the diff range (0 files).
 
 **Not run:** `make crud-test` (paid harness) and the `site/AGENTS.md` screenshot
-comparison. Both are recorded as gaps below and deferred to the user.
+comparison. Both are recorded below as `not-run`, deferred to the user, and listed as pending
+bullets under `## CR-0083` in `docs/backlog/cr-0078-0083.md`. A derived, not-yet-run user
+scenario stands in for the live-tenant Teams check at
+`.agents/scenarios/2026-09-02-teams-conversation-and-transcript-reads.md`.
 
 ## Requirement Verification
 
@@ -36,7 +40,7 @@ comparison. Both are recorded as gaps below and deferred to the user.
 | FR-3 | `TeamsEnabled` on `config.Config` from `OUTLOOK_MCP_TEAMS_ENABLED`, plus `EnvTeamsEnabled` const and inventory row | PASS | `internal/config/config.go:157-167,343`; `internal/config/inventory.go:45,95`; `site/src/generated/surface.json` config section carries `OUTLOOK_MCP_TEAMS_ENABLED`; test `TestLoadConfig_TeamsEnabledDefaultFalse` passes |
 | FR-4 | Four delegated read scopes requested only when enabled | PASS | `internal/auth/auth.go:53,60,66,75,131`; test `TestScopes_TeamsEnabled` passes |
 | FR-5 | No Teams send or write scope in any configuration | PASS | `internal/auth/auth.go:97-116` (doc comment states the property); test `TestScopes_NoTeamsSendEver` passes over every flag combination |
-| FR-6 | All four hints declared explicitly with the matrix values | PARTIAL | Values are correct in source: `internal/server/teams_verbs.go:75-82` (twelve verbs, openWorld `true`), `internal/tools/help/verb.go:52-56` (`help`, openWorld `false`). Declaration of all four is graded by `TestEveryVerbHasClassification` (`internal/tools/verb_metadata_test.go:209` domain list includes `teams`). `readOnlyHint`/`destructiveHint` **values** graded by `TestTeamsExposesNoWriteVerb` (`internal/server/teams_verbs_test.go:156`). **No test asserts `idempotentHint` or `openWorldHint` values for any teams verb** — the specified `TestTeamsVerbAnnotations` does not exist. See GAP-2 |
+| FR-6 | All four hints declared explicitly with the matrix values | PASS | Values are correct in source: `internal/server/teams_verbs.go:75-82` (twelve verbs, openWorld `true`), `internal/tools/help/verb.go:52-56` (`help`, openWorld `false`). Declaration of all four is graded by `TestEveryVerbHasClassification` (`internal/tools/verb_metadata_test.go:209` domain list includes `teams`). `readOnlyHint`/`destructiveHint` **values** graded by `TestTeamsExposesNoWriteVerb` (`internal/server/teams_verbs_test.go:156`). FIXED: `TestTeamsVerbAnnotations` (`internal/tools/tool_annotations_test.go:360`) derives its cases from `BuildDomainVerbSets(cfg)["teams"]` and asserts all four values per verb, `(true, false, true, true)` for the twelve Graph-calling verbs and `(true, false, true, false)` for `help` — passes. Status raised to PASS |
 | FR-7 | No verb writes/sends; `compose_reply` reads parent, returns text, posts nothing | PASS | `internal/tools/teams_compose_reply.go:108-149` (only a `Get`); description states the no-send property at `internal/server/teams_verbs.go:334`; tests `TestComposeReply_PostsNothing`, `TestComposeReply_ReadsTheParentItQuotes`, `TestComposeReply_StatesNotSent` pass |
 | FR-8 | `search` posts `entityTypes: ["chatMessage"]`, requires non-empty query, hits carry identifiers | PASS | `internal/tools/teams_search.go:79-95,154`; tests `TestTeamsSearch_PostsChatMessageEntityType`, `TestTeamsSearch_RejectsEmptyQueryBeforeAnyRequest`, `TestTeamsSearch_LabelsHitsByCollection` pass |
 | FR-9 | Chat reads via `/me/chats` builders with identifier validation; no single-chat read | PASS | `internal/tools/teams_list_chats.go`, `teams_list_chat_messages.go`, `teams_get_chat_message.go`, `teams_list_chat_message_replies.go`; tests `TestListChatMessages_RejectsMissingChatIDBeforeAnyRequest`, `TestGetChatMessage_RefusesEachIdentifierSeparately`, `TestTeamsRegistryExposesNoOutOfScopeVerb` (refuses `get_chat`) pass |
@@ -48,16 +52,16 @@ comparison. Both are recorded as gaps below and deferred to the user.
 | FR-15 | `compose_reply` declares no `output`, returns text unconditionally, description states not-sent | PASS | `internal/server/teams_verbs.go:334,342-349`; tests `TestComposeReply_DeclaresNoOutputParameter` (`internal/server/teams_verbs_test.go:180`), `TestComposeReply_StatesNotSent` pass |
 | FR-16 | Every verb wrapped by auth, account resolution, observability, audit under `teams.<verb>` | PASS | `internal/server/teams_verbs.go:122-124`; test `TestTeamsVerbsCarryDomainQualifiedIdentity` (`internal/server/teams_verbs_test.go:227`) reads the written audit log and passes |
 | FR-17 | Non-empty `Summary` ≤80 chars, `Description`, ≥1 `Examples`, ≥1 resolving `SeeDocs` | PASS | `internal/server/teams_verbs.go:150-416`; tests `TestEveryVerbHasSummary`, `TestEveryVerbHasDescription`, `TestSeeDocsAnchorsResolve`, `TestEveryVerbStatesRequiredParameters`, `TestEveryParameterHasDescription` all carry `teams` in their domain lists (`internal/tools/verb_metadata_test.go:102,209,235`; `internal/tools/description_quality_test.go:95,132,166`) and pass |
-| FR-18 | Every error carries a fix on **both** the tool result and the log record; team/channel fix names `teams.search`; meeting fix names `get_online_meeting` | PARTIAL | Source satisfies both channels: e.g. `internal/tools/teams_get_channel_message.go:33-37` plus the handler's `logger.Error(..., "fix", ...)` and `mcp.NewToolResultError(fmt.Sprintf("%s: %s", ...))`; `internal/tools/teams_list_transcripts.go:32` and `teams_get_transcript.go:40` name `teams get_online_meeting`. **No test asserts the log-record half** — the specified `TestErrorFixReachesBothToolResultAndLog` does not exist and no teams test captures a `slog` record; the `*_GraphFailureCarriesFix` tests assert the tool-result half only. See GAP-1. Note the fix strings say "teams search" / "teams get_online_meeting" (the domain-plus-verb form used throughout this codebase) rather than the dotted `teams.search` |
+| FR-18 | Every error carries a fix on **both** the tool result and the log record; team/channel fix names `teams.search`; meeting fix names `get_online_meeting` | PASS | Source satisfies both channels: e.g. `internal/tools/teams_get_channel_message.go:33-37` plus the handler's `logger.Error(..., "fix", ...)` and `mcp.NewToolResultError(fmt.Sprintf("%s: %s", ...))`; `internal/tools/teams_list_transcripts.go:32` and `teams_get_transcript.go:40` name `teams get_online_meeting`. FIXED: `internal/tools/teams_read_verbs_test.go` now exists and installs a buffer-backed `slog` handler. `TestErrorFixReachesBothToolResultAndLog` (`:269`) asserts the same correction substring on both channels for a pre-request refusal and a service failure; `TestReadVerbsHonourTimeoutAndRedaction` (`:213`) asserts a correction reaches the log record on both the timeout and the service-failure branch of all twelve Graph-calling verbs — all pass. Status raised to PASS. Note the fix strings say "teams search" / "teams get_online_meeting" (the domain-plus-verb form used throughout this codebase) rather than the dotted `teams.search` |
 | FR-19 | `teams` as the sixth `extension/manifest.json` entry; literal `5`→`6`; `maximalSurfaceConfig` gains the flag; `long_description` Teams line | PASS | `extension/manifest.json` `tools` array is `[calendar, mail, account, system, contacts, teams]`; `long_description` line 11 "Teams reading: search chat and channel messages…"; `internal/server/manifest_sync_test.go:73` (`TeamsEnabled: true`) and the count literal; test `TestManifestDescribesEveryRegisteredVerb` passes |
 | FR-20 | Surface manifest regenerated; `build.go` gains `domainOrder`, both configs, gate probe | PASS | `internal/surface/build.go:31,44,77,84`; `site/src/generated/surface.json` records `teams` 13 full / 0 default with every verb gated on `OUTLOOK_MCP_TEAMS_ENABLED`; totals 70/38; test `TestCommittedManifestMatchesRecord` passes and `make ci` leaves the tree clean |
 | FR-21 | `toolCount` incremented inside the gated branch; base literal untouched | PASS | `internal/server/server.go:205` (`toolCount := 4`), `:225`, `:255`; the schema-size run logs `tool registration complete tools=6` |
 | FR-22 | Schema gate extended with `TeamsEnabled`, reduction ≥60%, constants unchanged | PASS | `internal/server/schema_size_test.go:67`; measured 27,413 bytes / 62%; `minRequiredReductionPct` still 60 (`:30`), `preCRBaselineBytes` still 74,000 (`:26`) |
-| FR-23 | `docs/concepts.md` Teams gating section, **two `OUTLOOK_MCP_TEAMS_ENABLED` rows in the "OAuth scopes used per feature" table**, and no stale tool-set statement | FAIL | Gating section present and correct (`docs/concepts.md:80-91`); stale statements corrected (`:95`, `:189`, `:141`). **The "OAuth scopes used per feature" table (`docs/concepts.md:131-140`) has no `OUTLOOK_MCP_TEAMS_ENABLED` row.** The contacts precedent carries both of its rows there (`:137-138`); the Teams analogue is absent, so the canonical scopes table omits the four scopes the domain requests. See GAP-5 |
+| FR-23 | `docs/concepts.md` Teams gating section, **two `OUTLOOK_MCP_TEAMS_ENABLED` rows in the "OAuth scopes used per feature" table**, and no stale tool-set statement | FIXED | Gating section present and correct (`docs/concepts.md:80-91`); stale statements corrected (`:95`, `:191`, `:143`). Both scope rows now present, following the contacts rows: `docs/concepts.md:139-140`. Gated by `TestTeamsScopeRowsNameEveryRequestedScope` (`internal/docs/catalog_test.go:104`), which reads the **embedded bundle** rather than the file on disk, as the contacts-era mail precedent in the same file does, and asserts the enabled row names all four scopes — passes |
 | FR-24 | CRUD prompt steps from Step 52 with a `config.features.teams_enabled` skip; `crud-test.sh` column/awk/jq; CSV header reset | PASS | `docs/prompts/mcp-tool-crud-test.md:790-858` (Steps 52-58, skip instruction at `:794`); `scripts/crud-test.sh:97` (`mcp_teams` column), `:118` (awk bucket), `:130,138` (jq argument); `docs/bench/crud-runs.csv` is header-only (1 line), historical rows reset |
 | FR-25 | Every statement of the aggregate tool set updated | PASS | `teams` present in `AGENTS.md`, `README.md`, `docs/readme.md`, `docs/quickstart.md`, `docs/troubleshooting.md`, `docs/reference/architecture.md`, `extension/README.md`, `internal/docs/llmstxt.go`, `internal/tools/aggregate_annotations.go:2`, `site/src/surface.ts`; `site/src/surface.ts:82` `domainCount` still `surface.domains.length`, not a literal |
 | FR-26 | No `Manage=3` capability introduced | PASS | Tests `TestTeamsRegistryExposesNoOutOfScopeVerb` (`internal/server/teams_verbs_test.go:121`, name and prefix exclusions) and `TestTeamsVerbsRegisterThirteen` pass |
-| FR-27 | `system.status` reports `config.features.teams_enabled` | PARTIAL | Source present: `internal/tools/status.go:237-241` (field with the JSON tag) and `:341` (populated from `cfg.TeamsEnabled`). **No test**: `internal/tools/status_test.go` is unchanged in the diff range and `TestStatus_FeaturesGroup` (`:273-292`) asserts `read_only`, `mail_enabled`, `provenance_tag` only. The specified `TestStatus_ReportsTeamsEnabled` does not exist. See GAP-3 |
+| FR-27 | `system.status` reports `config.features.teams_enabled` | FIXED | Source present: `internal/tools/status.go:237-241` (field with the JSON tag) and `:341` (populated from `cfg.TeamsEnabled`). `TestStatus_ReportsTeamsEnabled` (`internal/tools/status_test.go:305`) now calls the status handler under both polarities and asserts the field is present and follows the configured value — passes. Both polarities are asserted so a field pinned to a constant cannot pass |
 
 ### Non-Functional Requirements
 
@@ -80,15 +84,15 @@ comparison. Both are recorded as gaps below and deferred to the user.
 | AC-3 | Chat and channel reads with body escalation; channel read missing an identifier refused naming search | PASS | `TestGetChatMessage_DefaultPreviewsAndRawEscalates`, `TestGetChannelMessage_DefaultPreviewsAndRawEscalates`, `TestGetChannelMessage_RefusesEachIdentifierSeparately` pass; fix strings at `internal/tools/teams_get_channel_message.go:33-34` name the teams search hit |
 | AC-4 | Draft-only reply sends nothing; text and description say so; no `output` parameter | PASS | All four clauses graded: `TestComposeReply_PostsNothing`, `TestComposeReply_StatesNotSent`, `TestComposeReply_DeclaresNoOutputParameter` pass |
 | AC-5 | Transcript chain resolves by identifier; full content only under raw | PASS | `TestGetOnlineMeeting_ResolvesJoinURL`, `TestListTranscripts_ReadsTheNamedMeeting`, `TestGetTranscript_ContentOnlyUnderRaw` pass |
-| AC-6 | Every verb read-only, non-destructive, idempotent; open-world except `help`; folded tool read-only; no send scope ever | PARTIAL | Scope clause PASS (`TestScopes_NoTeamsSendEver`). Read-only and non-destructive per verb PASS (`TestTeamsExposesNoWriteVerb`). **The idempotent and open-world clauses are unasserted, and the folded aggregate for `teams` is unasserted** — no `TestTeamsAggregateIsReadOnly` exists, unlike `TestContactsAggregateIsReadOnly` (`internal/tools/tool_annotations_test.go:303`). See GAP-2 |
+| AC-6 | Every verb read-only, non-destructive, idempotent; open-world except `help`; folded tool read-only; no send scope ever | PASS | Scope clause PASS (`TestScopes_NoTeamsSendEver`). Read-only and non-destructive per verb PASS (`TestTeamsExposesNoWriteVerb`). FIXED: the idempotent and open-world clauses are graded per verb by `TestTeamsVerbAnnotations` (`internal/tools/tool_annotations_test.go:360`), including `help`'s `openWorldHint: false`, and the folded aggregate by `TestTeamsAggregateIsReadOnly` (`:330`), which mirrors `TestContactsAggregateIsReadOnly` against `getRegisteredTool(t, s, "teams")` — both pass. Status raised to PASS |
 | AC-7 | Consent surface changes only on opt-in | PASS | `TestScopes_TeamsEnabled`, `TestScopes_NoTeamsSendEver` pass; `internal/auth/auth.go:131` gates the four scopes |
 | AC-8 | Tool count 6; `make ci` matches the committed surface manifest; manifest holds six entries; surface records 13 gated verbs | PASS | Schema-size run logs `tools=6`; `make ci` exit 0 with `git status --porcelain` empty; `extension/manifest.json` six entries; `site/src/generated/surface.json` teams 13/0, every verb gated on `OUTLOOK_MCP_TEAMS_ENABLED` |
 | AC-9 | Schema gate passes at max configuration and the measurement is recorded | PASS | Measured 27,413 bytes / 62% ≥ 60%; recorded in `docs/backlog/cr-0078-0083.md:1290-1291`; `minRequiredReductionPct` unchanged; `go.mod`/`go.sum` unchanged |
 | AC-10 | Registry metadata complete; eleven reads declare `output`, `compose_reply` and `help` do not | PASS | `TestEveryVerbHasSummary`, `TestEveryVerbHasDescription`, `TestSeeDocsAnchorsResolve`, `TestTeamsReadVerbsDeclareOutput`, `TestComposeReply_DeclaresNoOutputParameter` pass |
-| AC-11 | Errors carry their correction on the tool result **and** the log record | PARTIAL | Tool-result half graded by the seven `*_GraphFailureCarriesFix` and `*_Refuses*` tests. **The log-record half is graded by nothing**: no teams test installs a capturing handler. Source does emit `"fix"` on the log record in every handler. See GAP-1 |
+| AC-11 | Errors carry their correction on the tool result **and** the log record | PASS | Tool-result half graded by the seven `*_GraphFailureCarriesFix` and `*_Refuses*` tests. FIXED: the log-record half is graded by `TestErrorFixReachesBothToolResultAndLog` and `TestReadVerbsHonourTimeoutAndRedaction` (`internal/tools/teams_read_verbs_test.go:269,213`), both installing a buffer-backed `slog` handler and reading the emitted record — pass. Status raised to PASS |
 | AC-12 | No out-of-scope Teams capability; exactly thirteen verbs | PASS | `TestTeamsRegistryExposesNoOutOfScopeVerb`, `TestTeamsVerbsRegisterThirteen` pass |
 | AC-13 | Every verb carries the `teams.<verb>` middleware identity | PASS | `TestTeamsVerbsCarryDomainQualifiedIdentity` derives its cases from the built slice, reads the audit log, and asserts `operation_type: read` — passes |
-| AC-14 | Documentation, status, and harness surfaces state the domain that now exists | FAIL | Documentation clauses PASS: troubleshooting anchors at `docs/troubleshooting.md:253,270,285`; no file states a tool set omitting teams (FR-25 evidence); `site/src/surface.ts:82` `domainCount` still derived; CRUD prompt steps and skip instruction at `docs/prompts/mcp-tool-crud-test.md:790,794`; `scripts/crud-test.sh:97` header matches `docs/bench/crud-runs.csv:1`. **Two clauses fail:** the "two OAuth scope rows for `OUTLOOK_MCP_TEAMS_ENABLED`" are absent from the `docs/concepts.md` scopes table (GAP-5), and the `system.status` clause has no test (GAP-3) |
+| AC-14 | Documentation, status, and harness surfaces state the domain that now exists | FIXED | Documentation clauses PASS: troubleshooting anchors at `docs/troubleshooting.md:253,270,285`; no file states a tool set omitting teams (FR-25 evidence); `site/src/surface.ts:82` `domainCount` still derived; CRUD prompt steps and skip instruction at `docs/prompts/mcp-tool-crud-test.md:790,794`; `scripts/crud-test.sh:97` header matches `docs/bench/crud-runs.csv:1`. Both previously failing clauses are FIXED: the two OAuth scope rows are present at `docs/concepts.md:139-140` and gated by `TestTeamsScopeRowsNameEveryRequestedScope`, and the `system.status` clause is graded by `TestStatus_ReportsTeamsEnabled`. Status raised to FIXED |
 
 ## Test Strategy Verification
 
@@ -106,21 +110,22 @@ comparison. Both are recorded as gaps below and deferred to the user.
 | `internal/tools/teams_get_online_meeting_test.go` | `TestGetOnlineMeeting_ResolvesJoinURL` | yes | yes (`:142`) | yes |
 | `internal/tools/teams_get_online_meeting_test.go` | `TestGetOnlineMeeting_RequiresOneIdentifier` | yes | yes (`:199`) | yes |
 | `internal/tools/teams_get_transcript_test.go` | `TestGetTranscript_ContentOnlyUnderRaw` | yes | yes (`:77`) | yes |
-| `internal/tools/teams_read_verbs_test.go` | `TestEveryReadVerbValidatesIdentifiersBeforeCall` | yes | **no — file absent** | GAP-1 |
-| `internal/tools/teams_read_verbs_test.go` | `TestReadVerbsHonourTimeoutAndRedaction` | yes | **no — file absent** | GAP-1 |
-| `internal/tools/teams_read_verbs_test.go` | `TestErrorFixReachesBothToolResultAndLog` | yes | **no — file absent** | GAP-1 |
-| `internal/tools/tool_annotations_test.go` | `TestTeamsVerbAnnotations` | yes | **no** | GAP-2 |
-| `internal/tools/tool_annotations_test.go` | `TestTeamsAggregateIsReadOnly` | yes | **no** | GAP-2 |
-| `internal/server/teams_verbs_test.go` | `TestBuildTeamsVerbs_ThirteenVerbsInOrder` | yes | yes, renamed `TestTeamsVerbsRegisterThirteen` (`:77`) | partial — asserts the sorted verb **set**, not the inventory **order** the row specifies. GAP-6 |
+| `internal/tools/teams_read_verbs_test.go` | `TestEveryReadVerbValidatesIdentifiersBeforeCall` | yes | yes (`:183`) | yes — table-driven over the eleven verbs with a required argument, asserting refusal and a zero request count. `list_chats` is excluded and the exclusion is stated: it takes no required argument |
+| `internal/tools/teams_read_verbs_test.go` | `TestReadVerbsHonourTimeoutAndRedaction` | yes | yes (`:213`) | yes — both halves over all twelve Graph-calling verbs, with a buffer-backed `slog` handler asserting the log record on each |
+| `internal/tools/teams_read_verbs_test.go` | `TestErrorFixReachesBothToolResultAndLog` | yes | yes (`:269`) | yes — a pre-request refusal and a service failure, each asserted on both channels |
+| `internal/tools/teams_read_verbs_test.go` | `TestEveryTeamsGraphVerbIsCovered` | no — added | yes (`:169`) | not specified; guards the hand-written table above against a fourteenth verb escaping all three cross-verb properties |
+| `internal/tools/tool_annotations_test.go` | `TestTeamsVerbAnnotations` | yes | yes (`:360`) | yes — all four values per verb, derived from the registered verb set |
+| `internal/tools/tool_annotations_test.go` | `TestTeamsAggregateIsReadOnly` | yes | yes (`:330`) | yes — mirrors `TestContactsAggregateIsReadOnly` |
+| `internal/server/teams_verbs_test.go` | `TestBuildTeamsVerbs_ThirteenVerbsInOrder` | yes | yes, renamed `TestTeamsVerbsRegisterThirteen` (`:84`) | yes — the `sort.Strings` call is removed and the comparison is now against the inventory order `buildTeamsVerbs` produces |
 | `internal/server/server_test.go` | `TestRegisterTools_TeamsEnabled_RegistersSixthTool` | yes | yes | yes |
 | `internal/server/server_test.go` | `TestRegisterTools_TeamsDisabled_NoTeamsTool` | yes | yes | yes |
 | `internal/tools/teams_output_test.go` | `TestEveryTeamsReadVerbDeclaresOutput` | yes | yes, relocated and renamed `TestTeamsReadVerbsDeclareOutput` (`internal/server/teams_verbs_test.go:193`) | yes — derives cases from the built slice and asserts the selection count is 11 |
 | `internal/auth/auth_test.go` | `TestScopes_TeamsEnabled` | yes | yes | yes |
 | `internal/auth/auth_test.go` | `TestScopes_NoTeamsSendEver` | yes | yes | yes |
 | `internal/config/config_test.go` | `TestLoadConfig_TeamsEnabledDefaultFalse` | yes | yes | yes |
-| `internal/surface/surface_test.go` | `TestTeamsDomainRecordedGatedAndFull` | yes | **no** — the file's only change makes `TestContactsDomainRecordedGatedAndFull` position-independent | GAP-4 |
+| `internal/surface/surface_test.go` | `TestTeamsDomainRecordedGatedAndFull` | yes | yes (`:175`) | yes — asserts 13 full / 0 default, thirteen recorded verbs, the gate on every one, and `EnvTeamsEnabled` enumerated in `rec.Config` |
 | `internal/server/teams_verbs_test.go` | `TestTeamsVerbsCarryDomainQualifiedIdentity` | yes | yes (`:227`) | yes |
-| `internal/tools/status_test.go` | `TestStatus_ReportsTeamsEnabled` | yes | **no** — file unchanged in the diff range | GAP-3 |
+| `internal/tools/status_test.go` | `TestStatus_ReportsTeamsEnabled` | yes | yes (`:305`) | yes — both polarities |
 | `internal/server/teams_verbs_test.go` | `TestTeamsRegistryExposesNoOutOfScopeVerb` | yes | yes (`:121`) | yes |
 
 ### Tests to Modify
@@ -138,9 +143,11 @@ comparison. Both are recorded as gaps below and deferred to the user.
 | `docs/prompts/mcp-tool-crud-test.md` | Steps 52-58 with skip instruction | yes | yes | yes — `:790-858` |
 | `scripts/crud-test.sh`, `docs/bench/crud-runs.csv` | per-domain accounting | yes | yes | yes — `:97,118,130,138`; CSV header-only |
 
+| `internal/docs/catalog_test.go` | Teams OAuth scope row gate | no — added by gap fix | yes, `TestTeamsScopeRowsNameEveryRequestedScope` (`:104`) | not specified; the contacts-era precedent in the same file gates its documentation row the same way, reading the embedded bundle rather than the file on disk |
+
 ### Test execution
 
-Every test named above that exists was executed and passed. Full `make ci` exits 0 with no
+Every test named above was executed and passed. Full `make ci` exits 0 with no
 `FAIL` line across 19 packages.
 
 ## Diff Coverage
@@ -180,6 +187,10 @@ Every test named above that exists was executed and passed. Full `make ci` exits
 | `internal/tools/teams_serialize_test.go` | +424/-0 | FR-13 |
 | `internal/tools/text_format.go` | +390/-0 | NFR-1 |
 | `internal/tools/status.go` | +7/-0 | FR-27 |
+| `internal/tools/status_test.go` | gap fix | FR-27, AC-14 (`TestStatus_ReportsTeamsEnabled`) |
+| `internal/tools/teams_read_verbs_test.go` | gap fix, new file | FR-18, AC-11, NFR-2 |
+| `internal/docs/catalog_test.go` | gap fix | FR-23, AC-14 (embedded-bundle gate on the scope rows) |
+| `.agents/scenarios/2026-09-02-teams-conversation-and-transcript-reads.md` | gap fix, new file | Deferred live-tenant verification (GAP-7, GAP-8) |
 | `internal/server/teams_verbs.go` | +416/-0 | FR-1, FR-6, FR-13, FR-14, FR-15, FR-16, FR-17 |
 | `internal/server/teams_verbs_test.go` | +288/-0 | FR-1, FR-15, FR-16, FR-26, AC-4, AC-12, AC-13 |
 | `internal/server/server.go` | +30/-0 | FR-1, FR-2, FR-21 |
@@ -188,14 +199,14 @@ Every test named above that exists was executed and passed. Full `make ci` exits
 | `internal/server/surface_export.go` | +2/-2 | FR-25 |
 | `internal/server/surface_export_test.go` | +3/-3 | Tests to Modify |
 | `internal/surface/build.go` | +10/-4 | FR-20 |
-| `internal/surface/surface_test.go` | +21/-10 | FR-20 (refactor only; the specified teams test is absent — GAP-4) |
+| `internal/surface/surface_test.go` | +21/-10, plus the gap fix | FR-20 (`TestTeamsDomainRecordedGatedAndFull` added by the gap fix) |
 | `internal/server/manifest_sync_test.go` | +7/-6 | FR-19 |
 | `internal/server/schema_size_test.go` | +6/-4 | FR-22, NFR-3, AC-9 |
 | `internal/tools/dispatch_registry_test.go` | +14/-0 | Tests to Modify (verb-inventory golden) |
 | `internal/tools/verb_metadata_test.go` | +8/-5 | FR-6, FR-17 |
 | `internal/tools/description_quality_test.go` | +5/-4 | FR-17, NFR-4 |
 | `internal/tools/tool_description_test.go` | +4/-2 | FR-17 |
-| `internal/tools/tool_annotations_test.go` | +2/-1 | FR-6 (help-output clause only) |
+| `internal/tools/tool_annotations_test.go` | +2/-1, plus the gap fix | FR-6 (help-output clause, plus `TestTeamsVerbAnnotations` and `TestTeamsAggregateIsReadOnly`) |
 | `internal/tools/aggregate_annotations.go` | +2/-2 | FR-25 |
 | `internal/docs/llmstxt.go` | +2/-2 | FR-25 |
 | `extension/manifest.json` | +5/-1 | FR-19 |
@@ -205,7 +216,7 @@ Every test named above that exists was executed and passed. Full `make ci` exits
 | `scripts/crud-test.sh` | +6/-5 | FR-24 |
 | `docs/bench/crud-runs.csv` | +1/-1 | FR-24 |
 | `docs/prompts/mcp-tool-crud-test.md` | +71/-0 | FR-24 |
-| `docs/concepts.md` | +18/-5 | FR-23 (gating section only; the OAuth table rows are missing — GAP-5) |
+| `docs/concepts.md` | +18/-5, plus the two scope rows | FR-23 |
 | `docs/troubleshooting.md` | +47/-1 | FR-17 (SeeDocs anchors), FR-25 |
 | `docs/quickstart.md` | +38/-1 | FR-25 |
 | `docs/readme.md` | +2/-1 | FR-25 |
@@ -235,134 +246,151 @@ least one requirement above.
 
 ## Gaps
 
-### GAP-1 — The log-record half of the error contract is unasserted (FR-18, AC-11) — PARTIAL
+Six gaps are closed. The two remaining are the deferred live-instrument runs, recorded here
+as `not-run` and listed for the user in `docs/backlog/cr-0078-0083.md` under `## CR-0083`.
 
-The specified file `internal/tools/teams_read_verbs_test.go` does not exist, taking with it all
-three of its tests: `TestEveryReadVerbValidatesIdentifiersBeforeCall`,
-`TestReadVerbsHonourTimeoutAndRedaction`, and `TestErrorFixReachesBothToolResultAndLog`. The
-first two are substantively covered by the per-verb `*_RefusesEachIdentifierSeparately` and
-`*_GraphFailureCarriesFix` tests, though not derived from the registry as specified. The third
-is not covered at all: FR-18 and AC-11 both require the fix to reach **both** the tool result
-and the log record, and no teams test installs a capturing `slog` handler, so only the
-tool-result half is graded. The handlers do emit `"fix"` on the log record
-(`internal/tools/teams_get_channel_message.go`, `teams_get_transcript.go`, and the other ten),
-so this is a verification gap rather than a behaviour gap.
+### GAP-1 — The log-record half of the error contract is unasserted (FR-18, AC-11) — FIXED
 
-**Minimal fix:** add `internal/tools/teams_read_verbs_test.go` with
-`TestErrorFixReachesBothToolResultAndLog`: install a `slog` handler capturing records into a
-buffer via `logging.WithLogger`, call `NewHandleGetChannelMessage` with `team_id` omitted and
-`NewHandleGetTranscript` with `meeting_id` omitted, and assert the same fix substring appears
-in both the tool result text and the captured record's `fix` attribute. Optionally add the two
-registry-derived siblings.
+The specified file `internal/tools/teams_read_verbs_test.go` now exists and carries all three
+of its tests plus one guard.
 
-### GAP-2 — Two of the four annotation hint values are unasserted, and the folded aggregate is unasserted (FR-6, AC-6) — PARTIAL
+`TestErrorFixReachesBothToolResultAndLog` (`:269`) installs a buffer-backed `slog` handler via
+`slog.SetDefault`, which is the channel `logging.Logger(ctx)` derives from, and asserts the
+same correction substring appears in the tool result and in the emitted record. Two
+structurally different failures are driven, a pre-request validation refusal on
+`NewHandleGetChannelMessage` and a service failure on `NewHandleGetTranscript`, because the
+two are written on different branches of every handler and a fix present on one says nothing
+about the other.
 
-`TestTeamsVerbAnnotations` and `TestTeamsAggregateIsReadOnly` do not exist.
-`TestTeamsExposesNoWriteVerb` (`internal/server/teams_verbs_test.go:156`) asserts `readOnlyHint`
-is true and `destructiveHint` is not true; `TestEveryVerbHasClassification` asserts all four
-hints are **declared**. Nothing asserts that `idempotentHint` is true or that `openWorldHint` is
-true for the twelve Graph-calling verbs and false for `help`, and nothing asserts the folded
-`teams` tool annotation, which `TestContactsAggregateIsReadOnly`
-(`internal/tools/tool_annotations_test.go:303`) does for the contacts precedent. This also
-misses the `AGENTS.md` rule that new verbs "MUST add a value assertion alongside the existing
-annotation tests in `internal/tools/`".
+`TestReadVerbsHonourTimeoutAndRedaction` (`:213`) drives all twelve Graph-calling verbs
+against two endpoints: one that withholds its answer past a millisecond deadline, and one
+that answers with a service error carrying an email address. It asserts the timeout is
+reported rather than blocked on, the address does not survive into the tool result while
+`[email redacted]` does, and a correction reaches the log record on both branches.
 
-**Minimal fix:** add `TestTeamsVerbAnnotations` to `internal/tools/tool_annotations_test.go`
-using the existing `verbHints` helper (`:453`) over the registered teams verbs, asserting
-`(true, false, true, true)` for every verb and `(true, false, true, false)` for `help`; and add
-`TestTeamsAggregateIsReadOnly` mirroring `TestContactsAggregateIsReadOnly` at `:303` against
-`getRegisteredTool(t, s, "teams")`.
+`TestEveryReadVerbValidatesIdentifiersBeforeCall` (`:183`) asserts a missing required
+argument refuses with a zero request count across the eleven verbs that take one.
 
-### GAP-3 — `system.status` Teams flag has no test (FR-27, AC-14) — PARTIAL
+`TestEveryTeamsGraphVerbIsCovered` (`:169`) was added beyond the specification. The three
+tests above drive bare constructors against a recording endpoint, so their tables cannot be
+derived from the registry the way the server-package tests are; without this guard a
+fourteenth verb would be added to the domain and silently escape all three cross-verb
+properties. It fails the build when the table stops covering twelve.
 
-`internal/tools/status.go:237-241,341` adds and populates the field, but
-`internal/tools/status_test.go` is unchanged in the diff range and `TestStatus_FeaturesGroup`
-(`:273-292`) asserts only `read_only`, `mail_enabled`, and `provenance_tag`. The specified
-`TestStatus_ReportsTeamsEnabled` does not exist. FR-24's harness skip instruction keys on
-`config.features.teams_enabled`, so a regression here silently turns the Teams harness steps
-into permanent skips.
+One implementation note worth carrying: the slow endpoint bounds its own wait rather than
+blocking on `req.Context().Done()`. An aborted client is not reliably observed as a cancelled
+server-side context, and the POST-bodied `search` verb hung the whole package for the full
+test timeout while `httptest.Server.Close` waited on the outstanding handler.
 
-**Minimal fix:** add `TestStatus_ReportsTeamsEnabled` to `internal/tools/status_test.go`,
-calling the status handler with `TeamsEnabled` true and then false and asserting
-`config.features.teams_enabled` is present and follows the configured value, following the
-shape of `TestStatus_FeaturesGroup`.
+### GAP-2 — Two of the four annotation hint values are unasserted, and the folded aggregate is unasserted (FR-6, AC-6) — FIXED
 
-### GAP-4 — The teams surface-record gate is missing (FR-20, FR-3) — GAP
+`TestTeamsVerbAnnotations` (`internal/tools/tool_annotations_test.go:360`) reads
+`BuildDomainVerbSets(cfg)["teams"]` under `TeamsEnabled: true` and asserts all four hint
+values for every registered verb through the existing `verbHints` helper: readOnly true,
+destructive false, idempotent true for all thirteen, and openWorld true for the twelve that
+reach Graph and false for `help`. The cases are derived from the registry rather than listed,
+so a verb added later is asserted without anyone extending a list.
 
-`TestTeamsDomainRecordedGatedAndFull` does not exist. The only change to
-`internal/surface/surface_test.go` makes `TestContactsDomainRecordedGatedAndFull` select by
-name rather than by last position. The teams record is graded indirectly by
-`TestRecordCountsMatchBuiltVerbs`, `TestDefaultCountExcludesGatedVerbs`,
-`TestEveryVerbCarriesSummaryAndGate` (which iterate `rec.Domains`), and
-`TestCommittedManifestMatchesRecord`. What is not directly asserted is the specific contract
-the CR names: `fullCount` 13, `defaultCount` 0, every verb attributed to
-`OUTLOOK_MCP_TEAMS_ENABLED`, and the record's config section naming that variable (the FR-3
-inventory-row half, folded into this test by review finding V6).
+`TestTeamsAggregateIsReadOnly` (`:330`) mirrors `TestContactsAggregateIsReadOnly` against
+`getRegisteredTool(t, s, "teams")`, asserting the folded `(Teams, true, false, true, true)`.
 
-**Minimal fix:** add `TestTeamsDomainRecordedGatedAndFull` to
-`internal/surface/surface_test.go` mirroring the now name-selecting
-`TestContactsDomainRecordedGatedAndFull` at `:121`, asserting 13/0, the gate on every verb, and
-the presence of `OUTLOOK_MCP_TEAMS_ENABLED` in `rec.Config`.
+This also satisfies the `AGENTS.md` rule that a new verb must add a value assertion alongside
+the existing annotation tests in `internal/tools/`.
 
-### GAP-5 — The `docs/concepts.md` OAuth scopes table has no Teams rows (FR-23, AC-14) — FAIL
+### GAP-3 — `system.status` Teams flag has no test (FR-27, AC-14) — FIXED
 
-FR-23 requires that the "OAuth scopes used per feature" table "**MUST** gain the two
-`OUTLOOK_MCP_TEAMS_ENABLED` rows", and AC-14 grades it. The table at
-`docs/concepts.md:131-140` carries both `OUTLOOK_MCP_CONTACTS_ENABLED` rows but no
-`OUTLOOK_MCP_TEAMS_ENABLED` row of either polarity. The Teams gating section
-(`docs/concepts.md:80-91`) does state the four scopes, but it is a different table under a
-different heading, and a reader consulting the canonical per-feature scopes table sees nothing
-about Teams beyond the trailing sentence at `:141`. This is the documented requirement's
-literal subject and it is unmet.
+`TestStatus_ReportsTeamsEnabled` (`internal/tools/status_test.go:305`) calls the status
+handler with `TeamsEnabled` false and then true and asserts `config.features.teams_enabled` is
+present and follows the configured value. Both polarities are asserted deliberately: a field
+pinned to a constant would pass a single-value check, and the harness keys its Teams skip on
+this field, so that regression would turn the Teams steps into permanent silent skips.
 
-**Minimal fix:** insert two rows into the table at `docs/concepts.md:138`, after the contacts
-rows and before the `offline_access` row:
+### GAP-4 — The teams surface-record gate is missing (FR-20, FR-3) — FIXED
 
-```
-| `OUTLOOK_MCP_TEAMS_ENABLED=false` (default) | *(none)* |
-| `OUTLOOK_MCP_TEAMS_ENABLED=true` | `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, `OnlineMeetingTranscript.Read.All` |
-```
+`TestTeamsDomainRecordedGatedAndFull` (`internal/surface/surface_test.go:175`) selects the
+domain by name, as the contacts test now does, and asserts `FullCount` 13, `DefaultCount` 0,
+thirteen recorded verbs, `config.EnvTeamsEnabled` as the gate on every one of them, and the
+presence of that variable in the record's own `Config` inventory, which is the FR-3
+inventory-row half folded in by review finding V6. A verb attributed to a variable the
+inventory does not enumerate would render on the site as a gate a reader cannot look up,
+which is why the last clause is in the same test rather than a separate one.
 
-### GAP-6 — The verb-set test asserts a set, not the inventory order — PARTIAL
+### GAP-5 — The `docs/concepts.md` OAuth scopes table has no Teams rows (FR-23, AC-14) — FIXED
 
-The Test Strategy row for `TestBuildTeamsVerbs_ThirteenVerbsInOrder` specifies "Thirteen verbs,
-named and ordered as the inventory states". The implemented
-`TestTeamsVerbsRegisterThirteen` (`internal/server/teams_verbs_test.go:77-110`) sorts the built
-names before comparing, so a builder that emitted the thirteen verbs in any order would pass.
-Registration order is what the published operation enum and the help output present, so the
-ordering clause is graded by nothing.
+Both rows are inserted into the "OAuth scopes used per feature" table at
+`docs/concepts.md:139-140`, after the contacts rows and before the `offline_access` row, in
+the polarity pair the contacts precedent uses.
 
-**Minimal fix:** in `TestTeamsVerbsRegisterThirteen`, drop the `sort.Strings(got)` call and
-compare against the inventory order (`help`, `search`, `list_chats`, `list_chat_messages`,
-`get_chat_message`, `list_chat_message_replies`, `list_channel_messages`,
-`get_channel_message`, `list_channel_message_replies`, `compose_reply`, `get_online_meeting`,
-`list_transcripts`, `get_transcript`), which is the order `buildTeamsVerbs` already produces at
-`internal/server/teams_verbs.go:128-142`.
+The row is gated by `TestTeamsScopeRowsNameEveryRequestedScope`
+(`internal/docs/catalog_test.go:104`), following the precedent already in that file: the
+assertion reads the **embedded bundle** rather than the file on disk, because the bundle is
+what a running server serves to an LLM mid-session, and a documentation row that is correct
+on disk but absent from the bundle is absent where it is consulted. It asserts the disabled
+row states that no scope is requested and the enabled row names all four scopes. The rows are
+told apart by the `=false` marker rather than by position, and the `=` form is what selects
+the canonical scopes table over the gating section, which states the same variable in a
+Variable/Value column pair.
 
-### GAP-7 — `make crud-test` not run — GAP (deferred to the user)
+### GAP-6 — The verb-set test asserts a set, not the inventory order — FIXED
 
-FR-24 adds Steps 52-58 to `docs/prompts/mcp-tool-crud-test.md` and the `mcp_teams` accounting to
-`scripts/crud-test.sh`. The harness is a paid, live-tenant run and was excluded from this
-validation by instruction. The static edits are verified (see FR-24), but the prompt has never
-been executed against a live tenant with `OUTLOOK_MCP_TEAMS_ENABLED` set, so the Teams steps'
-executability, the per-domain CSV accounting, and the `config.features.teams_enabled` skip path
-are unproven end to end. `AGENTS.md` records prompt drift as an open class with no automated
-check binding prompt prose to registry parameters, so this run is the only instrument that
-would catch a drifted Teams step.
+`TestTeamsVerbsRegisterThirteen` (`internal/server/teams_verbs_test.go:84`) no longer sorts.
+The `sort.Strings` call and the now-unused `sort` import are removed, and the comparison is
+against the inventory order `buildTeamsVerbs` already produces at
+`internal/server/teams_verbs.go:128-142`: `help`, `search`, `list_chats`,
+`list_chat_messages`, `get_chat_message`, `list_chat_message_replies`,
+`list_channel_messages`, `get_channel_message`, `list_channel_message_replies`,
+`compose_reply`, `get_online_meeting`, `list_transcripts`, `get_transcript`. The Test Strategy
+row is met as written; no amendment was needed. Registration order is what the published
+operation enum and the help output present, and the inventory groups the verbs by the chain a
+caller walks, which a sorted comparison would have accepted any permutation of.
 
-**Deferred to the user.** Rebuild the binary at the `.mcp.json` path first (`AGENTS.md`
-records that the harness drives a built binary by path, not the working tree), confirm the
+### GAP-7 — `make crud-test` not run — not-run (deferred to the user)
+
+Unchanged from the original finding: the harness is a paid, live-tenant run and was excluded
+by instruction. The static edits are verified (see FR-24); the prompt has never been executed
+against a live tenant with `OUTLOOK_MCP_TEAMS_ENABLED` set, so the Teams steps'
+executability, the per-domain CSV accounting, and the `config.features.teams_enabled` skip
+path are unproven end to end. `AGENTS.md` records prompt drift as an open class with no
+automated check binding prompt prose to registry parameters, so this run is the only
+instrument that would catch a drifted Teams step.
+
+**Deferred to the user**, and recorded as a pending bullet under `## CR-0083` in
+`docs/backlog/cr-0078-0083.md`. Rebuild the binary at the `.mcp.json` path first, confirm the
 report's `Server version` line matches `git rev-parse --short HEAD`, then run `make crud-test`.
 
-### GAP-8 — Site screenshot comparison not run — GAP (deferred to the user)
+### GAP-8 — Site screenshot comparison not run — not-run (deferred to the user)
 
-`site/AGENTS.md` requires that a change claiming to leave rendering untouched be verified by
-screenshot comparison rather than assumed. This diff changes `site/src/generated/surface.json`
-(+91/-1: a sixth domain, thirteen verbs, totals 57→70 full and a new config variable) and
-`site/src/surface.ts` (+1/-1, doc comment only). The site derives every figure it states about
-the tool surface from that manifest, so the rendered pages change by construction; the
-comparison was not run and no before/after evidence exists for the affected pages.
+Unchanged from the original finding. `site/AGENTS.md` requires that a change claiming to
+leave rendering untouched be verified by screenshot comparison rather than assumed. This diff
+changes `site/src/generated/surface.json` (a sixth domain, thirteen verbs, totals 57 to 70
+full, and a new config variable) and `site/src/surface.ts` (doc comment only). The site
+derives every figure it states about the tool surface from that manifest, so the rendered
+pages change by construction; the comparison was not run and no before/after evidence exists.
 
-**Deferred to the user.** Run the site's screenshot comparison against the pages that read
-`domainCount`, `fullVerbCount`, `defaultVerbCount`, `configVarCount`, and `domainNames`, and
-confirm the only deltas are the intended new figures.
+**Deferred to the user**, and recorded as a pending bullet under `## CR-0083` in
+`docs/backlog/cr-0078-0083.md`. Compare the pages that read `domainCount`, `fullVerbCount`,
+`defaultVerbCount`, `configVarCount`, and `domainNames`, and confirm the only deltas are the
+intended new figures.
+
+## Deferred live-tenant verification
+
+The two `not-run` gaps above are both instruments, not observations. Neither of them, and no
+test in this repository, has ever put a Teams call on the wire: every Teams unit test drives
+an `httptest` server and grades the outgoing request against a canned response.
+
+A user scenario is derived and written to
+`.agents/scenarios/2026-09-02-teams-conversation-and-transcript-reads.md`, marked
+`outcome: not-run` in its frontmatter. It exists to settle the two facts a canned endpoint
+cannot reach and on which the domain's usability rests:
+
+* **Whether a live search hit from a channel carries the team and channel identifiers.** The
+  domain deliberately offers no team or channel enumeration, so a channel is reachable only
+  through a search hit's `channelIdentity`. If the live service omits either field, the
+  channel half of the domain is unreachable by the only route it offers.
+* **Whether `joinWebUrl eq` resolves an online meeting the account attended rather than
+  organised.** The whole transcript chain depends on it, and it is the single most likely
+  failure.
+
+The scenario states that either reproduction routes to a follow-on change request rather than
+a patch, and that it should be run before the paid harness: it costs a handful of
+authenticated calls to answer what a harness run would spend a great deal more to report.

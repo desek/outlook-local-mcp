@@ -13,7 +13,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 
@@ -72,8 +71,16 @@ func teamsSchemaProperties(opts []mcp.ToolOption) map[string]any {
 }
 
 // TestTeamsVerbsRegisterThirteen asserts the domain registers exactly the
-// thirteen verbs the inventory states. The set is the scope boundary: a
-// fourteenth verb appearing here is a scope expansion, not a detail.
+// thirteen verbs the inventory states, in the order it states them. The set is
+// the scope boundary: a fourteenth verb appearing here is a scope expansion,
+// not a detail.
+//
+// The order is asserted as well as the membership, because registration order
+// is what the published operation enum and the help output present to a caller.
+// The inventory groups the verbs by the chain a caller walks, help first, then
+// the entry point, then chats, channels, the reply, and the meeting-to-transcript
+// path; a comparison against a sorted list would accept any permutation of that
+// and leave the grouping ungraded.
 func TestTeamsVerbsRegisterThirteen(t *testing.T) {
 	verbs := buildTestTeamsVerbs(t)
 
@@ -81,29 +88,28 @@ func TestTeamsVerbsRegisterThirteen(t *testing.T) {
 	for _, v := range verbs {
 		got = append(got, v.Name)
 	}
-	sort.Strings(got)
 
 	want := []string{
-		"compose_reply",
-		"get_channel_message",
-		"get_chat_message",
-		"get_online_meeting",
-		"get_transcript",
 		"help",
-		"list_channel_message_replies",
-		"list_channel_messages",
-		"list_chat_message_replies",
-		"list_chat_messages",
-		"list_chats",
-		"list_transcripts",
 		"search",
+		"list_chats",
+		"list_chat_messages",
+		"get_chat_message",
+		"list_chat_message_replies",
+		"list_channel_messages",
+		"get_channel_message",
+		"list_channel_message_replies",
+		"compose_reply",
+		"get_online_meeting",
+		"list_transcripts",
+		"get_transcript",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("teams registers %d verbs (%v), want %d (%v)", len(got), got, len(want), want)
 	}
 	for i := range want {
 		if got[i] != want[i] {
-			t.Errorf("teams verb set = %v, want %v", got, want)
+			t.Errorf("teams verb order = %v, want %v", got, want)
 			break
 		}
 	}

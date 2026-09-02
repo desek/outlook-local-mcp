@@ -91,6 +91,73 @@ func TestMailGatingRowNamesDraftAttachments(t *testing.T) {
 	}
 }
 
+// TestTeamsScopeRowsNameEveryRequestedScope asserts that the embedded concepts
+// document's canonical per-feature scopes table carries both polarities of the
+// Teams gate, and that the enabled row names all four scopes the gate causes to
+// be requested.
+//
+// The gating section elsewhere in the document states the same scopes, but a
+// reader answering "what will this consent prompt ask for" consults the
+// per-feature table, and a gate absent from that table reads as a gate that
+// changes no consent. The assertion reads the embedded bundle rather than the
+// file on disk, because the bundle is what a running server serves.
+func TestTeamsScopeRowsNameEveryRequestedScope(t *testing.T) {
+	t.Parallel()
+
+	disabled, enabled := teamsScopeRows(t)
+
+	if !strings.Contains(disabled, "*(none)*") {
+		t.Errorf("the disabled Teams row does not state that no scope is requested: %q", disabled)
+	}
+	for _, scope := range []string{
+		"Chat.Read",
+		"ChannelMessage.Read.All",
+		"OnlineMeetings.Read",
+		"OnlineMeetingTranscript.Read.All",
+	} {
+		if !strings.Contains(enabled, scope) {
+			t.Errorf("the enabled Teams row does not name the requested scope %s: %q", scope, enabled)
+		}
+	}
+}
+
+// teamsScopeRows returns the disabled-polarity and enabled-polarity
+// OUTLOOK_MCP_TEAMS_ENABLED rows of the embedded concepts document's
+// per-feature scopes table, failing the test when either is absent.
+//
+// The rows are told apart by the "=false" marker rather than by their order, so
+// a later reordering of the table does not silently swap the two assertions.
+func teamsScopeRows(t *testing.T) (disabled, enabled string) {
+	t.Helper()
+
+	data, err := docs.ReadSlug("concepts")
+	if err != nil {
+		t.Fatalf("ReadSlug(\"concepts\") error: %v", err)
+	}
+
+	for _, line := range strings.Split(string(data), "\n") {
+		// The "=" form is what the per-feature scopes table uses. The gating
+		// section states the same variable in a Variable/Value column pair
+		// instead, so keying on it selects the canonical table alone.
+		if !strings.HasPrefix(line, "|") || !strings.Contains(line, "OUTLOOK_MCP_TEAMS_ENABLED=") {
+			continue
+		}
+		if strings.Contains(line, "OUTLOOK_MCP_TEAMS_ENABLED=false") {
+			disabled = line
+			continue
+		}
+		enabled = line
+	}
+
+	if disabled == "" {
+		t.Fatal("the embedded concepts scopes table carries no OUTLOOK_MCP_TEAMS_ENABLED=false row, so a reader cannot see that the default gate requests nothing")
+	}
+	if enabled == "" {
+		t.Fatal("the embedded concepts scopes table carries no OUTLOOK_MCP_TEAMS_ENABLED=true row, so the four scopes the gate requests are absent from the canonical table")
+	}
+	return disabled, enabled
+}
+
 // mailGatingRow returns the MAIL_MANAGE_ENABLED row of the embedded concepts
 // document, failing the test when the row is absent.
 //

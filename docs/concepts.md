@@ -136,6 +136,8 @@ The server requests scopes incrementally. Expanding mail access after initial co
 | `MAIL_MANAGE_ENABLED=true` (implies `MAIL_ENABLED`) | `Mail.ReadWrite` |
 | `OUTLOOK_MCP_CONTACTS_ENABLED=false` (default) | *(none)* |
 | `OUTLOOK_MCP_CONTACTS_ENABLED=true` | `Contacts.Read`, `People.Read` |
+| `OUTLOOK_MCP_TEAMS_ENABLED=false` (default) | *(none)* |
+| `OUTLOOK_MCP_TEAMS_ENABLED=true` | `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, `OnlineMeetingTranscript.Read.All` |
 | Refresh tokens (always) | `offline_access` (added automatically by the identity library) |
 
 `Mail.Send` is never requested under any configuration, and neither is `Contacts.ReadWrite` nor any Teams send or write scope.

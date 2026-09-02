@@ -293,6 +293,35 @@ func TestStatus_FeaturesGroup(t *testing.T) {
 	}
 }
 
+// TestStatus_ReportsTeamsEnabled verifies that the features group reports the
+// Teams gate under both polarities.
+//
+// The flag is not decorative. The CRUD harness prompt reads
+// config.features.teams_enabled to decide whether to run the Teams steps or skip
+// them, so a field that disappeared, or one pinned to a constant, would turn
+// every Teams step into a permanent skip while the harness still reported a
+// clean run. Both polarities are asserted because a hardcoded false would pass a
+// single-value check.
+func TestStatus_ReportsTeamsEnabled(t *testing.T) {
+	for _, enabled := range []bool{false, true} {
+		registry := auth.NewAccountRegistry()
+		_ = registry.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+
+		cfg := testConfig()
+		cfg.TeamsEnabled = enabled
+
+		features := callStatus(t, cfg, registry, time.Now())["config"].(map[string]any)["features"].(map[string]any)
+
+		got, present := features["teams_enabled"]
+		if !present {
+			t.Fatal("the features group reports no teams_enabled field; the harness keys its Teams skip on it and would skip every step silently")
+		}
+		if got != enabled {
+			t.Errorf("teams_enabled = %v, want %v", got, enabled)
+		}
+	}
+}
+
 // TestStatus_ObservabilityGroup verifies that the observability config group
 // contains all required fields with correct values.
 func TestStatus_ObservabilityGroup(t *testing.T) {

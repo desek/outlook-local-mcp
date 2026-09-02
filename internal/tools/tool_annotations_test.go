@@ -317,6 +317,90 @@ func TestContactsAggregateIsReadOnly(t *testing.T) {
 	})
 }
 
+// TestTeamsAggregateIsReadOnly verifies the folded annotation on the "teams"
+// domain tool under the configuration that registers it.
+//
+// Every registered teams verb is a read, so the conservative fold must report
+// readOnly=true, destructive=false and idempotent=true; openWorld is true
+// because twelve of the thirteen verbs reach Graph. The domain's central claim
+// is that it never communicates, and these four values are the machine-readable
+// form of that claim: a client that gates writes behind a confirmation prompt
+// reads them and nothing else, so a verb that posted anything would have to move
+// them before it could reach a user unprompted.
+func TestTeamsAggregateIsReadOnly(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+		TeamsEnabled:   true,
+	})
+	tool := getRegisteredTool(t, s, "teams")
+	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
+		title:       "Teams",
+		readOnly:    true,
+		destructive: false,
+		idempotent:  true,
+		openWorld:   true,
+	})
+}
+
+// TestTeamsVerbAnnotations asserts the four hint values every registered teams
+// verb declares, read from the registry under the configuration that registers
+// the domain.
+//
+// The aggregate fold above is lossy in the direction that matters here: it
+// reports one openWorld value for the whole tool, and the domain has two kinds
+// of verb, twelve that reach Graph and one, help, that renders the registry
+// locally and reaches nothing. The folded true hides help's false, which is the
+// value its own help output publishes and the one a caller reasons about when
+// deciding whether an operation leaves the machine.
+//
+// The cases are derived from the registered verbs rather than listed, so a
+// fourteenth verb added later is asserted here without anyone extending a list.
+func TestTeamsVerbAnnotations(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+		TeamsEnabled:   true,
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	verbs := verbSets["teams"]
+	if len(verbs) == 0 {
+		t.Fatal("the teams domain registers no verbs under the configuration that enables it")
+	}
+
+	for _, v := range verbs {
+		readOnly, destructive, idempotent, openWorld, declared := verbHints(v.Annotations)
+		if !declared {
+			t.Errorf("verb %q leaves at least one of the four hints undeclared", v.Name)
+			continue
+		}
+
+		// help renders the registry in process; every other verb issues a Graph
+		// request, so openWorld is the one hint that splits the domain.
+		wantOpenWorld := v.Name != "help"
+
+		if !readOnly || destructive || !idempotent || openWorld != wantOpenWorld {
+			t.Errorf("verb %q hints = readOnly:%t destructive:%t idempotent:%t openWorld:%t, want readOnly:true destructive:false idempotent:true openWorld:%t",
+				v.Name, readOnly, destructive, idempotent, openWorld, wantOpenWorld)
+		}
+	}
+}
+
 // TestAggregateAnnotations_NoOldToolNames verifies that no old
 // {domain}_{operation} tool names survive registration after CR-0060 (AC-1).
 func TestAggregateAnnotations_NoOldToolNames(t *testing.T) {
