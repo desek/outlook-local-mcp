@@ -1038,3 +1038,148 @@ func FormatWriteConfirmation(action, subject, eventID, displayTime, location str
 	}
 	return b.String()
 }
+
+// FormatContactMatchesText formats merged contacts-domain search matches into a
+// numbered plain-text listing with a total count. Each entry states the source
+// the match came from, because a saved contact and a person Graph inferred from
+// correspondence carry different confidence and a caller choosing an address
+// needs to see which it is looking at.
+//
+// Parameters:
+//   - matches: slice of summary contact or person maps carrying "displayName",
+//     "emailAddress", "id", and the "source" label.
+//
+// Returns a formatted plain-text string. Returns a stated no-match line when
+// the slice is empty, naming what to try next.
+//
+// Side effects: none.
+func FormatContactMatchesText(matches []map[string]any) string {
+	if len(matches) == 0 {
+		return "No contacts or people matched. Try a shorter query, a surname, or a company name."
+	}
+
+	var b strings.Builder
+	for i, match := range matches {
+		source, _ := match["source"].(string)
+		fmt.Fprintf(&b, "%d. %s [%s]\n", i+1, contactDisplayLabel(match), source)
+		if address, _ := match["emailAddress"].(string); address != "" {
+			fmt.Fprintf(&b, "   Email: %s\n", address)
+		}
+		if id, _ := match["id"].(string); id != "" {
+			fmt.Fprintf(&b, "   ID: %s\n", id)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d match(es) total.", len(matches))
+
+	return b.String()
+}
+
+// FormatPeopleText formats relevance-ranked people into a numbered plain-text
+// listing with a total count. The listing order is Graph's relevance order, so
+// the position of an entry is itself information and is preserved.
+//
+// Parameters:
+//   - people: slice of summary person maps carrying "displayName",
+//     "emailAddress", and "id".
+//
+// Returns a formatted plain-text string. Returns "No people found." when the
+// slice is empty.
+//
+// Side effects: none.
+func FormatPeopleText(people []map[string]any) string {
+	if len(people) == 0 {
+		return "No people found."
+	}
+
+	var b strings.Builder
+	for i, person := range people {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, contactDisplayLabel(person))
+		if address, _ := person["emailAddress"].(string); address != "" {
+			fmt.Fprintf(&b, "   Email: %s\n", address)
+		}
+		if id, _ := person["id"].(string); id != "" {
+			fmt.Fprintf(&b, "   ID: %s\n", id)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d person/people total, most relevant first.", len(people))
+
+	return b.String()
+}
+
+// FormatContactDetailText formats one saved contact as labelled fields. Every
+// address the contact holds is listed, not only the leading one, because a
+// contact commonly carries a work and a personal address and picking between
+// them is the caller's decision.
+//
+// Parameters:
+//   - contact: a summary contact map carrying "displayName", "id", and
+//     "emailAddresses".
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatContactDetailText(contact map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Contact: %s\n", contactDisplayLabel(contact))
+	if id, _ := contact["id"].(string); id != "" {
+		fmt.Fprintf(&b, "ID: %s\n", id)
+	}
+	writeContactAddressLines(&b, contact)
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// FormatPersonDetailText formats one relevance-ranked person as labelled
+// fields. A person carries no per-address name in Graph, so the addresses are
+// listed under the person's own display name and the relevance score of the
+// leading address is stated, since it is the only confidence signal the
+// resource offers.
+//
+// Parameters:
+//   - person: a summary person map carrying "displayName", "id",
+//     "emailAddresses", and "relevanceScore".
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatPersonDetailText(person map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Person: %s\n", contactDisplayLabel(person))
+	if id, _ := person["id"].(string); id != "" {
+		fmt.Fprintf(&b, "ID: %s\n", id)
+	}
+	writeContactAddressLines(&b, person)
+	if score, ok := person["relevanceScore"].(float64); ok {
+		fmt.Fprintf(&b, "Relevance: %.2f\n", score)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// writeContactAddressLines writes one Email line per address a summary record
+// holds, or a stated absence, so a record with no address reads as an answer
+// rather than as a truncated one.
+func writeContactAddressLines(b *strings.Builder, record map[string]any) {
+	addresses, _ := record["emailAddresses"].([]string)
+	if len(addresses) == 0 {
+		b.WriteString("Email: (none recorded)\n")
+		return
+	}
+	for _, address := range addresses {
+		fmt.Fprintf(b, "Email: %s\n", address)
+	}
+}
+
+// contactDisplayLabel returns the name a contacts-domain record should be
+// listed under, falling back to its leading address and then to a stated
+// placeholder, so a record Graph returned without a display name is still
+// identifiable rather than rendered as a blank line.
+func contactDisplayLabel(record map[string]any) string {
+	if name, _ := record["displayName"].(string); name != "" {
+		return name
+	}
+	if address, _ := record["emailAddress"].(string); address != "" {
+		return address
+	}
+	return "(Unnamed)"
+}
