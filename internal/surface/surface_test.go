@@ -110,3 +110,39 @@ func TestEveryVerbCarriesSummaryAndGate(t *testing.T) {
 		t.Fatal("record contains no verbs")
 	}
 }
+
+// TestContactsDomainRecordedGatedAndFull asserts that the record carries the
+// contacts domain in last position with all five of its verbs and none of them
+// in the default set, each attributed to the contacts gate.
+//
+// The domain is gated whole rather than verb by verb, which is a shape no other
+// domain has: every one of its verbs must carry the gate, and its default count
+// must be zero rather than merely lower.
+func TestContactsDomainRecordedGatedAndFull(t *testing.T) {
+	rec := BuildRecord()
+
+	if len(rec.Domains) == 0 {
+		t.Fatal("record contains no domains")
+	}
+	last := rec.Domains[len(rec.Domains)-1]
+	if last.Name != "contacts" {
+		t.Fatalf("last domain is %q, want contacts; domainOrder places it last", last.Name)
+	}
+
+	if last.FullCount != 5 {
+		t.Errorf("contacts FullCount = %d, want 5", last.FullCount)
+	}
+	if last.DefaultCount != 0 {
+		t.Errorf("contacts DefaultCount = %d, want 0; the whole domain is gated", last.DefaultCount)
+	}
+
+	for _, v := range last.Verbs {
+		if v.Gate == nil {
+			t.Errorf("contacts verb %q carries no gate although the domain is gated whole", v.Name)
+			continue
+		}
+		if *v.Gate != config.EnvContactsEnabled {
+			t.Errorf("contacts verb %q gate = %q, want %q", v.Name, *v.Gate, config.EnvContactsEnabled)
+		}
+	}
+}

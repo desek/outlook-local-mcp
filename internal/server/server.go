@@ -185,9 +185,45 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	})
 	*mailRegistry = populatedMail
 
-	// Tool count: 4 aggregate domain tools (calendar, mail, account, system).
-	// All verbs are dispatched within their domain tool.
+	// Tool count: 4 aggregate domain tools (calendar, mail, account, system)
+	// by default, plus the opt-in contacts tool when it is enabled. All verbs
+	// are dispatched within their domain tool.
+	//
+	// Contacts domain aggregate tool. Unlike the four domains above it is
+	// registered conditionally: the whole domain, and with it the Contacts.Read
+	// and People.Read scopes, is opt-in behind ContactsEnabled, so a default
+	// server keeps the four-tool surface and asks for no contacts consent.
+	//
+	// The contactsRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *contactsRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	//
+	// The identical condition is repeated in BuildDomainVerbSets: a domain
+	// registered here alone is invisible to the surface generator and to the
+	// manifest-sync check.
 	toolCount := 4
+	if cfg.ContactsEnabled {
+		contactsVerbs, contactsRegistry := buildContactsVerbs(contactsVerbsConfig{
+			retryCfg:          retryCfg,
+			timeout:           timeout,
+			m:                 m,
+			tracer:            t,
+			authMW:            authMW,
+			accountResolverMW: accountResolverMW,
+		})
+		populatedContacts := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+			Domain: "contacts",
+			Intro: "Contact lookup for Microsoft Outlook via Microsoft Graph, for resolving a name " +
+				"to an email address. Read-only: search, get_contact, list_people, and get_person, " +
+				"plus help. The domain is registered only when ContactsEnabled is configured, and " +
+				"no verb writes a contact, folder, or photo.",
+			Verbs:           contactsVerbs,
+			ToolAnnotations: tools.AggregateAnnotations("Contacts", contactsVerbs),
+		})
+		*contactsRegistry = populatedContacts
+		toolCount++
+	}
 
 	slog.Info("tool registration complete", "tools", toolCount)
 }

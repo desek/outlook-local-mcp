@@ -1054,3 +1054,82 @@ func TestRegisterTools_CalendarSchedulingReads(t *testing.T) {
 		}
 	}
 }
+
+// TestRegisterTools_ContactsEnabled_RegistersFifthTool asserts that enabling
+// the contacts flag registers a fifth top-level tool named contacts, publishing
+// its five verbs in the operation enum.
+func TestRegisterTools_ContactsEnabled_RegistersFifthTool(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	cfg := testConfig()
+	cfg.ContactsEnabled = true
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
+
+	registered := s.ListTools()
+	if _, ok := registered["contacts"]; !ok {
+		t.Fatal("aggregate 'contacts' tool is absent although the contacts flag is set")
+	}
+
+	const expectedTotal = 5
+	if got := len(registered); got != expectedTotal {
+		t.Errorf("expected %d tools with contacts enabled, got %d", expectedTotal, got)
+	}
+
+	ops := registeredOperations(t, s, "contacts")
+	for _, name := range []string{"help", "search", "get_contact", "list_people", "get_person"} {
+		if !ops[name] {
+			t.Errorf("verb %q is absent from the contacts operation enum", name)
+		}
+	}
+	if got := len(ops); got != 5 {
+		t.Errorf("contacts publishes %d operations, want 5; the domain is scoped to reads only", got)
+	}
+}
+
+// TestRegisterTools_ContactsDisabled_StaysFourTools asserts that the default
+// surface is unchanged by this domain's existence, graded by name and not only
+// by count: a fifth tool registered under a different name would pass a count
+// assertion alone.
+func TestRegisterTools_ContactsDisabled_StaysFourTools(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), testConfig(), nil)
+
+	registered := s.ListTools()
+	if _, ok := registered["contacts"]; ok {
+		t.Error("aggregate 'contacts' tool is registered although the contacts flag is unset")
+	}
+
+	want := map[string]bool{"calendar": true, "mail": true, "account": true, "system": true}
+	for name := range registered {
+		if !want[name] {
+			t.Errorf("unexpected tool %q in the default surface", name)
+		}
+	}
+	for name := range want {
+		if _, ok := registered[name]; !ok {
+			t.Errorf("default tool %q is missing", name)
+		}
+	}
+}

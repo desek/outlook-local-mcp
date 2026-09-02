@@ -6,8 +6,10 @@
 // aggregate annotation and discards the per-verb detail. The classification-
 // presence guard needs that per-verb detail, so BuildDomainVerbSets reproduces
 // the verb-building portion of RegisterTools without registering, returning the
-// slices for inspection. It deliberately mirrors the four build-config literals
-// in RegisterTools; keep the two in sync when a domain gains a dependency.
+// slices for inspection. It deliberately mirrors the build-config literals
+// in RegisterTools, including the condition under which the opt-in contacts
+// domain is built; keep the two in sync when a domain gains a dependency or a
+// gate.
 package server
 
 import (
@@ -27,9 +29,11 @@ import (
 // metadata (Name, Annotations) that RegisterTools does not otherwise expose.
 //
 // The returned map is keyed by domain name ("calendar", "account", "system",
-// "mail"). The verb set for each domain reflects the same gating RegisterTools
-// applies: mail read/write verbs follow cfg.MailEnabled / cfg.MailManageEnabled,
-// and system's complete_auth follows cfg.AuthMethod.
+// "mail", and "contacts" when enabled). The verb set for each domain reflects
+// the same gating RegisterTools applies: mail read/write verbs follow
+// cfg.MailEnabled / cfg.MailManageEnabled, system's complete_auth follows
+// cfg.AuthMethod, and the whole contacts domain follows cfg.ContactsEnabled,
+// so no "contacts" key is present when that flag is false.
 //
 // Parameters:
 //   - cfg: the server configuration driving verb gating.
@@ -106,10 +110,28 @@ func BuildDomainVerbSets(
 		readOnly:             false,
 	})
 
-	return map[string][]tools.Verb{
+	sets := map[string][]tools.Verb{
 		"calendar": calVerbs,
 		"account":  accVerbs,
 		"system":   sysVerbs,
 		"mail":     mailVerbs,
 	}
+
+	// The contacts domain is built only under the same condition RegisterTools
+	// registers it under, so an inspecting caller sees the domain set the
+	// running server would expose and no "contacts" key exists when the flag
+	// is off.
+	if cfg.ContactsEnabled {
+		contactsVerbs, _ := buildContactsVerbs(contactsVerbsConfig{
+			retryCfg:          retryCfg,
+			timeout:           timeout,
+			m:                 m,
+			tracer:            tracer,
+			authMW:            authMW,
+			accountResolverMW: accountResolverMW,
+		})
+		sets["contacts"] = contactsVerbs
+	}
+
+	return sets
 }
