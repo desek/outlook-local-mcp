@@ -66,7 +66,7 @@ var llmsSections = []llmsSection{
 			{
 				title:       "Extension Manifest",
 				path:        "extension/manifest.json",
-				description: "MCP tool manifest listing all four aggregate domain tools (calendar, mail, account, system) with their annotations.",
+				description: "MCP tool manifest listing the four default aggregate domain tools (calendar, mail, account, system) and the opt-in contacts tool, with their annotations.",
 			},
 		},
 	},
@@ -150,7 +150,7 @@ func GenerateLLMsTxt() string {
 	b.WriteString("It supports several accounts at once, so it also fits \"do this on my work account, not my personal one\".\n\n")
 	b.WriteString("Do not reach for it when there is no local Microsoft account to connect, when the task is a bulk server-side mailbox migration or admin operation, or when the user wants a hosted multi-tenant web API. ")
 	b.WriteString("This is a local, single-binary MCP server that runs on the user's own machine and speaks to Microsoft Graph directly; it has no hosted endpoint and no API keys.\n\n")
-	b.WriteString("To call it, connect over the Model Context Protocol and dispatch a verb on one of the four aggregate tools (`calendar`, `mail`, `account`, `system`) with a required `operation`. ")
+	b.WriteString("To call it, connect over the Model Context Protocol and dispatch a verb on one of the four default aggregate tools (`calendar`, `mail`, `account`, `system`), or on `contacts` where the operator has set `OUTLOOK_MCP_CONTACTS_ENABLED`, with a required `operation`. ")
 	b.WriteString("Start with `{tool: \"system\", args: {operation: \"status\"}}` to confirm the server is up, then `{tool: \"calendar\", args: {operation: \"help\"}}` or the same `help` verb on any domain to discover that domain's verbs and parameters.\n\n")
 
 	for _, section := range llmsSections {

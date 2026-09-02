@@ -339,10 +339,47 @@
       ],
       "fullCount": 7,
       "defaultCount": 6
+    },
+    {
+      "name": "contacts",
+      "verbs": [
+        {
+          "name": "help",
+          "summary": "show detailed documentation for all verbs or a single named verb",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        },
+        {
+          "name": "search",
+          "summary": "free-text search over saved contacts and relevance-ranked people",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        },
+        {
+          "name": "get_contact",
+          "summary": "get one saved personal contact by ID with all of its email addresses",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        },
+        {
+          "name": "list_people",
+          "summary": "list relevance-ranked people, most relevant correspondent first",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        },
+        {
+          "name": "get_person",
+          "summary": "get one relevance-ranked person by ID with all of its scored addresses",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        }
+      ],
+      "fullCount": 5,
+      "defaultCount": 0
     }
   ],
   "totals": {
-    "fullCount": 52,
+    "fullCount": 57,
     "defaultCount": 38
   },
   "config": [

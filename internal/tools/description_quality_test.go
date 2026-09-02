@@ -38,6 +38,7 @@ func fullSurfaceConfig() config.Config {
 		AuthMethod:        "auth_code",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
 	}
 }
 
@@ -90,7 +91,7 @@ func TestDescriptionsListVerbsOnSeparateLines(t *testing.T) {
 	s := buildTestServer(t, cfg)
 	names := domainVerbNames(t, cfg)
 
-	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts"} {
 		tool := getRegisteredTool(t, s, domain)
 		for _, verb := range names[domain] {
 			if verbLine(tool.Description, verb) == "" {
@@ -127,7 +128,7 @@ func TestEveryVerbStatesRequiredParameters(t *testing.T) {
 	s := buildTestServer(t, cfg)
 	names := domainVerbNames(t, cfg)
 
-	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts"} {
 		tool := getRegisteredTool(t, s, domain)
 		for _, verb := range names[domain] {
 			line := verbLine(tool.Description, verb)
@@ -148,7 +149,7 @@ func TestDescriptionLengthBounded(t *testing.T) {
 	const maxLen = 4000
 	s := buildTestServer(t, fullSurfaceConfig())
 
-	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts"} {
 		tool := getRegisteredTool(t, s, domain)
 		if got := len(tool.Description); got >= maxLen {
 			t.Errorf("domain %q description is %d chars, want < %d", domain, got, maxLen)
@@ -161,7 +162,7 @@ func TestDescriptionLengthBounded(t *testing.T) {
 func TestEveryParameterHasDescription(t *testing.T) {
 	s := buildTestServer(t, fullSurfaceConfig())
 
-	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts"} {
 		tool := getRegisteredTool(t, s, domain)
 
 		raw, err := json.Marshal(tool.InputSchema)

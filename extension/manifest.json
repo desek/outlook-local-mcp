@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "display_name": "Local Outlook MCP",
   "description": "Manage Microsoft Outlook calendars, events, and email directly from Claude. Runs entirely on your local machine — data stays on your device.",
-  "long_description": "A local MCP server that connects Claude to your Microsoft Outlook account via the Microsoft Graph API.\n\n## Features\n\n- **Calendar management**: list, create, update, delete, cancel, reschedule, and respond to events\n- **Free/busy lookup**: check availability across time ranges\n- **Email access**: list folders, search messages, read full message details\n- **Multi-account**: add and switch between multiple Microsoft accounts\n- **Recurrence support**: create and expand recurring events (daily, weekly, monthly, yearly)\n- **Teams integration**: create events with automatic Teams online meeting links\n\n## Privacy & Security\n\n- Runs as a single binary on your machine — no cloud relay, no proxy\n- OAuth tokens stored in your OS keychain (macOS Keychain / Windows Credential Manager)\n- Only connects to Microsoft Graph API with your explicit consent\n- Delegated permissions only: Calendars.ReadWrite, Mail.Read, User.Read",
+  "long_description": "A local MCP server that connects Claude to your Microsoft Outlook account via the Microsoft Graph API.\n\n## Features\n\n- **Calendar management**: list, create, update, delete, cancel, reschedule, and respond to events\n- **Free/busy lookup**: check availability across time ranges\n- **Email access**: list folders, search messages, read full message details\n- **Multi-account**: add and switch between multiple Microsoft accounts\n- **Recurrence support**: create and expand recurring events (daily, weekly, monthly, yearly)\n- **Teams integration**: create events with automatic Teams online meeting links\n\n## Privacy & Security\n\n- Runs as a single binary on your machine — no cloud relay, no proxy\n- OAuth tokens stored in your OS keychain (macOS Keychain / Windows Credential Manager)\n- Only connects to Microsoft Graph API with your explicit consent\n- Delegated permissions only: Calendars.ReadWrite, Mail.Read, User.Read; Contacts.Read and People.Read are requested only when OUTLOOK_MCP_CONTACTS_ENABLED is set",
   "author": {
     "name": "Daniel Grenemark",
     "url": "https://github.com/desek"
@@ -67,6 +67,10 @@
     {
       "name": "system",
       "description": "System diagnostics, authentication utilities, and embedded documentation access. Required operation: help (detailed docs), about (build identity and host environment metadata), status (server health, accounts, config), complete_auth (finish auth_code flow — only when auth=auth_code), list_docs (list embedded documentation slugs), search_docs (keyword search across embedded docs), get_docs (fetch full content or a section by slug and anchor)."
+    },
+    {
+      "name": "contacts",
+      "description": "Read-only contact and people lookup for resolving a name to an email address, registered only when ContactsEnabled. Required operation: help (detailed docs), search (free-text search over saved contacts and relevance-ranked people — ContactsEnabled), get_contact (one saved personal contact with all of its email addresses — ContactsEnabled), list_people (relevance-ranked people, most relevant correspondent first — ContactsEnabled), get_person (one relevance-ranked person with all of its scored addresses — ContactsEnabled)."
     }
   ],
   "compatibility": {

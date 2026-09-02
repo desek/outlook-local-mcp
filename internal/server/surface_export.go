@@ -22,7 +22,8 @@ import (
 
 // BuildVerbsForInspection builds every domain's verb slice under cfg using
 // no-op middleware and zero-value dependencies, returning them keyed by domain
-// name ("calendar", "account", "system", "mail").
+// name ("calendar", "account", "system", "mail", and "contacts" when that
+// opt-in domain is enabled).
 //
 // It is a thin wrapper over BuildDomainVerbSets that supplies an identity
 // middleware factory and nil registry, metrics, and tracer, and zero retry and

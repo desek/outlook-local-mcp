@@ -11,16 +11,21 @@ import (
 )
 
 // TestBuildVerbsRequiresNoCredentials asserts that the surface inspection entry
-// point builds all four domain verb slices from a zero-value configuration with
-// nil metrics, tracer, and registry, without panicking. Building constructs and
-// wraps handlers but never invokes them, so no credential is read and no Graph
-// call is made (NFR-2, FR-1). The four slices must each be non-empty.
+// point builds every domain verb slice from a credential-free configuration
+// with nil metrics, tracer, and registry, without panicking. Building constructs
+// and wraps handlers but never invokes them, so no credential is read and no
+// Graph call is made (NFR-2, FR-1). Each slice must be non-empty.
+//
+// Only the contacts gate is opened, because that domain is not registered at all
+// when it is closed and would otherwise be absent from the assertion. Opening a
+// gate reads no credential, so the property under test is unaffected.
 func TestBuildVerbsRequiresNoCredentials(t *testing.T) {
-	var cfg config.Config // zero value: no client, no accounts, no gates enabled
+	// No client, no accounts, no credentials; only the contacts gate is open.
+	cfg := config.Config{ContactsEnabled: true}
 
 	sets := BuildVerbsForInspection(cfg)
 
-	for _, domain := range []string{"calendar", "account", "system", "mail"} {
+	for _, domain := range []string{"calendar", "account", "system", "mail", "contacts"} {
 		verbs, ok := sets[domain]
 		if !ok {
 			t.Errorf("missing domain %q in inspection result", domain)

@@ -742,6 +742,51 @@ Call `{tool: "calendar", args: {operation: "get_event_attachment", event_id: "<a
 - **Cleanup:** Call `{tool: "calendar", args: {operation: "delete_event", event_id: "<attachment event ID>"}}`. Deleting the event removes its attachments with it; there is no separate attachment removal verb.
 - **Fail:** If the returned content does not decode to the bytes sent in Step 44, if the unknown attachment ID is accepted, or if the cleanup delete fails.
 
+### Step 47 -- Contacts domain help (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "help"}}`.
+
+- **Skip:** If no `contacts` tool is registered, mark Steps 47-51 SKIP with the reason "contacts disabled" and continue. The domain is opt-in and is absent unless `OUTLOOK_MCP_CONTACTS_ENABLED` is set.
+- **Verify:** The response names all five verbs: `help`, `search`, `get_contact`, `list_people`, `get_person`.
+- **Verify:** Every verb is documented as read-only and non-destructive; no write, create, update, delete, folder, photo, directory, or sync verb is listed.
+- **Fail:** If any of the five verbs is missing, or if any verb that writes a contact is offered.
+
+### Step 48 -- Search contacts and people (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "search", query: "<first name of the attendee from Step 2, or any common name>"}}`.
+
+- **Verify:** The default response is plain text and every match is labelled with the source it came from, so a saved personal contact is distinguishable from a relevance-ranked person.
+- **Verify (summary tier):** Call again with `output: "summary"`. The response is structured and still carries the display name and the email address of each match.
+- **Verify (empty query rejected):** Call again with `query: "   "`. The call must fail naming the `query` parameter and stating what to supply, and no result set is returned.
+- **Record:** A `contact_id` and a `person_id` from the results, if any, for Steps 49 and 51.
+- **Fail:** If a match carries no source label, if the whitespace-only query is accepted, or if the summary tier omits the address.
+
+### Step 49 -- Get one saved contact (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "get_contact", contact_id: "<contact_id from Step 48>"}}`. If Step 48 returned no personal contact, mark this step SKIP with the reason "no personal contact in this mailbox".
+
+- **Verify:** Response is plain text naming the contact's display name and every one of its email addresses.
+- **Verify (invalid identifier):** Call again with `contact_id: ""`. The call must fail naming the `contact_id` parameter, before any Microsoft Graph request is issued.
+- **Fail:** If the addresses are missing, or if the empty identifier is accepted.
+
+### Step 50 -- List relevance-ranked people (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "list_people"}}`.
+
+- **Verify:** The default response is plain text, a numbered list of people ending with a total count.
+- **Verify:** The order is the relevance order Microsoft Graph returned, most relevant first; it is not alphabetical unless Graph returned it that way.
+- **Verify (raw tier):** Call again with `output: "raw"`. The response carries the full payload for each person.
+- **Record:** A `person_id` from the results for Step 51 if Step 48 supplied none.
+- **Fail:** If the response is re-sorted, or if the total count is absent.
+
+### Step 51 -- Get one relevance-ranked person (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "get_person", person_id: "<person_id from Step 48 or Step 50>"}}`.
+
+- **Verify:** Response is plain text naming the person's display name and every one of its scored email addresses, each address labelled with that same display name.
+- **Verify (invalid identifier):** Call again with `person_id: ""`. The call must fail naming the `person_id` parameter, before any Microsoft Graph request is issued.
+- **Fail:** If any scored address is omitted, or if the empty identifier is accepted.
+
 ## Reporting
 
 After all steps, print a summary table. Every row **MUST** include a short `Comment` (under ~120 characters) explaining the result — for PASS rows, a brief confirmation of what was verified; for FAIL rows, the failure cause (tool name, error, mismatch); for SKIP rows, the reason (e.g., "single-account mode"). Do not leave the `Comment` column blank.
@@ -823,6 +868,11 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 44   | Add attachment to an event        | PASS/FAIL      | e.g., "attachment id and size confirmed; bad base64 refused" |
 | 45   | List event attachments            | PASS/FAIL      | e.g., "crud-test.txt listed, metadata only, no content"  |
 | 46   | Get event attachment (round trip) | PASS/FAIL      | e.g., "base64 decodes to the bytes sent; event deleted"  |
+| 47   | Contacts help (five verbs)        | PASS/FAIL/SKIP | e.g., "help, search, get_contact, list_people, get_person" |
+| 48   | Search contacts and people        | PASS/FAIL/SKIP | e.g., "matches labelled by source; blank query refused"  |
+| 49   | Get one saved contact             | PASS/FAIL/SKIP | e.g., "all email addresses returned; empty id refused"   |
+| 50   | List relevance-ranked people      | PASS/FAIL/SKIP | e.g., "relevance order preserved; total count present"   |
+| 51   | Get one relevance-ranked person   | PASS/FAIL/SKIP | e.g., "scored addresses labelled with display name"      |
 ```
 
 Then print the **environment** section using all values recorded in Steps 0c and 1:

@@ -116,7 +116,7 @@ func buildContactsSearchVerb(c contactsVerbsConfig, rc graph.RetryConfig, wrap f
 			{Args: map[string]any{"query": "Alex"}, Comment: "resolve a first name to an address"},
 			{Args: map[string]any{"query": "Smith", "output": "summary"}, Comment: "return display names and primary addresses only"},
 		},
-		SeeDocs: []string{"concepts#output-tiers"},
+		SeeDocs: []string{"concepts#output-tiers", "concepts#contacts-gating"},
 		Handler: wrap("contacts.search", "read", tools.NewHandleContactsSearch(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -147,7 +147,7 @@ func buildGetContactVerb(c contactsVerbsConfig, rc graph.RetryConfig, wrap func(
 		Examples: []tools.Example{
 			{Args: map[string]any{"contact_id": "AAMkAGI2..."}, Comment: "fetch a contact returned by search"},
 		},
-		SeeDocs: []string{"concepts#output-tiers"},
+		SeeDocs: []string{"concepts#output-tiers", "concepts#contacts-gating"},
 		Handler: wrap("contacts.get_contact", "read", tools.NewHandleGetContact(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -179,7 +179,7 @@ func buildListPeopleVerb(c contactsVerbsConfig, rc graph.RetryConfig, wrap func(
 			{Args: map[string]any{}, Comment: "list the most relevant people"},
 			{Args: map[string]any{"output": "summary"}, Comment: "return display names and primary addresses only"},
 		},
-		SeeDocs: []string{"concepts#output-tiers"},
+		SeeDocs: []string{"concepts#output-tiers", "concepts#contacts-gating"},
 		Handler: wrap("contacts.list_people", "read", tools.NewHandleListPeople(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),
@@ -206,7 +206,7 @@ func buildGetPersonVerb(c contactsVerbsConfig, rc graph.RetryConfig, wrap func(s
 		Examples: []tools.Example{
 			{Args: map[string]any{"person_id": "d4b8b3a0-..."}, Comment: "fetch a person returned by list_people"},
 		},
-		SeeDocs: []string{"concepts#output-tiers"},
+		SeeDocs: []string{"concepts#output-tiers", "concepts#contacts-gating"},
 		Handler: wrap("contacts.get_person", "read", tools.NewHandleGetPerson(rc, c.timeout)),
 		Annotations: []mcp.ToolOption{
 			mcp.WithReadOnlyHintAnnotation(true),

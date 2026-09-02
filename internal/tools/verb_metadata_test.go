@@ -55,6 +55,7 @@ func buildMetadataTestServer(t *testing.T) *mcpserver.MCPServer {
 		AuthMethod:        "browser",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
 	}
 	server.RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, r, cfg, nil)
 	return s
@@ -97,7 +98,7 @@ func verbsFromHelp(t *testing.T, s *mcpserver.MCPServer, domain string) []map[st
 // has a non-empty Description field (CR-0065 FR-9, AC-4).
 func TestEveryVerbHasDescription(t *testing.T) {
 	s := buildMetadataTestServer(t)
-	domains := []string{"calendar", "mail", "account", "system"}
+	domains := []string{"calendar", "mail", "account", "system", "contacts"}
 
 	for _, domain := range domains {
 		verbs := verbsFromHelp(t, s, domain)
@@ -146,17 +147,19 @@ func TestEveryVerbHasClassification(t *testing.T) {
 	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
 	audit.InitAuditLog(false, "")
 
-	// auth_code plus both mail flags registers every verb the server can host.
+	// auth_code plus both mail flags and the contacts gate registers every verb
+	// the server can host.
 	cfg := config.Config{
 		AuthRecordPath:    "/tmp/test",
 		CacheName:         "test",
 		AuthMethod:        "auth_code",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
 	}
 	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
 
-	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts"} {
 		verbs, ok := verbSets[domain]
 		if !ok {
 			t.Errorf("domain %q missing from verb sets", domain)
@@ -201,7 +204,7 @@ func missingClassificationHints(opts []mcp.ToolOption) []string {
 // at most 80 characters (CR-0065 FR-9, original CR-0060 contract).
 func TestEveryVerbHasSummary(t *testing.T) {
 	s := buildMetadataTestServer(t)
-	domains := []string{"calendar", "mail", "account", "system"}
+	domains := []string{"calendar", "mail", "account", "system", "contacts"}
 
 	for _, domain := range domains {
 		verbs := verbsFromHelp(t, s, domain)
@@ -227,7 +230,7 @@ func TestEveryVerbHasSummary(t *testing.T) {
 // in that file (CR-0065 FR-11, AC-6).
 func TestSeeDocsAnchorsResolve(t *testing.T) {
 	s := buildMetadataTestServer(t)
-	domains := []string{"calendar", "mail", "account", "system"}
+	domains := []string{"calendar", "mail", "account", "system", "contacts"}
 
 	// Build heading index: slug -> set of anchor strings derived from "## Heading".
 	headingIndex := buildHeadingIndex(t)
@@ -370,11 +373,12 @@ func TestWriteVerbsDeclareNoOutputParameter(t *testing.T) {
 		AuthMethod:        "auth_code",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
 	}
 	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
 
 	checked := 0
-	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts"} {
 		for _, v := range verbSets[domain] {
 			if verbIsReadOnly(v.Annotations) {
 				continue

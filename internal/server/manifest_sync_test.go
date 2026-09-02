@@ -1,8 +1,8 @@
 // Package server — this file holds the derived check that keeps
 // extension/manifest.json in step with the verb registry.
 //
-// The manifest is what Claude Desktop reads to describe the four aggregate
-// tools, and nothing else in the build reads it, so a verb added to a domain
+// The manifest is what Claude Desktop reads to describe the aggregate tools,
+// and nothing else in the build reads it, so a verb added to a domain
 // registry without a matching manifest edit ships an extension that describes a
 // surface that no longer exists. The cases here are derived from the registry
 // under the maximal configuration rather than listed, so a future verb is
@@ -35,8 +35,9 @@ type manifestTool struct {
 
 // manifestDocument is the subset of extension/manifest.json this check reads.
 type manifestDocument struct {
-	// Tools is the published aggregate tool list, which must stay at four
-	// entries because the MCP surface is four aggregate domain tools.
+	// Tools is the published aggregate tool list, which must stay at five
+	// entries because the MCP surface is four aggregate domain tools by
+	// default plus the opt-in contacts domain.
 	Tools []manifestTool `json:"tools"`
 }
 
@@ -68,6 +69,7 @@ func maximalSurfaceConfig() config.Config {
 	return config.Config{
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
 		AuthMethod:        "auth_code",
 	}
 }
@@ -75,7 +77,8 @@ func maximalSurfaceConfig() config.Config {
 // TestManifestDescribesEveryRegisteredVerb asserts that every verb the registry
 // registers for a domain under the maximal configuration is named in that
 // domain's extension/manifest.json description, and that the tools array holds
-// exactly the four aggregate domain tools.
+// exactly the four default aggregate domain tools plus the opt-in contacts
+// domain.
 //
 // The verb name is matched on word boundaries so a shorter name cannot be
 // satisfied by a longer one that contains it: Go's \b treats the underscore as a
@@ -84,8 +87,8 @@ func maximalSurfaceConfig() config.Config {
 func TestManifestDescribesEveryRegisteredVerb(t *testing.T) {
 	doc := readExtensionManifest(t)
 
-	if len(doc.Tools) != 4 {
-		t.Fatalf("extension/manifest.json declares %d tools, want exactly 4 aggregate domain tools", len(doc.Tools))
+	if len(doc.Tools) != 5 {
+		t.Fatalf("extension/manifest.json declares %d tools, want exactly 5 aggregate domain tools", len(doc.Tools))
 	}
 
 	described := make(map[string]string, len(doc.Tools))

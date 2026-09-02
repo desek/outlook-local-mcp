@@ -66,9 +66,20 @@ Mail access is disabled by default and enabled in two tiers via environment vari
 
 `Mail.Send` is **never** requested under any configuration. The model prepares drafts that land in Outlook Drafts for manual review; email is never sent automatically. Enabling mail read for the first time triggers an incremental consent prompt; upgrading to mail manage triggers re-consent.
 
+## Contacts gating
+
+The `contacts` domain is off by default. It is the one aggregate tool that is not registered unless it is asked for, so a user who never enables it sees four tools, no contacts verb, and no contacts consent prompt.
+
+| Variable | Value | Effect |
+|---|---|---|
+| `OUTLOOK_MCP_CONTACTS_ENABLED` | `false` (default) | The `contacts` tool is not registered; the surface stays at four aggregate tools and no contacts OAuth scope is requested |
+| `OUTLOOK_MCP_CONTACTS_ENABLED` | `true` | Registers the fifth aggregate tool, `contacts`, with its read verbs (`contacts.search`, `contacts.get_contact`, `contacts.list_people`, `contacts.get_person`) and the mandatory `contacts.help`; requests `Contacts.Read` and `People.Read` |
+
+Both scopes are read scopes. No contact write scope (`Contacts.ReadWrite`) is requested under any configuration, and the domain registers no verb that creates, updates, deletes, or moves a contact, person, or folder. Enabling contacts for the first time triggers an incremental consent prompt.
+
 ## Tool annotation semantics
 
-The four aggregate tools (`calendar`, `mail`, `account`, `system`) each publish the five MCP annotations (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) at tool granularity. Because a single tool hosts many verbs whose individual classifications differ, each aggregate annotation is computed as a **conservative fold** over the verbs actually registered in the running configuration, not hard-coded:
+The four default aggregate tools (`calendar`, `mail`, `account`, `system`), and the opt-in `contacts` tool when it is registered, each publish the five MCP annotations (`title`, `readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`) at tool granularity. Because a single tool hosts many verbs whose individual classifications differ, each aggregate annotation is computed as a **conservative fold** over the verbs actually registered in the running configuration, not hard-coded:
 
 - `readOnlyHint` is `true` only when **every** registered verb is read-only.
 - `destructiveHint` is `true` when **at least one** registered verb is destructive.
@@ -110,9 +121,11 @@ The server requests scopes incrementally. Expanding mail access after initial co
 | `MAIL_ENABLED=false` (default) | *(none)* |
 | `MAIL_ENABLED=true` | `Mail.Read` |
 | `MAIL_MANAGE_ENABLED=true` (implies `MAIL_ENABLED`) | `Mail.ReadWrite` |
+| `OUTLOOK_MCP_CONTACTS_ENABLED=false` (default) | *(none)* |
+| `OUTLOOK_MCP_CONTACTS_ENABLED=true` | `Contacts.Read`, `People.Read` |
 | Refresh tokens (always) | `offline_access` (added automatically by the identity library) |
 
-`Mail.Send` is never requested under any configuration.
+`Mail.Send` is never requested under any configuration, and neither is `Contacts.ReadWrite`.
 
 ## Well-known client IDs
 
@@ -160,7 +173,7 @@ The server ships as an OCI container image at `ghcr.io/desek/outlook-local-mcp`.
 
 Running inside a container supports the full feature set over stdio:
 
-- All four aggregate domain tools: `calendar`, `mail`, `account`, `system`
+- All four default aggregate domain tools: `calendar`, `mail`, `account`, `system`, plus the opt-in `contacts` tool when `OUTLOOK_MCP_CONTACTS_ENABLED` is set
 - Microsoft Graph API access (ca-certs are included in every variant)
 - Multi-account support with file-backed token storage
 - Observability: structured logs written to stderr, OpenTelemetry metrics and traces

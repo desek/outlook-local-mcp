@@ -3,8 +3,9 @@
 //
 // This file implements the shared conservative-fold helper that derives an
 // aggregate domain tool's five MCP annotations from the set of verbs actually
-// registered for that domain (CR-0068). The four domain tools (calendar, mail,
-// account, system) publish a single tool-granularity annotation each, yet host
+// registered for that domain (CR-0068). The four default domain tools (calendar,
+// mail, account, system), and the opt-in contacts tool when it is registered,
+// publish a single tool-granularity annotation each, yet host
 // many verbs whose individual read-only, destructive, idempotent and open-world
 // classifications differ. Publishing a static annotation is wrong in at least
 // one supported gated configuration, so the aggregate is computed here as a pure

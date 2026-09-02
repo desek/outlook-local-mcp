@@ -384,9 +384,10 @@ func TestPerVerbAnnotations_DocumentedInHelp(t *testing.T) {
 		AuthMethod:        "browser",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
 	})
 
-	domains := []string{"calendar", "mail", "account", "system"}
+	domains := []string{"calendar", "mail", "account", "system", "contacts"}
 	for _, domain := range domains {
 		t.Run(domain, func(t *testing.T) {
 			msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + domain + `","arguments":{"operation":"help"}}}`

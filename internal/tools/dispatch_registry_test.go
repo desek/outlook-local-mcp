@@ -28,7 +28,7 @@ import (
 // the canonical form "domain.operation ro=%t de=%t id=%t ow=%t", sorted.
 //
 // It is generated under the maximal configuration (AuthMethod "auth_code" plus
-// both mail flags) so every gateable verb is present. This is deliberately a
+// both mail flags and the contacts gate) so every gateable verb is present. This is deliberately a
 // golden list rather than a count: a count would pass if one verb were dropped
 // and another added, which is exactly the shape a framework migration failure
 // takes. Per the project's standard on golden diffs, a failure here is a
@@ -64,6 +64,11 @@ var verbInventoryGolden = []string{
 	"calendar.search_events ro=true de=false id=true ow=true",
 	"calendar.update_event ro=false de=false id=true ow=true",
 	"calendar.update_meeting ro=false de=false id=true ow=true",
+	"contacts.get_contact ro=true de=false id=true ow=true",
+	"contacts.get_person ro=true de=false id=true ow=true",
+	"contacts.help ro=true de=false id=true ow=false",
+	"contacts.list_people ro=true de=false id=true ow=true",
+	"contacts.search ro=true de=false id=true ow=true",
 	"mail.add_attachment ro=false de=false id=false ow=true",
 	"mail.create_draft ro=false de=false id=false ow=true",
 	"mail.create_forward_draft ro=false de=false id=false ow=true",
@@ -110,13 +115,15 @@ func buildFullVerbInventory(t *testing.T) []string {
 	r := auth.NewAccountRegistry()
 	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
 
-	// auth_code plus both mail flags registers every verb the server can host.
+	// auth_code plus both mail flags and the contacts gate registers every verb
+	// the server can host.
 	cfg := config.Config{
 		AuthRecordPath:    "/tmp/test",
 		CacheName:         "test",
 		AuthMethod:        "auth_code",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
 	}
 	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
 
