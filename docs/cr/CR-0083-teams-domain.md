@@ -219,12 +219,15 @@ The Graph SDK request builders behind each call, confirmed against the pinned
 source, not the vendor's documentation. Every path, symbol, return type, and line number
 below was re-verified at review time and is accurate:
 
-* **Search**: `search.QueryRequestBuilder.Post` returns `QueryResponseable`
-  (`search/query_request_builder.go:43`). The body type is `search.QueryPostRequestBodyable`
+* **Search**: `search.QueryRequestBuilder.PostAsQueryPostResponse` returns
+  `QueryPostResponseable` (`search/query_request_builder.go:66`). The sibling
+  `Post` (`search/query_request_builder.go:43`) posts the same body to the same endpoint but
+  carries a `Deprecated` marker, so it fails `make lint` under staticcheck and is not used.
+  The body type is `search.QueryPostRequestBodyable`
   (`search/query_post_request_body.go:121`), which lives in the **`search` package, not
   `models`**; the entity type it carries is `models.CHATMESSAGE_ENTITYTYPE`
   (`models/entity_type.go:17`, whose `String()` is `"chatMessage"`). The accessor chain is
-  `client.Search().Query().Post(ctx, body, nil)`
+  `client.Search().Query().PostAsQueryPostResponse(ctx, body, nil)`
   (`GraphBaseServiceClient.Search()` at `graph_base_service_client.go:411`,
   `SearchRequestBuilder.Query()` at `search/search_request_builder.go:110`).
 * **Chats**: `users.ItemChatsRequestBuilder.Get` returns `models.ChatCollectionResponseable`
@@ -943,7 +946,7 @@ Run `make build`, `make vet`, and the package-scoped tests at the end of Phases 
 
 1. `internal/tools/teams_search.go`: build a `search.QueryPostRequestBodyable` whose
    `entityTypes` is `[]models.EntityType{models.CHATMESSAGE_ENTITYTYPE}`, reject an empty
-   `query` before the call, and issue `client.Search().Query().Post(...)` through the shared
+   `query` before the call, and issue `client.Search().Query().PostAsQueryPostResponse(...)` through the shared
    retry and timeout helpers with Graph errors redacted (FR-8).
 2. `internal/tools/teams_list_chats.go`: `client.Me().Chats().Get(...)`.
 3. `internal/tools/teams_list_chat_messages.go`,

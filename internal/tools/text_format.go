@@ -1528,3 +1528,48 @@ func teamsFieldOr(record map[string]any, key, placeholder string) string {
 func teamsSingleLine(text string) string {
 	return strings.Join(strings.Fields(text), " ")
 }
+
+// FormatPreparedTeamsReplyText renders a drafted Teams reply: the parent it
+// answers, the parent's text quoted, and the reply body itself. The rendering
+// opens and closes with the statement that nothing was sent, because the verb's
+// name contains the word "reply" and Teams has no draft store to make the
+// difference visible anywhere else; a reader who skims either end of the output
+// still learns that posting it is a manual action.
+//
+// Parameters:
+//   - parent: the raw-tier serialization of the message being answered, carrying
+//     "from", "createdDateTime", "body" or "bodyPreview", and its locating
+//     identifiers.
+//   - body: the reply text the caller supplied, returned unchanged.
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatPreparedTeamsReplyText(parent map[string]any, body string) string {
+	var b strings.Builder
+	b.WriteString("Prepared reply. NOT SENT: nothing was posted to Microsoft Teams.\n\n")
+
+	fmt.Fprintf(&b, "In reply to %s", teamsFieldOr(parent, "from", "(unknown sender)"))
+	if created, _ := parent["createdDateTime"].(string); created != "" {
+		fmt.Fprintf(&b, " (%s)", created)
+	}
+	b.WriteString(":\n")
+	writeTeamsIdentifierLines(&b, parent, "  ")
+	b.WriteString(quotedTeamsBody(teamsMessageBody(parent)))
+
+	fmt.Fprintf(&b, "\nReply text:\n%s\n", body)
+	b.WriteString("\nThis text has not been sent and no draft was stored. To send it, open the conversation in Microsoft Teams and paste the reply text.")
+
+	return b.String()
+}
+
+// quotedTeamsBody prefixes every line of the parent's text with a quote marker,
+// so the reply text below it is unambiguously the caller's own words rather than
+// a continuation of what is being answered.
+func quotedTeamsBody(text string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		fmt.Fprintf(&b, "  > %s\n", line)
+	}
+	return b.String()
+}
