@@ -321,6 +321,46 @@ func SerializeSummaryTranscript(transcript models.CallTranscriptable) map[string
 	}
 }
 
+// SerializeTranscriptMetadata projects a transcript's metadata onto the raw
+// tier without any content. It is what a raw-tier listing carries: the
+// escalation a listing offers is over how completely each record is described,
+// never over how much transcript text is inlined, because a meeting can hold
+// several transcripts and each is the full text of a call.
+//
+// Side effects: none.
+func SerializeTranscriptMetadata(transcript models.CallTranscriptable) map[string]any {
+	if transcript == nil {
+		return map[string]any{}
+	}
+
+	return map[string]any{
+		"id":                   graph.SafeStr(transcript.GetId()),
+		"meetingId":            graph.SafeStr(transcript.GetMeetingId()),
+		"callId":               graph.SafeStr(transcript.GetCallId()),
+		"createdDateTime":      teamsTimeStr(transcript.GetCreatedDateTime()),
+		"endDateTime":          teamsTimeStr(transcript.GetEndDateTime()),
+		"transcriptContentUrl": graph.SafeStr(transcript.GetTranscriptContentUrl()),
+		"contentCorrelationId": graph.SafeStr(transcript.GetContentCorrelationId()),
+		"meetingOrganizerId":   transcriptOrganizerID(transcript),
+	}
+}
+
+// transcriptOrganizerID returns the identifier of the meeting organiser a
+// transcript names, or an empty string when it names none. It matters because a
+// transcript is readable through the organiser's meeting, so a record whose
+// organiser is not this account explains a refusal the transcript read would
+// otherwise report only as an access error.
+func transcriptOrganizerID(transcript models.CallTranscriptable) string {
+	organizer := transcript.GetMeetingOrganizer()
+	if organizer == nil {
+		return ""
+	}
+	if user := organizer.GetUser(); user != nil {
+		return graph.SafeStr(user.GetId())
+	}
+	return ""
+}
+
 // SerializeTranscript projects one transcript's metadata together with its
 // WEBVTT content. A callTranscript carries no Graph-supplied preview field, so
 // the content is always fetched and this function decides how much of it the
@@ -342,15 +382,7 @@ func SerializeTranscript(transcript models.CallTranscriptable, content []byte, f
 		return map[string]any{}
 	}
 
-	result := map[string]any{
-		"id":                   graph.SafeStr(transcript.GetId()),
-		"meetingId":            graph.SafeStr(transcript.GetMeetingId()),
-		"callId":               graph.SafeStr(transcript.GetCallId()),
-		"createdDateTime":      teamsTimeStr(transcript.GetCreatedDateTime()),
-		"endDateTime":          teamsTimeStr(transcript.GetEndDateTime()),
-		"transcriptContentUrl": graph.SafeStr(transcript.GetTranscriptContentUrl()),
-		"contentCorrelationId": graph.SafeStr(transcript.GetContentCorrelationId()),
-	}
+	result := SerializeTranscriptMetadata(transcript)
 
 	text := string(content)
 	if full {
