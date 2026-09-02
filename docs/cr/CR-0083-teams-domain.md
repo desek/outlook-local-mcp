@@ -2,7 +2,7 @@
 id: "CR-0083"
 name: teams-domain
 description: Add a new teams aggregate domain for Teams message search, chat and channel message reads, a draft-only reply compose that never sends, and online meeting transcripts.
-status: "draft"
+status: "completed"
 date: 2026-09-01
 requestor: desek
 stakeholders:
@@ -10,7 +10,8 @@ stakeholders:
 target-version: "0.15.0"
 priority: "medium"
 source-branch: docs/cr-implementation-set-0079-0083
-source-commit: 85c6450
+source-commit: 0d71043
+completed-date: 2026-09-02
 ---
 
 # Teams Domain: Message Read, Search, Draft Reply, and Transcripts
@@ -1352,39 +1353,39 @@ Then docs/concepts.md carries a Teams gating and scope section and two OAuth sco
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
-- [ ] Any linter exceptions are documented with justification
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
+- [x] Any linter exceptions are documented with justification
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass, including under the race detector
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass, including under the race detector
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] Every new file carries a package-consistent doc comment and a single index annotation
-- [ ] Every new verb's parameters and annotation semantics are documented in the registry, not in markdown
-- [ ] The troubleshooting entries carry the stable anchors `#teams-disabled`,
+- [x] Every new file carries a package-consistent doc comment and a single index annotation
+- [x] Every new verb's parameters and annotation semantics are documented in the registry, not in markdown
+- [x] The troubleshooting entries carry the stable anchors `#teams-disabled`,
       `#teams-meeting-unresolved`, and `#teams-channel-identifiers`, and every verb `SeeDocs`
       reference resolves to an existing H2 heading in the embedded bundle
-- [ ] The domain enumeration in `AGENTS.md`, `README.md`, `docs/readme.md`,
+- [x] The domain enumeration in `AGENTS.md`, `README.md`, `docs/readme.md`,
       `docs/quickstart.md`, `docs/concepts.md`, `docs/troubleshooting.md`,
       `docs/reference/architecture.md`, and `extension/README.md` states the domains that now
       exist
-- [ ] No governance identifier appears in source, test names, or user-facing documentation
+- [x] No governance identifier appears in source, test names, or user-facing documentation
 
 ### Measurement
 
-- [ ] `TestColdStartSchemaSize_Reduction` has been re-run with `TeamsEnabled` set, and its
+- [x] `TestColdStartSchemaSize_Reduction` has been re-run with `TeamsEnabled` set, and its
       measured byte count and reduction percentage are recorded in the implementation notes
-- [ ] `minRequiredReductionPct` is unchanged at 60, or the CR-0060 budget is amended in this
+- [x] `minRequiredReductionPct` is unchanged at 60, or the CR-0060 budget is amended in this
       same change with the measurement chain published
 
 ## Risks and Mitigation
