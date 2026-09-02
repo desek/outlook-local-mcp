@@ -8,7 +8,8 @@
 // help, list_calendars, list_events, get_event, search_events, create_event,
 // update_event, delete_event, respond_event, reschedule_event, create_meeting,
 // update_meeting, cancel_meeting, reschedule_meeting, get_free_busy,
-// find_meeting_times, get_schedule.
+// find_meeting_times, get_schedule, list_event_attachments,
+// get_event_attachment, add_event_attachment.
 //
 // The aggregate "calendar" tool is registered unconditionally per FR-1.
 package server
@@ -56,6 +57,12 @@ type calendarVerbsConfig struct {
 
 	// readOnly controls whether write verbs are blocked by ReadOnlyGuard.
 	readOnly bool
+
+	// maxAttachmentSize is the ceiling in bytes applied to an event attachment
+	// downloaded by get_event_attachment and uploaded by add_event_attachment.
+	// It is the server's single attachment limit, shared with the mail domain,
+	// so a caller reasons about one knob rather than one per domain.
+	maxAttachmentSize int64
 }
 
 // buildCalendarVerbs constructs the ordered []tools.Verb slice for the calendar
@@ -115,6 +122,9 @@ func buildCalendarVerbs(c calendarVerbsConfig) ([]tools.Verb, *tools.VerbRegistr
 		buildGetFreeBusyVerb(c, rc, tz, wrap),
 		buildFindMeetingTimesVerb(c, rc, tz, wrap),
 		buildGetScheduleVerb(c, rc, tz, wrap),
+		buildListEventAttachmentsVerb(c, rc, wrap),
+		buildGetEventAttachmentVerb(c, rc, wrap),
+		buildAddEventAttachmentVerb(c, rc, wrapWrite),
 	}, registryPtr
 }
 
@@ -926,6 +936,136 @@ func buildGetScheduleVerb(c calendarVerbsConfig, rc graph.RetryConfig, tz string
 			mcp.WithString("output",
 				mcp.Description("Output mode: 'text' (default), 'summary', or 'raw'."),
 				mcp.Enum("text", "summary", "raw"),
+			),
+		},
+	}
+}
+
+// buildListEventAttachmentsVerb constructs the list_event_attachments Verb.
+//
+// It is registered on the read chain and unconditionally: an event attachment
+// is calendar data, so neither mail gate governs it, and a caller reading a
+// meeting's agenda must not have to enable the mail surface to see it.
+func buildListEventAttachmentsVerb(c calendarVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
+	return tools.Verb{
+		Name:        "list_event_attachments",
+		Summary:     "list attachment metadata (id, name, contentType, size) for an event",
+		Description: "Lists the attachments of a calendar event, returning metadata only: attachment ID, name, content type, and size in bytes. No content bytes are fetched, so the response stays small however large the attachments are; pass a returned attachment_id to get_event_attachment to download one. Requires event_id. Read-only, non-destructive, idempotent, and open-world: it queries Graph and changes nothing. Returns a numbered list by default; use output=summary or output=raw for structured results.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"event_id": "AAMkAGI2..."}, Comment: "list what is attached to an event"},
+			{Args: map[string]any{"event_id": "AAMkAGI2...", "output": "raw"}, Comment: "read the full attachment metadata as structured JSON"},
+		},
+		SeeDocs: []string{"concepts#output-tiers"},
+		Handler: wrap("calendar.list_event_attachments", "read", tools.NewHandleListEventAttachments(rc, c.timeout)),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(true),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("event_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the event whose attachments are listed."),
+			),
+			mcp.WithString("account",
+				mcp.Description("Account label or UPN to use. Never assume a default account — always check account list first. Accepts a label (e.g. 'work') or UPN (e.g. 'user@contoso.com'). Disconnected accounts are listed but require login before use."),
+			),
+			mcp.WithString("output",
+				mcp.Description("Output mode: 'text' (default), 'summary', or 'raw'."),
+				mcp.Enum("text", "summary", "raw"),
+			),
+		},
+	}
+}
+
+// buildGetEventAttachmentVerb constructs the get_event_attachment Verb.
+//
+// The size ceiling is stated in the published description because it is the one
+// thing about this verb a caller cannot discover from the schema: the refusal
+// arrives only after a request, and a caller that knows the bound in advance
+// can choose to list first rather than spend the call.
+func buildGetEventAttachmentVerb(c calendarVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
+	return tools.Verb{
+		Name:        "get_event_attachment",
+		Summary:     "download an event attachment; returns metadata and base64 content",
+		Description: "Downloads one attachment of a calendar event and returns its metadata plus the content as a standard base64-encoded string. Requires event_id and attachment_id; obtain the attachment_id from list_event_attachments. The full content is returned only within the server's attachment size limit (OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES, 10 MB by default); a larger attachment is refused with an error naming the limit, and no partial content is returned, so read the size from list_event_attachments first when the attachment may be large. Read-only, non-destructive, idempotent, and open-world: it queries Graph and changes nothing. Returns labeled fields by default; use output=summary or output=raw for structured results.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"event_id": "AAMkAGI2...", "attachment_id": "AAMkAGI2ZGY..."}, Comment: "download an attachment of an event"},
+			{Args: map[string]any{"event_id": "AAMkAGI2...", "attachment_id": "AAMkAGI2ZGY...", "output": "raw"}, Comment: "read the attachment and its metadata as structured JSON"},
+		},
+		SeeDocs: []string{"concepts#output-tiers"},
+		Handler: wrap("calendar.get_event_attachment", "read", tools.NewHandleGetEventAttachment(rc, c.timeout, c.maxAttachmentSize)),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(true),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(true),
+			mcp.WithOpenWorldHintAnnotation(true),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("event_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the event the attachment belongs to."),
+			),
+			mcp.WithString("attachment_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the attachment, as returned by list_event_attachments."),
+			),
+			mcp.WithString("account",
+				mcp.Description("Account label or UPN to use. Never assume a default account — always check account list first. Accepts a label (e.g. 'work') or UPN (e.g. 'user@contoso.com'). Disconnected accounts are listed but require login before use."),
+			),
+			mcp.WithString("output",
+				mcp.Description("Output mode: 'text' (default), 'summary', or 'raw'."),
+				mcp.Enum("text", "summary", "raw"),
+			),
+		},
+	}
+}
+
+// buildAddEventAttachmentVerb constructs the add_event_attachment Verb.
+//
+// The MIME parameter is named mime_type rather than content_type for the same
+// reason the mail domain names it so: the aggregate tool publishes the union of
+// its verbs' parameters, and one concept keeps one name across the surface.
+//
+// No is_inline parameter is published. An event attachment the caller supplies
+// as a file has no body to be inline within, so the flag would name a choice
+// this verb does not offer.
+func buildAddEventAttachmentVerb(c calendarVerbsConfig, rc graph.RetryConfig, wrapWrite func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
+	return tools.Verb{
+		Name:        "add_event_attachment",
+		Summary:     "attach a file to an existing event; bytes supplied base64 in content_bytes",
+		Description: "Attaches a file to an existing calendar event. Requires event_id, name, and content_bytes; content_bytes carries the file content as a standard base64-encoded string, and the optional mime_type sets the attachment content type (defaults to application/octet-stream). The transfer mechanism is chosen from the decoded size, small files in a single request and larger ones through a chunked upload session, so the caller never selects it. Content above the server's attachment size limit (OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES, 10 MB by default) is refused before any upload begins. Attaching to an event that already has attendees does not itself notify them; use update_event when the change should reach them. Non-read-only, non-destructive (it only adds, leaving the event and its existing attachments untouched), non-idempotent (a repeated call adds a second attachment with a new ID), and open-world. The confirmation names the event, the attachment, its size, and the attachment ID the service assigned. Returns a text confirmation and takes no output parameter.",
+		Examples: []tools.Example{
+			{Args: map[string]any{"event_id": "AAMkAGI2...", "name": "agenda.pdf", "content_bytes": "JVBERi0xLjQK...", "mime_type": "application/pdf"}, Comment: "attach a PDF agenda to a meeting"},
+			{Args: map[string]any{"event_id": "AAMkAGI2...", "name": "notes.txt", "content_bytes": "aGVsbG8gd29ybGQ="}, Comment: "attach a small file without naming its MIME type"},
+		},
+		SeeDocs: []string{"concepts#read-only-mode"},
+		Handler: wrapWrite("calendar.add_event_attachment", "write", tools.NewHandleAddEventAttachment(rc, c.timeout, c.maxAttachmentSize)),
+		Annotations: []mcp.ToolOption{
+			mcp.WithReadOnlyHintAnnotation(false),
+			mcp.WithDestructiveHintAnnotation(false),
+			mcp.WithIdempotentHintAnnotation(false),
+			mcp.WithOpenWorldHintAnnotation(true),
+		},
+		Schema: []mcp.ToolOption{
+			mcp.WithString("event_id",
+				mcp.Required(),
+				mcp.Description("The unique identifier of the event the attachment is added to."),
+			),
+			mcp.WithString("name",
+				mcp.Required(),
+				mcp.Description("File name the attachment carries on the event, for example agenda.pdf. At most 255 characters."),
+			),
+			mcp.WithString("content_bytes",
+				mcp.Required(),
+				mcp.Description("File content as a standard base64-encoded string. The decoded size selects the transfer path and is checked against the server's attachment size limit."),
+			),
+			mcp.WithString("mime_type",
+				mcp.Description("MIME type of the attachment, for example application/pdf. Omit to default to application/octet-stream. This is the attachment content type, not the event body content type."),
+			),
+			mcp.WithString("account",
+				mcp.Description("Account label or UPN to use. Never assume a default account — always check account list first. Accepts a label (e.g. 'work') or UPN (e.g. 'user@contoso.com'). Disconnected accounts are listed but require login before use."),
 			),
 		},
 	}

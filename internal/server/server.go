@@ -82,6 +82,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		authMW:               authMW,
 		accountResolverMW:    accountResolverMW,
 		readOnly:             readOnly,
+		maxAttachmentSize:    cfg.MaxAttachmentSizeBytes,
 	})
 	populatedCal := tools.RegisterDomainTool(s, tools.DomainToolConfig{
 		Domain:          "calendar",

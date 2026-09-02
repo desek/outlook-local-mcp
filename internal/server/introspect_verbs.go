@@ -70,6 +70,7 @@ func BuildDomainVerbSets(
 		authMW:               authMW,
 		accountResolverMW:    accountResolverMW,
 		readOnly:             false,
+		maxAttachmentSize:    cfg.MaxAttachmentSizeBytes,
 	})
 
 	accVerbs, _ := buildAccountVerbs(accountVerbsConfig{

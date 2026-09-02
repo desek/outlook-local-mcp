@@ -627,3 +627,69 @@ func TestSchedulingReadVerbAnnotations(t *testing.T) {
 		}
 	}
 }
+
+// TestCalendarAttachmentVerbAnnotations asserts the four hint values each of
+// the calendar event-attachment verbs declares, per the project's
+// classification matrix.
+//
+// The values are asserted per-verb because the aggregate fold hides them: the
+// calendar tool already publishes readOnlyHint false, destructiveHint true, and
+// idempotentHint false because create_event and delete_event force them, so
+// each of these three could be misclassified without moving the folded result
+// at all, while publishing the wrong classification in the domain's help
+// output, which is what a caller actually reasons about.
+//
+// The add is non-destructive because it only appends: it removes nothing and
+// leaves the event and its existing attachments as they were. It is
+// non-idempotent because it is a POST minting a new attachment identifier on
+// every successful call, so a repeated call leaves a second attachment behind.
+func TestCalendarAttachmentVerbAnnotations(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	byName := make(map[string][]mcp.ToolOption)
+	for _, v := range verbSets["calendar"] {
+		byName[v.Name] = v.Annotations
+	}
+
+	want := map[string]aggregateAnnotationExpectation{
+		"list_event_attachments": {readOnly: true, destructive: false, idempotent: true, openWorld: true},
+		"get_event_attachment":   {readOnly: true, destructive: false, idempotent: true, openWorld: true},
+		"add_event_attachment":   {readOnly: false, destructive: false, idempotent: false, openWorld: true},
+	}
+
+	for name, exp := range want {
+		opts, present := byName[name]
+		if !present {
+			t.Errorf("verb %q is not registered in the calendar domain", name)
+			continue
+		}
+		readOnly, destructive, idempotent, openWorld, declared := verbHints(opts)
+		if !declared {
+			t.Errorf("verb %q leaves at least one of the four hints undeclared", name)
+			continue
+		}
+		if readOnly != exp.readOnly || destructive != exp.destructive ||
+			idempotent != exp.idempotent || openWorld != exp.openWorld {
+			t.Errorf("verb %q hints = readOnly:%t destructive:%t idempotent:%t openWorld:%t, want readOnly:%t destructive:%t idempotent:%t openWorld:%t",
+				name, readOnly, destructive, idempotent, openWorld,
+				exp.readOnly, exp.destructive, exp.idempotent, exp.openWorld)
+		}
+	}
+}
