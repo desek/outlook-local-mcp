@@ -14,7 +14,7 @@ import (
 // point builds every domain verb slice from a credential-free configuration
 // with nil metrics, tracer, and registry, without panicking. Building constructs
 // and wraps handlers but never invokes them, so no credential is read and no
-// Graph call is made (NFR-2, FR-1). Each slice must be non-empty.
+// Graph call is made. Each slice must be non-empty.
 //
 // Only the contacts gate is opened, because that domain is not registered at all
 // when it is closed and would otherwise be absent from the assertion. Opening a

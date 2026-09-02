@@ -2,7 +2,7 @@
 id: "CR-0082"
 name: contacts-domain
 description: Add a fifth, opt-in read-only contacts domain tool that resolves a name to an email address through personal contacts and relevance-ranked people.
-status: "draft"
+status: "completed"
 date: 2026-09-01
 requestor: desek
 stakeholders:
@@ -10,7 +10,8 @@ stakeholders:
 priority: "medium"
 target-version: "0.14.0"
 source-branch: docs/cr-implementation-set-0079-0083
-source-commit: 3ae0e2c
+source-commit: 8cf26e1
+completed-date: 2026-09-02
 ---
 
 # Contacts Domain: Read and Search
@@ -1350,28 +1351,28 @@ Then each names contacts alongside calendar, mail, account, and system
 
 ### Build & Compilation
 
-- [ ] Code compiles/builds without errors
-- [ ] No new compiler warnings introduced
+- [x] Code compiles/builds without errors
+- [x] No new compiler warnings introduced
 
 ### Linting & Code Style
 
-- [ ] All linter checks pass with zero warnings/errors
-- [ ] Code follows project coding conventions and style guides
-- [ ] Any linter exceptions are documented with justification
+- [x] All linter checks pass with zero warnings/errors
+- [x] Code follows project coding conventions and style guides
+- [x] Any linter exceptions are documented with justification
 
 ### Test Execution
 
-- [ ] All existing tests pass after implementation
-- [ ] All new tests pass, including under the race detector
-- [ ] The cold-start schema-size gate is re-measured over five tools and stays at or above 60%
-- [ ] Test coverage meets project requirements for changed code
+- [x] All existing tests pass after implementation
+- [x] All new tests pass, including under the race detector
+- [x] The cold-start schema-size gate is re-measured over five tools and stays at or above 60%
+- [x] Test coverage meets project requirements for changed code
 
 ### Documentation
 
-- [ ] Every new file carries a package-consistent doc comment and a single index annotation
-- [ ] Every new verb's parameters and annotation semantics are documented in the registry, not in markdown
-- [ ] The four-tool rule and the scopes-per-feature table are amended in every place they appear
-- [ ] No governance identifier appears in source, test names, or user-facing documentation
+- [x] Every new file carries a package-consistent doc comment and a single index annotation
+- [x] Every new verb's parameters and annotation semantics are documented in the registry, not in markdown
+- [x] The four-tool rule and the scopes-per-feature table are amended in every place they appear
+- [x] No governance identifier appears in source, test names, or user-facing documentation
 
 ## Risks and Mitigation
 
