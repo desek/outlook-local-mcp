@@ -90,8 +90,10 @@ jobs:
               arch=$(echo "$name" | cut -d_ -f3)
               if [ "$os" = "windows" ]; then
                 (cd "$dir" && zip "$RELEASE_DIR/outlook-local-mcp-${os}-${arch}.zip" outlook-local-mcp.exe)
+                cp "$dir/outlook-local-mcp.exe" "$RELEASE_DIR/outlook-local-mcp-${os}-${arch}.exe"
               else
                 tar -czf "$RELEASE_DIR/outlook-local-mcp-${os}-${arch}.tar.gz" -C "$dir" outlook-local-mcp
+                cp "$dir/outlook-local-mcp" "$RELEASE_DIR/outlook-local-mcp-${os}-${arch}"
               fi
             done
           done
@@ -122,6 +124,27 @@ jobs:
             dist/release/* \
             outlook-local-mcp.mcpb \
             --clobber
+      - name: Pin release digests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          BRANCH="chore/plugin-digests-${TAG}"
+          git fetch origin main
+          git checkout -B "$BRANCH" origin/main
+          {
+            echo "# ${TAG}"
+            grep 'outlook-local-mcp-[a-z0-9]*-[a-z0-9]*\(\.exe\)\?$' dist/release/checksums.txt
+          } >> plugin/checksums.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add plugin/checksums.txt
+          git commit -m "chore(plugin): pin release digests ${TAG}"
+          git push origin "$BRANCH"
+          gh pr create --base main --head "$BRANCH" \
+            --title "chore(plugin): pin release digests ${TAG}" \
+            --body "Pins the SHA-256 digests of the raw binary assets of release ${TAG} in plugin/checksums.txt."
+          gh pr merge "$BRANCH" --auto --squash || echo "auto-merge is not enabled; merge the digest pin pull request by hand"
 
   container:
     name: container

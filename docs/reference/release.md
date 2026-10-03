@@ -112,6 +112,36 @@ make mcpb-local
 
 `extension/manifest.json` contains the four default aggregate domain tools (`calendar`, `mail`, `account`, `system`) plus the two opt-in tools `contacts` and `teams`, six entries in total, with their annotations. The `contacts` and `teams` entries are published even though those domains are registered only when `OUTLOOK_MCP_CONTACTS_ENABLED` and `OUTLOOK_MCP_TEAMS_ENABLED` respectively are set, because the manifest describes the full tool surface a user may opt into rather than the default one. When a new verb is added or a tool annotation changes, the manifest **MUST** be updated to match. The manifest is validated by `make mcpb-validate`, which is wired into `make ci`.
 
+## Plugin bundle
+
+The `plugin/` folder is the unit that is submitted to the Claude directory for Claude Code and Cowork. The directory no longer accepts MCPB listings, so the plugin is the directory surface. The MCPB packaging above is unchanged.
+
+### Raw binary assets
+
+The "Create archives and checksums" step of the `release` job copies each desktop build into `dist/release/` as a raw binary asset named `outlook-local-mcp-<os>-<arch>` (with `.exe` on Windows). These assets are published beside the archives and are listed in `checksums.txt`.
+
+### Digest pin
+
+After the "Upload release assets" step, the `release` job opens a pull request `chore(plugin): pin release digests v<version>` against `main` with auto-merge. It appends a `# v<version>` block to `plugin/checksums.txt` that holds the verbatim `sha256sum` lines of the raw binary assets. It never pushes to `main` directly.
+
+Until that pull request merges, the launcher finds no committed pin for the version. It then uses the digest from the `checksums.txt` of the release.
+
+### Version
+
+release-please bumps `version` in `plugin/.claude-plugin/plugin.json` through `extra-files`, so the plugin version is always the tag version.
+
+### Directory submission and update
+
+1. Open `claude.ai/directory/manage`.
+2. Select **Submit new**, then **Plugin bundle**.
+3. Enter the repository and the path `plugin`.
+4. Set the tracked branch to `main`.
+5. Select **Validate** and fix each finding.
+6. Complete the data handling and compliance sections.
+7. Select **Publish**.
+
+The directory follows `main`, so a merged release updates the listing. Expect the reviewers to hold the submission for a check of the binary download.
+
 ---
 
 ## Container images

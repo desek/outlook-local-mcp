@@ -1,0 +1,5 @@
+# SHA-256 digests of the raw binary assets of each release, committed after the release.
+# Format: a "# v<version>" line starts the block of one version. The lines below it
+# are the verbatim sha256sum lines "<hex>  outlook-local-mcp-<os>-<arch>" of that release.
+# The launcher verifies a download against the block of its own version. When that
+# block is absent, it uses the checksums.txt of the GitHub release.
