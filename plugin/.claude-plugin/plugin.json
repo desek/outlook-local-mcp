@@ -1,7 +1,7 @@
 {
   "name": "outlook-local-mcp",
   "displayName": "Outlook Local MCP",
-  "version": "1.0.0-rc.2",
+  "version": "1.1.0-rc.2",
   "description": "Local MCP server for Microsoft Outlook calendar, mail, contacts, and Teams through Microsoft Graph. Runs on your machine; tokens stay in the OS keychain.",
   "author": {
     "name": "Daniel Grenemark",

@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0-rc.2](https://github.com/desek/outlook-local-mcp/compare/v1.0.0-rc.2...v1.1.0-rc.2) (2026-10-03)
+
+
+### Features
+
+* **plugin:** plugin-stable tag moved on each completed release for the directory to track ([4cb51bf](https://github.com/desek/outlook-local-mcp/commit/4cb51bff81e31fe68fcb87386150acbff6aa10a8))
+
+
+### Bug Fixes
+
+* **plugin:** drop the options key from auth_method for the directory validator ([0f7212a](https://github.com/desek/outlook-local-mcp/commit/0f7212afa46a6511111833cb85c95b447e3f9636))
+
 ## [1.0.0-rc.2](https://github.com/desek/outlook-local-mcp/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2026-10-03)
 
 
