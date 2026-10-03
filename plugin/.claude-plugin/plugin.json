@@ -1,0 +1,96 @@
+{
+  "name": "outlook-local-mcp",
+  "displayName": "Outlook Local MCP",
+  "version": "1.0.0-rc.1",
+  "description": "Local MCP server for Microsoft Outlook calendar, mail, contacts, and Teams through Microsoft Graph. Runs on your machine; tokens stay in the OS keychain.",
+  "author": {
+    "name": "Daniel Grenemark",
+    "url": "https://github.com/desek"
+  },
+  "homepage": "https://outlook-local-mcp.com",
+  "repository": "https://github.com/desek/outlook-local-mcp",
+  "license": "MIT",
+  "keywords": [
+    "outlook",
+    "microsoft-graph",
+    "calendar",
+    "mail",
+    "teams",
+    "mcp"
+  ],
+  "icon": "./icon.png",
+  "documentationUrl": "https://outlook-local-mcp.com/docs/quickstart",
+  "supportUrl": "https://github.com/desek/outlook-local-mcp/issues",
+  "privacyPolicyUrl": "https://github.com/desek/outlook-local-mcp/blob/main/PRIVACY.md",
+  "userConfig": {
+    "client_id": {
+      "type": "string",
+      "title": "Microsoft Application (Client) ID",
+      "description": "The app used to access Microsoft Graph. Default: 'outlook-desktop' (Microsoft Office, works out of the box with device_code auth). Use 'outlook-local-mcp' for the project's own app registration. To use browser auth, register your own app in Entra ID with http://localhost redirect URI and paste the client ID here.",
+      "default": "outlook-desktop"
+    },
+    "tenant_id": {
+      "type": "string",
+      "title": "Entra ID Tenant ID",
+      "description": "Your Entra ID tenant. Use 'common' (default) for any Microsoft account, 'organizations' for work/school only, or 'consumers' for personal accounts only. Advanced: paste a specific tenant GUID to restrict access to a single organization.",
+      "default": "common"
+    },
+    "auth_method": {
+      "type": "string",
+      "title": "Authentication Method",
+      "description": "How you sign in to Microsoft. 'device_code' (default): visit a URL and enter a code — works everywhere, no app registration needed. 'browser': opens your browser automatically — requires your own app registration with http://localhost redirect URI. 'auth_code': manual flow for headless/remote environments.",
+      "default": "device_code",
+      "options": [
+        "device_code",
+        "browser",
+        "auth_code"
+      ]
+    },
+    "timezone": {
+      "type": "string",
+      "title": "Timezone",
+      "description": "Your timezone for calendar operations (IANA format). Use 'auto' to detect from your system, or specify explicitly, e.g. 'America/New_York', 'Europe/London', 'Asia/Tokyo'. Defaults to 'auto'.",
+      "default": "auto"
+    },
+    "mail_enabled": {
+      "type": "boolean",
+      "title": "Enable mail",
+      "description": "Enable read-only mail access and request the Mail.Read scope.",
+      "default": false
+    },
+    "mail_manage_enabled": {
+      "type": "boolean",
+      "title": "Enable mail management",
+      "description": "Enable draft management, draft attachments, and received-message management, and request the Mail.ReadWrite scope; implies mail_enabled.",
+      "default": false
+    },
+    "contacts_enabled": {
+      "type": "boolean",
+      "title": "Enable contacts",
+      "description": "Enable the read-only contacts domain and request the Contacts.Read and People.Read scopes; no contact write scope is ever requested.",
+      "default": false
+    },
+    "teams_enabled": {
+      "type": "boolean",
+      "title": "Enable Teams",
+      "description": "Enable the read-only Teams domain and request the Chat.Read, ChannelMessage.Read.All, OnlineMeetings.Read, and OnlineMeetingTranscript.Read.All scopes; no Teams send or write scope is ever requested.",
+      "default": false
+    }
+  },
+  "mcpServers": {
+    "outlook": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/outlook-local-mcp.sh",
+      "args": [],
+      "env": {
+        "OUTLOOK_MCP_CLIENT_ID": "${user_config.client_id}",
+        "OUTLOOK_MCP_TENANT_ID": "${user_config.tenant_id}",
+        "OUTLOOK_MCP_AUTH_METHOD": "${user_config.auth_method}",
+        "OUTLOOK_MCP_DEFAULT_TIMEZONE": "${user_config.timezone}",
+        "OUTLOOK_MCP_MAIL_ENABLED": "${user_config.mail_enabled}",
+        "OUTLOOK_MCP_MAIL_MANAGE_ENABLED": "${user_config.mail_manage_enabled}",
+        "OUTLOOK_MCP_CONTACTS_ENABLED": "${user_config.contacts_enabled}",
+        "OUTLOOK_MCP_TEAMS_ENABLED": "${user_config.teams_enabled}"
+      }
+    }
+  }
+}
