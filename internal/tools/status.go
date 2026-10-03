@@ -225,10 +225,20 @@ type statusConfigFeatures struct {
 	// MailEnabled indicates whether read-only email access is active.
 	MailEnabled bool `json:"mail_enabled"`
 
-	// MailManageEnabled indicates whether draft management (Mail.ReadWrite) is
-	// active; draft/reply/forward/update/delete tools are registered only when
+	// MailManageEnabled indicates whether draft and received-message management (Mail.ReadWrite) is
+	// active; the draft and received-message write verbs are registered only when
 	// this flag is set (see CR-0058).
 	MailManageEnabled bool `json:"mail_manage_enabled"`
+
+	// ContactsEnabled indicates whether the opt-in contacts domain (Contacts.Read,
+	// People.Read) is registered; the contacts tool is absent when false.
+	ContactsEnabled bool `json:"contacts_enabled"`
+
+	// TeamsEnabled indicates whether the opt-in teams domain (Chat.Read,
+	// ChannelMessage.Read.All, OnlineMeetings.Read,
+	// OnlineMeetingTranscript.Read.All) is registered; the teams tool is absent
+	// when false.
+	TeamsEnabled bool `json:"teams_enabled"`
 
 	// ProvenanceTag is the extended property name for MCP-created events.
 	ProvenanceTag string `json:"provenance_tag"`
@@ -327,6 +337,8 @@ func HandleStatus(cfg config.Config, registry *auth.AccountRegistry, startTime t
 					ReadOnly:          cfg.ReadOnly,
 					MailEnabled:       cfg.MailEnabled,
 					MailManageEnabled: cfg.MailManageEnabled,
+					ContactsEnabled:   cfg.ContactsEnabled,
+					TeamsEnabled:      cfg.TeamsEnabled,
 					ProvenanceTag:     cfg.ProvenanceTag,
 				},
 				Observability: statusConfigObservability{

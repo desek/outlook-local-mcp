@@ -27,7 +27,7 @@ outlook-mcp/
     observability/             # OpenTelemetry metrics and tracing, WithObservability middleware
     buildinfo/                 # Build identity and host environment snapshot (system.about; CR-0067)
     server/                    # RegisterTools, ReadOnlyGuard, AwaitShutdownSignal
-    tools/                     # The 4 aggregate domain tools and their verb registries
+    tools/                     # The 4 default aggregate domain tools, the opt-in contacts and teams tools, and their verb registries
   docs/
     ...
 ```
@@ -79,7 +79,7 @@ All MCP tools **MUST** be registered in `extension/manifest.json` under the `too
 
 ## Tool Naming Convention
 
-As of CR-0060 (v0.6.0) the MCP surface is four aggregate domain tools, each dispatched by a required `operation` verb. New work **MUST** add a verb to the appropriate domain registry, not a new top-level MCP tool.
+As of CR-0060 (v0.6.0) the MCP surface is four aggregate domain tools by default, plus two opt-in ones registered only when their variable is set, `contacts` under `OUTLOOK_MCP_CONTACTS_ENABLED` and `teams` under `OUTLOOK_MCP_TEAMS_ENABLED`, each dispatched by a required `operation` verb. New work **MUST** add a verb to the appropriate domain registry, not a new top-level MCP tool.
 
 Aggregate tools and their domains:
 
@@ -87,6 +87,8 @@ Aggregate tools and their domains:
 * `mail` -- Mail message, folder, and draft verbs
 * `account` -- Account management verbs
 * `system` -- Server-level and diagnostic verbs
+* `contacts` -- Contact and people read verbs; opt-in, registered only under `OUTLOOK_MCP_CONTACTS_ENABLED`
+* `teams` -- Microsoft Teams message and meeting transcript read verbs; opt-in, registered only under `OUTLOOK_MCP_TEAMS_ENABLED`
 
 The current verb inventory of a domain is the registry's to state, not this
 file's: invoke `operation="help"` on the domain.

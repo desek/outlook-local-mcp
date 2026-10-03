@@ -241,6 +241,184 @@ func FormatFreeBusyText(data FreeBusyResponse) string {
 	return b.String()
 }
 
+// FormatMeetingTimeSuggestionsText formats a FindMeetingTimesResponse into a
+// numbered plain-text listing of candidate meeting slots.
+//
+// Parameters:
+//   - data: the response envelope carrying summary-serialized suggestions and,
+//     when Graph offered none, its own reason for the empty result.
+//
+// Returns a formatted plain-text string with a numbered list of suggestions and
+// a total count. When there are no suggestions, returns Graph's stated reason
+// so the caller learns why no slot was offered rather than only that none was.
+//
+// Side effects: none.
+func FormatMeetingTimeSuggestionsText(data FindMeetingTimesResponse) string {
+	if len(data.Suggestions) == 0 {
+		if data.EmptySuggestionsReason != "" {
+			return fmt.Sprintf("No meeting times suggested. Reason: %s", data.EmptySuggestionsReason)
+		}
+		return "No meeting times suggested."
+	}
+
+	var b strings.Builder
+	for i, s := range data.Suggestions {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, meetingSlotDisplay(s))
+
+		var details []string
+		if confidence, ok := s["confidence"].(float64); ok {
+			details = append(details, fmt.Sprintf("Confidence %.0f%%", confidence))
+		}
+		if organizer, ok := s["organizerAvailability"].(string); ok && organizer != "" {
+			details = append(details, fmt.Sprintf("Organizer %s", organizer))
+		}
+		if len(details) > 0 {
+			fmt.Fprintf(&b, "   %s\n", strings.Join(details, " | "))
+		}
+		if reason, ok := s["suggestionReason"].(string); ok && reason != "" {
+			fmt.Fprintf(&b, "   %s\n", reason)
+		}
+
+		if i < len(data.Suggestions)-1 {
+			b.WriteString("\n")
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d suggestion(s) total.", len(data.Suggestions))
+
+	return b.String()
+}
+
+// meetingSlotDisplay renders the time slot of a summary-serialized meeting-time
+// suggestion, preferring the localised displayTime and falling back to the raw
+// ISO bounds when Graph supplied no usable timezone.
+func meetingSlotDisplay(suggestion map[string]any) string {
+	slot, ok := suggestion["meetingTimeSlot"].(map[string]string)
+	if !ok {
+		return "(No time slot)"
+	}
+	if slot["displayTime"] != "" {
+		return slot["displayTime"]
+	}
+	if slot["start"] == "" && slot["end"] == "" {
+		return "(No time slot)"
+	}
+	return fmt.Sprintf("%s - %s", slot["start"], slot["end"])
+}
+
+// FormatScheduleText formats a GetScheduleResponse into a labeled per-mailbox
+// plain-text listing of free/busy blocks, working hours, and, where Graph
+// reported one, that mailbox's error.
+//
+// Parameters:
+//   - data: the response envelope carrying the resolved window and one
+//     summary-serialized record per mailbox, in the order they were requested.
+//
+// Returns a formatted plain-text string with one labeled section per mailbox and
+// a total count. A mailbox Graph could not read states its error rather than
+// being omitted, so a caller can tell a mailbox with no meetings from one it may
+// not view.
+//
+// Side effects: none.
+func FormatScheduleText(data GetScheduleResponse) string {
+	if len(data.Schedules) == 0 {
+		return "No schedules returned."
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "Schedules (%s to %s):\n\n", data.TimeRange.Start, data.TimeRange.End)
+
+	for i, record := range data.Schedules {
+		fmt.Fprintf(&b, "%s\n", scheduleMailboxLabel(record))
+
+		if failure := scheduleErrorLine(record); failure != "" {
+			fmt.Fprintf(&b, "  Error: %s\n", failure)
+		}
+		if hours := scheduleWorkingHoursLine(record); hours != "" {
+			fmt.Fprintf(&b, "  Working hours: %s\n", hours)
+		}
+		writeScheduleItems(&b, record)
+
+		if i < len(data.Schedules)-1 {
+			b.WriteString("\n")
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d mailbox(es) total.", len(data.Schedules))
+
+	return b.String()
+}
+
+// writeScheduleItems renders one mailbox's busy blocks, or states that it has
+// none, so an empty schedule reads as a finding rather than a missing section.
+func writeScheduleItems(b *strings.Builder, record map[string]any) {
+	items, _ := record["scheduleItems"].([]map[string]any)
+	if len(items) == 0 {
+		b.WriteString("  No busy periods.\n")
+		return
+	}
+	for _, item := range items {
+		when, _ := item["displayTime"].(string)
+		if when == "" {
+			start, _ := item["start"].(string)
+			end, _ := item["end"].(string)
+			when = fmt.Sprintf("%s - %s", start, end)
+		}
+		status, _ := item["status"].(string)
+		if status == "" {
+			status = "unknown"
+		}
+		fmt.Fprintf(b, "  %s | %s\n", when, status)
+	}
+}
+
+// scheduleErrorLine renders the per-mailbox error Graph reported, naming both
+// the message and the response code so the caller can act on either. Returns
+// the empty string when the mailbox was read successfully.
+func scheduleErrorLine(record map[string]any) string {
+	failure, ok := record["error"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	message, _ := failure["message"].(string)
+	code, _ := failure["responseCode"].(string)
+	switch {
+	case message != "" && code != "":
+		return fmt.Sprintf("%s (%s)", message, code)
+	case message != "":
+		return message
+	default:
+		return code
+	}
+}
+
+// scheduleWorkingHoursLine renders a mailbox's working hours as its days and
+// its daily bounds. Returns the empty string when Graph supplied none, so the
+// section is omitted rather than shown blank.
+func scheduleWorkingHoursLine(record map[string]any) string {
+	hours, ok := record["workingHours"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	days, _ := hours["daysOfWeek"].([]string)
+	startTime, _ := hours["startTime"].(string)
+	endTime, _ := hours["endTime"].(string)
+	timeZone, _ := hours["timeZone"].(string)
+
+	if len(days) == 0 && startTime == "" && endTime == "" {
+		return ""
+	}
+
+	line := fmt.Sprintf("%s - %s", startTime, endTime)
+	if len(days) > 0 {
+		line = fmt.Sprintf("%s, %s", strings.Join(days, ", "), line)
+	}
+	if timeZone != "" {
+		line += " (" + timeZone + ")"
+	}
+	return line
+}
+
 // FormatMessagesText formats a slice of serialized summary message maps into a
 // numbered plain-text listing. Each message shows subject, sender address, date,
 // read/attachment status flags, and body preview.
@@ -857,6 +1035,546 @@ func FormatWriteConfirmation(action, subject, eventID, displayTime, location str
 	fmt.Fprintf(&b, "Time: %s", displayTime)
 	if location != "" {
 		fmt.Fprintf(&b, "\nLocation: %s", location)
+	}
+	return b.String()
+}
+
+// FormatContactMatchesText formats merged contacts-domain search matches into a
+// numbered plain-text listing with a total count. Each entry states the source
+// the match came from, because a saved contact and a person Graph inferred from
+// correspondence carry different confidence and a caller choosing an address
+// needs to see which it is looking at.
+//
+// Parameters:
+//   - matches: slice of summary contact or person maps carrying "displayName",
+//     "emailAddress", "id", and the "source" label.
+//
+// Returns a formatted plain-text string. Returns a stated no-match line when
+// the slice is empty, naming what to try next.
+//
+// Side effects: none.
+func FormatContactMatchesText(matches []map[string]any) string {
+	if len(matches) == 0 {
+		return "No contacts or people matched. Try a shorter query, a surname, or a company name."
+	}
+
+	var b strings.Builder
+	for i, match := range matches {
+		source, _ := match["source"].(string)
+		fmt.Fprintf(&b, "%d. %s [%s]\n", i+1, contactDisplayLabel(match), source)
+		if address, _ := match["emailAddress"].(string); address != "" {
+			fmt.Fprintf(&b, "   Email: %s\n", address)
+		}
+		if id, _ := match["id"].(string); id != "" {
+			fmt.Fprintf(&b, "   ID: %s\n", id)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d match(es) total.", len(matches))
+
+	return b.String()
+}
+
+// FormatPeopleText formats relevance-ranked people into a numbered plain-text
+// listing with a total count. The listing order is Graph's relevance order, so
+// the position of an entry is itself information and is preserved.
+//
+// Parameters:
+//   - people: slice of summary person maps carrying "displayName",
+//     "emailAddress", and "id".
+//
+// Returns a formatted plain-text string. Returns "No people found." when the
+// slice is empty.
+//
+// Side effects: none.
+func FormatPeopleText(people []map[string]any) string {
+	if len(people) == 0 {
+		return "No people found."
+	}
+
+	var b strings.Builder
+	for i, person := range people {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, contactDisplayLabel(person))
+		if address, _ := person["emailAddress"].(string); address != "" {
+			fmt.Fprintf(&b, "   Email: %s\n", address)
+		}
+		if id, _ := person["id"].(string); id != "" {
+			fmt.Fprintf(&b, "   ID: %s\n", id)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d person/people total, most relevant first.", len(people))
+
+	return b.String()
+}
+
+// FormatContactDetailText formats one saved contact as labelled fields. Every
+// address the contact holds is listed, not only the leading one, because a
+// contact commonly carries a work and a personal address and picking between
+// them is the caller's decision.
+//
+// Parameters:
+//   - contact: a summary contact map carrying "displayName", "id", and
+//     "emailAddresses".
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatContactDetailText(contact map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Contact: %s\n", contactDisplayLabel(contact))
+	if id, _ := contact["id"].(string); id != "" {
+		fmt.Fprintf(&b, "ID: %s\n", id)
+	}
+	writeContactAddressLines(&b, contact)
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// FormatPersonDetailText formats one relevance-ranked person as labelled
+// fields. A person carries no per-address name in Graph, so the addresses are
+// listed under the person's own display name and the relevance score of the
+// leading address is stated, since it is the only confidence signal the
+// resource offers.
+//
+// Parameters:
+//   - person: a summary person map carrying "displayName", "id",
+//     "emailAddresses", and "relevanceScore".
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatPersonDetailText(person map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Person: %s\n", contactDisplayLabel(person))
+	if id, _ := person["id"].(string); id != "" {
+		fmt.Fprintf(&b, "ID: %s\n", id)
+	}
+	writeContactAddressLines(&b, person)
+	if score, ok := person["relevanceScore"].(float64); ok {
+		fmt.Fprintf(&b, "Relevance: %.2f\n", score)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// writeContactAddressLines writes one Email line per address a summary record
+// holds, or a stated absence, so a record with no address reads as an answer
+// rather than as a truncated one.
+func writeContactAddressLines(b *strings.Builder, record map[string]any) {
+	addresses, _ := record["emailAddresses"].([]string)
+	if len(addresses) == 0 {
+		b.WriteString("Email: (none recorded)\n")
+		return
+	}
+	for _, address := range addresses {
+		fmt.Fprintf(b, "Email: %s\n", address)
+	}
+}
+
+// contactDisplayLabel returns the name a contacts-domain record should be
+// listed under, falling back to its leading address and then to a stated
+// placeholder, so a record Graph returned without a display name is still
+// identifiable rather than rendered as a blank line.
+func contactDisplayLabel(record map[string]any) string {
+	if name, _ := record["displayName"].(string); name != "" {
+		return name
+	}
+	if address, _ := record["emailAddress"].(string); address != "" {
+		return address
+	}
+	return "(Unnamed)"
+}
+
+// FormatTeamsSearchHitsText formats ranked Teams search hits into a numbered
+// plain-text listing with a total count. Hits arrive in relevance order and are
+// listed in it, since the ranking is what the search adds over an enumeration.
+// Each entry names the collection its message came from, because a chat hit and
+// a channel hit are read back by different verbs taking different identifiers.
+//
+// Parameters:
+//   - hits: slice of hit maps carrying "source", "from", "createdDateTime",
+//     "bodyPreview", and whichever of "chatId", "teamId", and "channelId" the
+//     hit's collection supplies.
+//
+// Returns a formatted plain-text string. Returns a stated no-result line when
+// the slice is empty.
+//
+// Side effects: none.
+func FormatTeamsSearchHitsText(hits []map[string]any) string {
+	if len(hits) == 0 {
+		return "No Teams messages matched."
+	}
+
+	var b strings.Builder
+	for i, hit := range hits {
+		fmt.Fprintf(&b, "%d. [%s] %s\n", i+1, teamsFieldOr(hit, "source", "unknown"), teamsMessageLabel(hit))
+		if created, _ := hit["createdDateTime"].(string); created != "" {
+			fmt.Fprintf(&b, "   Sent: %s\n", created)
+		}
+		if preview, _ := hit["bodyPreview"].(string); preview != "" {
+			fmt.Fprintf(&b, "   %s\n", teamsSingleLine(preview))
+		}
+		writeTeamsIdentifierLines(&b, hit, "   ")
+	}
+
+	fmt.Fprintf(&b, "\n%d match(es) total.", len(hits))
+
+	return b.String()
+}
+
+// FormatChatsText formats the signed-in user's chats into a numbered plain-text
+// listing with a total count. A one-to-one chat commonly carries no topic, so
+// the preview of its last message is listed under it: without that, a page of
+// untitled chats is indistinguishable rows of identifiers.
+//
+// Parameters:
+//   - chats: slice of summary chat maps carrying "topic", "chatType", "id",
+//     "lastUpdatedDateTime", and "lastMessagePreview".
+//
+// Returns a formatted plain-text string. Returns a stated no-result line when
+// the slice is empty.
+//
+// Side effects: none.
+func FormatChatsText(chats []map[string]any) string {
+	if len(chats) == 0 {
+		return "No chats found."
+	}
+
+	var b strings.Builder
+	for i, chat := range chats {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, teamsChatLabel(chat))
+		if chatType, _ := chat["chatType"].(string); chatType != "" {
+			fmt.Fprintf(&b, "   Type: %s\n", chatType)
+		}
+		if updated, _ := chat["lastUpdatedDateTime"].(string); updated != "" {
+			fmt.Fprintf(&b, "   Last updated: %s\n", updated)
+		}
+		if preview, _ := chat["lastMessagePreview"].(string); preview != "" {
+			fmt.Fprintf(&b, "   Latest: %s\n", teamsSingleLine(preview))
+		}
+		if id, _ := chat["id"].(string); id != "" {
+			fmt.Fprintf(&b, "   ID: %s\n", id)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d chat(s) total.", len(chats))
+
+	return b.String()
+}
+
+// FormatTeamsMessagesText formats a collection of Teams messages, whether chat
+// messages, channel messages, or replies, into a numbered plain-text listing
+// with a total count. One formatter serves all three because the reading task is
+// the same, scanning a thread for the message worth opening; the identifier
+// lines differ per shape and are written from whichever the record carries.
+//
+// Parameters:
+//   - messages: slice of summary message maps carrying "from",
+//     "createdDateTime", "bodyPreview", "id", and whichever of "chatId",
+//     "teamId", "channelId", and "replyToId" apply.
+//
+// Returns a formatted plain-text string. Returns a stated no-result line when
+// the slice is empty.
+//
+// Side effects: none.
+func FormatTeamsMessagesText(messages []map[string]any) string {
+	if len(messages) == 0 {
+		return "No Teams messages found."
+	}
+
+	var b strings.Builder
+	for i, msg := range messages {
+		fmt.Fprintf(&b, "%d. %s\n", i+1, teamsMessageLabel(msg))
+		if created, _ := msg["createdDateTime"].(string); created != "" {
+			fmt.Fprintf(&b, "   Sent: %s\n", created)
+		}
+		if preview, _ := msg["bodyPreview"].(string); preview != "" {
+			fmt.Fprintf(&b, "   %s\n", teamsSingleLine(preview))
+		}
+		if count, ok := msg["attachmentCount"].(int); ok && count > 0 {
+			fmt.Fprintf(&b, "   Attachments: %d\n", count)
+		}
+		writeTeamsIdentifierLines(&b, msg, "   ")
+	}
+
+	fmt.Fprintf(&b, "\n%d message(s) total.", len(messages))
+
+	return b.String()
+}
+
+// FormatTeamsMessageDetailText formats one Teams message as labelled fields. The
+// whole body is written rather than a preview, because this formatter renders
+// what the caller escalated to see.
+//
+// Parameters:
+//   - msg: a message map carrying "from", "subject", "createdDateTime", and
+//     either "body" or "bodyPreview", plus its locating identifiers.
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatTeamsMessageDetailText(msg map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "From: %s\n", teamsFieldOr(msg, "from", "(unknown sender)"))
+	if subject, _ := msg["subject"].(string); subject != "" {
+		fmt.Fprintf(&b, "Subject: %s\n", subject)
+	}
+	if created, _ := msg["createdDateTime"].(string); created != "" {
+		fmt.Fprintf(&b, "Sent: %s\n", created)
+	}
+	if edited, _ := msg["lastEditedDateTime"].(string); edited != "" {
+		fmt.Fprintf(&b, "Edited: %s\n", edited)
+	}
+	writeTeamsIdentifierLines(&b, msg, "")
+	fmt.Fprintf(&b, "\n%s\n", teamsMessageBody(msg))
+	if names := teamsAttachmentNames(msg); len(names) > 0 {
+		fmt.Fprintf(&b, "\nAttachments: %s\n", strings.Join(names, ", "))
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// FormatOnlineMeetingText formats one online meeting as labelled fields. The
+// meeting identifier is stated on its own line because it is the key the
+// transcript verbs take, and resolving it is the whole purpose of the verb this
+// formatter renders.
+//
+// Parameters:
+//   - meeting: a meeting map carrying "subject", "id", "startDateTime",
+//     "endDateTime", and "joinWebUrl".
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatOnlineMeetingText(meeting map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Meeting: %s\n", teamsFieldOr(meeting, "subject", "(no subject)"))
+	if id, _ := meeting["id"].(string); id != "" {
+		fmt.Fprintf(&b, "Meeting ID: %s\n", id)
+	}
+	if start, _ := meeting["startDateTime"].(string); start != "" {
+		fmt.Fprintf(&b, "Start: %s\n", start)
+	}
+	if end, _ := meeting["endDateTime"].(string); end != "" {
+		fmt.Fprintf(&b, "End: %s\n", end)
+	}
+	if organizer, _ := meeting["organizer"].(string); organizer != "" {
+		fmt.Fprintf(&b, "Organizer: %s\n", organizer)
+	}
+	if join, _ := meeting["joinWebUrl"].(string); join != "" {
+		fmt.Fprintf(&b, "Join URL: %s\n", join)
+	}
+	if allowed, ok := meeting["allowTranscription"].(bool); ok && !allowed {
+		b.WriteString("Transcription: not enabled for this meeting\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// FormatTranscriptsText formats a meeting's transcripts into a numbered
+// plain-text listing with a total count. No content is shown: the listing exists
+// to choose which transcript to fetch, and each entry states the identifier that
+// fetch is keyed by.
+//
+// Parameters:
+//   - transcripts: slice of summary transcript maps carrying "id",
+//     "createdDateTime", and "endDateTime".
+//
+// Returns a formatted plain-text string. Returns a stated no-result line naming
+// why a transcribed meeting may still list none.
+//
+// Side effects: none.
+func FormatTranscriptsText(transcripts []map[string]any) string {
+	if len(transcripts) == 0 {
+		return "No transcripts found for this meeting. A meeting has transcripts only if it was transcribed while it ran."
+	}
+
+	var b strings.Builder
+	for i, transcript := range transcripts {
+		fmt.Fprintf(&b, "%d. Transcript %s\n", i+1, teamsFieldOr(transcript, "id", "(no id)"))
+		if created, _ := transcript["createdDateTime"].(string); created != "" {
+			fmt.Fprintf(&b, "   Created: %s\n", created)
+		}
+		if end, _ := transcript["endDateTime"].(string); end != "" {
+			fmt.Fprintf(&b, "   Ended: %s\n", end)
+		}
+	}
+
+	fmt.Fprintf(&b, "\n%d transcript(s) total.", len(transcripts))
+
+	return b.String()
+}
+
+// FormatTranscriptDetailText formats one transcript as labelled fields followed
+// by its text. When the text was truncated the reader is told so explicitly,
+// because a WEBVTT transcript cut mid-sentence otherwise reads as a complete
+// record of a shorter meeting.
+//
+// Parameters:
+//   - transcript: a transcript map carrying "id", "meetingId",
+//     "createdDateTime", "contentTruncated", and either "content" or
+//     "contentPreview".
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatTranscriptDetailText(transcript map[string]any) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Transcript: %s\n", teamsFieldOr(transcript, "id", "(no id)"))
+	if meetingID, _ := transcript["meetingId"].(string); meetingID != "" {
+		fmt.Fprintf(&b, "Meeting ID: %s\n", meetingID)
+	}
+	if created, _ := transcript["createdDateTime"].(string); created != "" {
+		fmt.Fprintf(&b, "Created: %s\n", created)
+	}
+	// The format says whether speaker names can be present, so the default tier
+	// states it rather than leaving the reader to infer it from the text.
+	if format, _ := transcript["contentFormat"].(string); format != "" {
+		fmt.Fprintf(&b, "Format: %s\n", format)
+	}
+
+	text, _ := transcript["content"].(string)
+	if text == "" {
+		text, _ = transcript["contentPreview"].(string)
+	}
+	if text == "" {
+		b.WriteString("\n(no transcript text returned)\n")
+		return strings.TrimRight(b.String(), "\n")
+	}
+
+	fmt.Fprintf(&b, "\n%s\n", text)
+	if truncated, _ := transcript["contentTruncated"].(bool); truncated {
+		b.WriteString("\nThis is a preview. Request output=raw for the full transcript.\n")
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// writeTeamsIdentifierLines writes an ID line for each locating identifier a
+// Teams message record carries, skipping the ones its shape does not have, so a
+// chat message is not padded with empty channel coordinates and a channel
+// message is not padded with an empty chat one.
+func writeTeamsIdentifierLines(b *strings.Builder, msg map[string]any, indent string) {
+	for _, field := range []struct {
+		key   string
+		label string
+	}{
+		{"id", "Message ID"},
+		{"replyToId", "Reply to"},
+		{"chatId", "Chat ID"},
+		{"teamId", "Team ID"},
+		{"channelId", "Channel ID"},
+	} {
+		if value, _ := msg[field.key].(string); value != "" {
+			fmt.Fprintf(b, "%s%s: %s\n", indent, field.label, value)
+		}
+	}
+}
+
+// teamsChatLabel returns the name a chat should be listed under, falling back
+// from its topic to its type and then to a stated placeholder, so a chat with no
+// topic is still identifiable rather than rendered as a blank line.
+func teamsChatLabel(chat map[string]any) string {
+	if topic, _ := chat["topic"].(string); topic != "" {
+		return topic
+	}
+	if chatType, _ := chat["chatType"].(string); chatType != "" {
+		return "(untitled " + chatType + " chat)"
+	}
+	return "(untitled chat)"
+}
+
+// teamsMessageLabel returns the heading a message is listed under: the sender,
+// with the subject appended when the message has one, which a channel post
+// commonly does and a chat message commonly does not.
+func teamsMessageLabel(msg map[string]any) string {
+	sender := teamsFieldOr(msg, "from", "(unknown sender)")
+	if subject, _ := msg["subject"].(string); subject != "" {
+		return sender + " - " + subject
+	}
+	return sender
+}
+
+// teamsMessageBody returns the text a detail rendering should show, preferring
+// the full body and falling back to the preview, so the same formatter serves a
+// raw-tier record and a summary-tier one.
+func teamsMessageBody(msg map[string]any) string {
+	if body, _ := msg["body"].(string); body != "" {
+		return body
+	}
+	if preview, _ := msg["bodyPreview"].(string); preview != "" {
+		return preview
+	}
+	return "(no message text)"
+}
+
+// teamsAttachmentNames reduces a raw-tier message's attachments to their names,
+// which is all a plain-text rendering can usefully state about them.
+func teamsAttachmentNames(msg map[string]any) []string {
+	attachments, _ := msg["attachments"].([]map[string]any)
+	names := make([]string, 0, len(attachments))
+	for _, att := range attachments {
+		if name, _ := att["name"].(string); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// teamsFieldOr returns a record's string field, or the given placeholder when it
+// is absent or empty, so a missing value reads as a stated absence rather than
+// leaving a label with nothing after it.
+func teamsFieldOr(record map[string]any, key, placeholder string) string {
+	if value, _ := record[key].(string); value != "" {
+		return value
+	}
+	return placeholder
+}
+
+// teamsSingleLine collapses a message body onto one line for a listing entry.
+// A Teams body carries newlines and HTML markup, and a multi-line entry inside a
+// numbered list breaks the alignment the list's readability depends on.
+func teamsSingleLine(text string) string {
+	return strings.Join(strings.Fields(text), " ")
+}
+
+// FormatPreparedTeamsReplyText renders a drafted Teams reply: the parent it
+// answers, the parent's text quoted, and the reply body itself. The rendering
+// opens and closes with the statement that nothing was sent, because the verb's
+// name contains the word "reply" and Teams has no draft store to make the
+// difference visible anywhere else; a reader who skims either end of the output
+// still learns that posting it is a manual action.
+//
+// Parameters:
+//   - parent: the raw-tier serialization of the message being answered, carrying
+//     "from", "createdDateTime", "body" or "bodyPreview", and its locating
+//     identifiers.
+//   - body: the reply text the caller supplied, returned unchanged.
+//
+// Returns a formatted plain-text string.
+//
+// Side effects: none.
+func FormatPreparedTeamsReplyText(parent map[string]any, body string) string {
+	var b strings.Builder
+	b.WriteString("Prepared reply. NOT SENT: nothing was posted to Microsoft Teams.\n\n")
+
+	fmt.Fprintf(&b, "In reply to %s", teamsFieldOr(parent, "from", "(unknown sender)"))
+	if created, _ := parent["createdDateTime"].(string); created != "" {
+		fmt.Fprintf(&b, " (%s)", created)
+	}
+	b.WriteString(":\n")
+	writeTeamsIdentifierLines(&b, parent, "  ")
+	b.WriteString(quotedTeamsBody(teamsMessageBody(parent)))
+
+	fmt.Fprintf(&b, "\nReply text:\n%s\n", body)
+	b.WriteString("\nThis text has not been sent and no draft was stored. To send it, open the conversation in Microsoft Teams and paste the reply text.")
+
+	return b.String()
+}
+
+// quotedTeamsBody prefixes every line of the parent's text with a quote marker,
+// so the reply text below it is unambiguously the caller's own words rather than
+// a continuation of what is being answered.
+func quotedTeamsBody(text string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(strings.TrimRight(text, "\n"), "\n") {
+		fmt.Fprintf(&b, "  > %s\n", line)
 	}
 	return b.String()
 }

@@ -97,6 +97,34 @@ func ParseShowAs(s string) models.FreeBusyStatus {
 	}
 }
 
+// ParseFlagStatus converts a case-insensitive string to the corresponding
+// models.FollowupFlagStatus enum constant. Valid values are "notFlagged",
+// "flagged", and "complete", the three the SDK defines.
+//
+// Unknown values default to NOTFLAGGED_FOLLOWUPFLAGSTATUS, matching the shape
+// of the other parsers in this file, which do not return an error. That default
+// *clears* a follow-up flag rather than leaving it unchanged, so an unrecognised
+// value must never reach this parser: validate.ValidateFlagStatus is called
+// first on every path, and the verb schema carries the three-value enum, so the
+// input is refused before conversion.
+//
+// Parameters:
+//   - s: the flag status string from user input.
+//
+// Returns the matching models.FollowupFlagStatus constant.
+func ParseFlagStatus(s string) models.FollowupFlagStatus {
+	switch strings.ToLower(s) {
+	case "notflagged":
+		return models.NOTFLAGGED_FOLLOWUPFLAGSTATUS
+	case "flagged":
+		return models.FLAGGED_FOLLOWUPFLAGSTATUS
+	case "complete":
+		return models.COMPLETE_FOLLOWUPFLAGSTATUS
+	default:
+		return models.NOTFLAGGED_FOLLOWUPFLAGSTATUS
+	}
+}
+
 // parseRecurrencePatternType converts a case-insensitive string to the
 // corresponding models.RecurrencePatternType enum constant. Valid values are
 // "daily", "weekly", "absolutemonthly", "relativemonthly", "absoluteyearly",

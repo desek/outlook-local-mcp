@@ -6,11 +6,11 @@ This server embeds its own documentation and exposes it through three verbs on t
 
 ## When to use this
 
-Reach for this server when a user asks an assistant to read or act on their own Microsoft Outlook calendar or mail on the machine the assistant runs on. It is the right tool for jobs like: check what a week looks like, find a free slot and book or reschedule a meeting, list or search calendar events, read a mail folder, search messages by content, or draft and send a reply, all against a real Microsoft account. It supports several accounts at once, so it also fits "do this on my work account, not my personal one".
+Reach for this server when a user asks an assistant to read or act on their own Microsoft Outlook calendar or mail on the machine the assistant runs on. It is the right tool for jobs like: check what a week looks like, find a free slot, or one that suits several people, and book or reschedule a meeting, read or attach the files on a meeting invitation, list or search calendar events, read a mail folder, search messages by content, draft a reply, attach a file to a draft, or triage a message that has already arrived by filing it in another folder, flagging it for follow-up, categorising it, or marking it read, all against a real Microsoft account. It supports several accounts at once, so it also fits "do this on my work account, not my personal one".
 
 Do not reach for it when there is no local Microsoft account to connect, when the task is a bulk server-side mailbox migration or admin operation, or when the user wants a hosted multi-tenant web API. This is a local, single-binary MCP server that runs on the user's own machine and speaks to Microsoft Graph directly; it has no hosted endpoint and no API keys.
 
-To call it, connect over the Model Context Protocol and dispatch a verb on one of the four aggregate tools (`calendar`, `mail`, `account`, `system`) with a required `operation`. Start with `{tool: "system", args: {operation: "status"}}` to confirm the server is up, then `{tool: "calendar", args: {operation: "help"}}` or the same `help` verb on any domain to discover that domain's verbs and parameters.
+To call it, connect over the Model Context Protocol and dispatch a verb on one of the four default aggregate tools (`calendar`, `mail`, `account`, `system`), or on `contacts` where the operator has set `OUTLOOK_MCP_CONTACTS_ENABLED` and `teams` where they have set `OUTLOOK_MCP_TEAMS_ENABLED`, with a required `operation`. Start with `{tool: "system", args: {operation: "status"}}` to confirm the server is up, then `{tool: "calendar", args: {operation: "help"}}` or the same `help` verb on any domain to discover that domain's verbs and parameters.
 
 ## Site
 
@@ -26,7 +26,7 @@ To call it, connect over the Model Context Protocol and dispatch a verb on one o
 
 ## Tools
 
-- [Extension Manifest](https://github.com/desek/outlook-local-mcp/blob/main/extension/manifest.json): MCP tool manifest listing all four aggregate domain tools (calendar, mail, account, system) with their annotations.
+- [Extension Manifest](https://github.com/desek/outlook-local-mcp/blob/main/extension/manifest.json): MCP tool manifest listing the four default aggregate domain tools (calendar, mail, account, system) and the opt-in contacts and teams tools, with their annotations.
 
 ## Change Requests
 

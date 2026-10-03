@@ -82,6 +82,7 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 		authMW:               authMW,
 		accountResolverMW:    accountResolverMW,
 		readOnly:             readOnly,
+		maxAttachmentSize:    cfg.MaxAttachmentSizeBytes,
 	})
 	populatedCal := tools.RegisterDomainTool(s, tools.DomainToolConfig{
 		Domain:          "calendar",
@@ -175,7 +176,8 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 			"By default only read verbs are registered. Additional read verbs " +
 			"(get_conversation, list_attachments, get_attachment) are registered when " +
 			"MailEnabled is configured, and write verbs (create_draft, create_reply_draft, " +
-			"create_forward_draft, update_draft, delete_draft) are registered when " +
+			"create_forward_draft, update_draft, delete_draft, move_message, set_flag, " +
+			"set_categories, mark_read, add_attachment) are registered when " +
 			"MailManageEnabled is configured. The verbs listed below are those active in " +
 			"the current configuration.",
 		Verbs:           mailVerbs,
@@ -183,9 +185,75 @@ func RegisterTools(s *mcpserver.MCPServer, retryCfg graph.RetryConfig, timeout t
 	})
 	*mailRegistry = populatedMail
 
-	// Tool count: 4 aggregate domain tools (calendar, mail, account, system).
-	// All verbs are dispatched within their domain tool.
+	// Tool count: 4 aggregate domain tools (calendar, mail, account, system)
+	// by default, plus the opt-in contacts tool when it is enabled. All verbs
+	// are dispatched within their domain tool.
+	//
+	// Contacts domain aggregate tool. Unlike the four domains above it is
+	// registered conditionally: the whole domain, and with it the Contacts.Read
+	// and People.Read scopes, is opt-in behind ContactsEnabled, so a default
+	// server keeps the four-tool surface and asks for no contacts consent.
+	//
+	// The contactsRegistry pointer is captured by the help verb handler before
+	// RegisterDomainTool populates it. After registration, *contactsRegistry is
+	// updated with the populated map so that the help verb can introspect all
+	// registered verbs at call time (not at construction time).
+	//
+	// The identical condition is repeated in BuildDomainVerbSets: a domain
+	// registered here alone is invisible to the surface generator and to the
+	// manifest-sync check.
 	toolCount := 4
+	if cfg.ContactsEnabled {
+		contactsVerbs, contactsRegistry := buildContactsVerbs(contactsVerbsConfig{
+			retryCfg:          retryCfg,
+			timeout:           timeout,
+			m:                 m,
+			tracer:            t,
+			authMW:            authMW,
+			accountResolverMW: accountResolverMW,
+		})
+		populatedContacts := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+			Domain: "contacts",
+			Intro: "Contact lookup for Microsoft Outlook via Microsoft Graph, for resolving a name " +
+				"to an email address. Read-only: search, get_contact, list_people, and get_person, " +
+				"plus help. The domain is registered only when ContactsEnabled is configured, and " +
+				"no verb writes a contact, folder, or photo.",
+			Verbs:           contactsVerbs,
+			ToolAnnotations: tools.AggregateAnnotations("Contacts", contactsVerbs),
+		})
+		*contactsRegistry = populatedContacts
+		toolCount++
+	}
+
+	// Teams domain aggregate tool, gated the same way and for the same reason:
+	// the whole domain, and with it the four Teams read scopes, is opt-in behind
+	// TeamsEnabled, so a default server keeps its surface and asks for no Teams
+	// consent. Every verb reads; compose_reply prepares reply text and posts
+	// nothing, so there is no write for ReadOnlyGuard to block.
+	//
+	// The identical condition is repeated in BuildDomainVerbSets.
+	if cfg.TeamsEnabled {
+		teamsVerbs, teamsRegistry := buildTeamsVerbs(teamsVerbsConfig{
+			retryCfg:          retryCfg,
+			timeout:           timeout,
+			m:                 m,
+			tracer:            t,
+			authMW:            authMW,
+			accountResolverMW: accountResolverMW,
+		})
+		populatedTeams := tools.RegisterDomainTool(s, tools.DomainToolConfig{
+			Domain: "teams",
+			Intro: "Microsoft Teams reads via Microsoft Graph, for finding what was said and " +
+				"recapping a meeting: search, the chat and channel message reads, the online " +
+				"meeting resolution, and the transcript reads, plus compose_reply, which " +
+				"prepares reply text and posts nothing. The domain is registered only when " +
+				"TeamsEnabled is configured, and no verb sends, posts, or writes.",
+			Verbs:           teamsVerbs,
+			ToolAnnotations: tools.AggregateAnnotations("Teams", teamsVerbs),
+		})
+		*teamsRegistry = populatedTeams
+		toolCount++
+	}
 
 	slog.Info("tool registration complete", "tools", toolCount)
 }

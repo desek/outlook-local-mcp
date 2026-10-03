@@ -102,7 +102,7 @@ func NewHandleUpdateDraft(retryCfg graph.RetryConfig, timeout time.Duration) fun
 		}
 
 		// Step 1: verify isDraft=true.
-		if errResult := verifyIsDraft(ctx, client, retryCfg, timeout, messageID, logger); errResult != nil {
+		if _, errResult := verifyIsDraft(ctx, client, retryCfg, timeout, messageID, logger); errResult != nil {
 			return errResult, nil
 		}
 
@@ -201,7 +201,13 @@ func NewHandleUpdateDraft(retryCfg graph.RetryConfig, timeout time.Duration) fun
 
 // verifyIsDraft fetches the target message with a narrow $select and returns
 // an MCP error result if the message is not found, not a draft, or the GET
-// call fails. Returns nil when the message is confirmed to be a draft.
+// call fails. It returns a nil result when the message is confirmed to be a
+// draft, alongside the message it fetched.
+//
+// The $select carries subject as well as the identity and the draft flag so a
+// caller that must name the draft in its confirmation reads it from this fetch
+// rather than paying a second GET for a field this one could have asked for.
+// Callers that do not need it discard the message.
 //
 // Parameters:
 //   - ctx: the request context.
@@ -211,17 +217,17 @@ func NewHandleUpdateDraft(retryCfg graph.RetryConfig, timeout time.Duration) fun
 //   - messageID: the message identifier to verify.
 //   - logger: the handler-scoped logger.
 //
-// Returns an *mcp.CallToolResult when verification fails, or nil when the
-// message is a draft.
+// Returns the fetched message and a nil result when the message is a draft, or
+// a nil message and an *mcp.CallToolResult when verification fails.
 //
 // Side effects: calls GET /me/messages/{id} on the Microsoft Graph API.
-func verifyIsDraft(ctx context.Context, client *msgraphsdk.GraphServiceClient, retryCfg graph.RetryConfig, timeout time.Duration, messageID string, logger *slog.Logger) *mcp.CallToolResult {
+func verifyIsDraft(ctx context.Context, client *msgraphsdk.GraphServiceClient, retryCfg graph.RetryConfig, timeout time.Duration, messageID string, logger *slog.Logger) (models.Messageable, *mcp.CallToolResult) {
 	timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	cfg := &users.ItemMessagesMessageItemRequestBuilderGetRequestConfiguration{
 		QueryParameters: &users.ItemMessagesMessageItemRequestBuilderGetQueryParameters{
-			Select: []string{"id", "isDraft"},
+			Select: []string{"id", "isDraft", "subject"},
 		},
 	}
 	var msg models.Messageable
@@ -233,13 +239,13 @@ func verifyIsDraft(ctx context.Context, client *msgraphsdk.GraphServiceClient, r
 	if err != nil {
 		if graph.IsTimeoutError(err) {
 			logger.ErrorContext(ctx, "request timed out", "timeout_seconds", int(timeout.Seconds()))
-			return mcp.NewToolResultError(graph.TimeoutErrorMessage(int(timeout.Seconds())))
+			return nil, mcp.NewToolResultError(graph.TimeoutErrorMessage(int(timeout.Seconds())))
 		}
 		logger.ErrorContext(ctx, "isDraft verification failed", "error", graph.FormatGraphError(err))
-		return mcp.NewToolResultError(graph.RedactGraphError(err))
+		return nil, mcp.NewToolResultError(graph.RedactGraphError(err))
 	}
 	if !graph.SafeBool(msg.GetIsDraft()) {
-		return mcp.NewToolResultError("message is not a draft: this tool only operates on messages with isDraft=true")
+		return nil, mcp.NewToolResultError("message is not a draft: this tool only operates on messages with isDraft=true")
 	}
-	return nil
+	return msg, nil
 }

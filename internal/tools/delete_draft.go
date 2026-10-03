@@ -73,7 +73,7 @@ func NewHandleDeleteDraft(retryCfg graph.RetryConfig, timeout time.Duration) fun
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		if errResult := verifyIsDraft(ctx, client, retryCfg, timeout, messageID, logger); errResult != nil {
+		if _, errResult := verifyIsDraft(ctx, client, retryCfg, timeout, messageID, logger); errResult != nil {
 			return errResult, nil
 		}
 

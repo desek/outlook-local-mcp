@@ -547,11 +547,14 @@ func TestScopes_CalendarOnly(t *testing.T) {
 	cfg := config.Config{MailEnabled: false}
 	scopes := Scopes(cfg)
 
-	if len(scopes) != 1 {
-		t.Fatalf("Scopes() returned %d scopes, want 1", len(scopes))
+	want := []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read"}
+	if len(scopes) != len(want) {
+		t.Fatalf("Scopes() = %v, want %v", scopes, want)
 	}
-	if scopes[0] != "Calendars.ReadWrite" {
-		t.Errorf("Scopes()[0] = %q, want %q", scopes[0], "Calendars.ReadWrite")
+	for i, w := range want {
+		if scopes[i] != w {
+			t.Errorf("Scopes()[%d] = %q, want %q", i, scopes[i], w)
+		}
 	}
 }
 
@@ -561,14 +564,14 @@ func TestScopes_WithMail(t *testing.T) {
 	cfg := config.Config{MailEnabled: true}
 	scopes := Scopes(cfg)
 
-	if len(scopes) != 2 {
-		t.Fatalf("Scopes() returned %d scopes, want 2", len(scopes))
+	want := []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.Read"}
+	if len(scopes) != len(want) {
+		t.Fatalf("Scopes() = %v, want %v", scopes, want)
 	}
-	if scopes[0] != "Calendars.ReadWrite" {
-		t.Errorf("Scopes()[0] = %q, want %q", scopes[0], "Calendars.ReadWrite")
-	}
-	if scopes[1] != "Mail.Read" {
-		t.Errorf("Scopes()[1] = %q, want %q", scopes[1], "Mail.Read")
+	for i, w := range want {
+		if scopes[i] != w {
+			t.Errorf("Scopes()[%d] = %q, want %q", i, scopes[i], w)
+		}
 	}
 }
 
@@ -578,14 +581,14 @@ func TestScopes_MailManage(t *testing.T) {
 	cfg := config.Config{MailEnabled: true, MailManageEnabled: true}
 	scopes := Scopes(cfg)
 
-	if len(scopes) != 2 {
-		t.Fatalf("Scopes() returned %d scopes, want 2", len(scopes))
+	want := []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.ReadWrite"}
+	if len(scopes) != len(want) {
+		t.Fatalf("Scopes() = %v, want %v", scopes, want)
 	}
-	if scopes[0] != "Calendars.ReadWrite" {
-		t.Errorf("Scopes()[0] = %q, want %q", scopes[0], "Calendars.ReadWrite")
-	}
-	if scopes[1] != "Mail.ReadWrite" {
-		t.Errorf("Scopes()[1] = %q, want %q", scopes[1], "Mail.ReadWrite")
+	for i, w := range want {
+		if scopes[i] != w {
+			t.Errorf("Scopes()[%d] = %q, want %q", i, scopes[i], w)
+		}
 	}
 	for _, s := range scopes {
 		if s == "Mail.Read" {
@@ -632,6 +635,186 @@ func TestScopes_NoMailSend(t *testing.T) {
 		for _, s := range scopes {
 			if s == "Mail.Send" {
 				t.Errorf("case %d: Scopes() must not include Mail.Send; got %v", i, scopes)
+			}
+		}
+	}
+}
+
+// TestScopes_Contacts validates that ContactsEnabled appends both contacts read
+// scopes on top of whatever the mail flags select, and that they are appended
+// rather than substituted for an existing scope.
+func TestScopes_Contacts(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  config.Config
+		want []string
+	}{
+		{
+			name: "contacts alone",
+			cfg:  config.Config{ContactsEnabled: true},
+			want: []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Contacts.Read", "People.Read"},
+		},
+		{
+			name: "contacts with mail read",
+			cfg:  config.Config{MailEnabled: true, ContactsEnabled: true},
+			want: []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.Read", "Contacts.Read", "People.Read"},
+		},
+		{
+			name: "contacts with mail manage",
+			cfg:  config.Config{MailEnabled: true, MailManageEnabled: true, ContactsEnabled: true},
+			want: []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.ReadWrite", "Contacts.Read", "People.Read"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scopes := Scopes(tc.cfg)
+			if len(scopes) != len(tc.want) {
+				t.Fatalf("Scopes() = %v, want %v", scopes, tc.want)
+			}
+			for i, want := range tc.want {
+				if scopes[i] != want {
+					t.Errorf("Scopes()[%d] = %q, want %q (full set %v)", i, scopes[i], want, scopes)
+				}
+			}
+		})
+	}
+}
+
+// TestScopes_NoContactsByDefault validates that neither contacts scope reaches a
+// configuration that did not opt in. A user who never sets the flag must see no
+// new consent prompt, so the scope set must be unchanged in every such config.
+func TestScopes_NoContactsByDefault(t *testing.T) {
+	cases := []config.Config{
+		{},
+		{MailEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true},
+		{MailManageEnabled: true},
+	}
+	for i, cfg := range cases {
+		scopes := Scopes(cfg)
+		for _, s := range scopes {
+			if s == "Contacts.Read" || s == "People.Read" {
+				t.Errorf("case %d: Scopes() must not include %q when ContactsEnabled is false; got %v", i, s, scopes)
+			}
+		}
+	}
+}
+
+// TestScopes_NoContactsWriteEver validates that no configuration requests a
+// contact write scope. The contacts surface is read-only, so Contacts.ReadWrite
+// is never asked for, opted in or not.
+func TestScopes_NoContactsWriteEver(t *testing.T) {
+	cases := []config.Config{
+		{},
+		{ContactsEnabled: true},
+		{MailEnabled: true, ContactsEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true, ContactsEnabled: true},
+	}
+	for i, cfg := range cases {
+		for _, s := range Scopes(cfg) {
+			if s == "Contacts.ReadWrite" || s == "People.ReadWrite" {
+				t.Errorf("case %d: Scopes() must never include the write scope %q; got %v", i, s, Scopes(cfg))
+			}
+		}
+	}
+}
+
+// TestScopes_TeamsEnabled validates that TeamsEnabled appends all four Teams
+// read scopes on top of whatever the mail and contacts flags select, in a stable
+// order and appended rather than substituted for an existing scope.
+func TestScopes_TeamsEnabled(t *testing.T) {
+	teams := []string{"Chat.Read", "ChannelMessage.Read.All", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All"}
+
+	cases := []struct {
+		name string
+		cfg  config.Config
+		want []string
+	}{
+		{
+			name: "teams alone",
+			cfg:  config.Config{TeamsEnabled: true},
+			want: append([]string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read"}, teams...),
+		},
+		{
+			name: "teams with mail read",
+			cfg:  config.Config{MailEnabled: true, TeamsEnabled: true},
+			want: append([]string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.Read"}, teams...),
+		},
+		{
+			name: "teams with mail manage",
+			cfg:  config.Config{MailEnabled: true, MailManageEnabled: true, TeamsEnabled: true},
+			want: append([]string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.ReadWrite"}, teams...),
+		},
+		{
+			name: "teams with contacts",
+			cfg:  config.Config{ContactsEnabled: true, TeamsEnabled: true},
+			want: append([]string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Contacts.Read", "People.Read"}, teams...),
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			scopes := Scopes(tc.cfg)
+			if len(scopes) != len(tc.want) {
+				t.Fatalf("Scopes() = %v, want %v", scopes, tc.want)
+			}
+			for i, want := range tc.want {
+				if scopes[i] != want {
+					t.Errorf("Scopes()[%d] = %q, want %q (full set %v)", i, scopes[i], want, scopes)
+				}
+			}
+		})
+	}
+}
+
+// TestScopes_NoTeamsByDefault validates that no Teams scope reaches a
+// configuration that did not opt in. A user who never sets the flag must see a
+// consent surface identical to the one before the domain existed.
+func TestScopes_NoTeamsByDefault(t *testing.T) {
+	cases := []config.Config{
+		{},
+		{MailEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true},
+		{ContactsEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true, ContactsEnabled: true},
+	}
+	for i, cfg := range cases {
+		for _, s := range Scopes(cfg) {
+			switch s {
+			case "Chat.Read", "ChannelMessage.Read.All", "OnlineMeetings.Read", "OnlineMeetingTranscript.Read.All":
+				t.Errorf("case %d: Scopes() must not include %q when TeamsEnabled is false; got %v", i, s, Scopes(cfg))
+			}
+		}
+	}
+}
+
+// TestScopes_NoTeamsSendEver validates that no configuration requests a Teams
+// send or write scope. The Teams surface is read-only, so the read-only property
+// is enforced at the scope layer and not only at the verb layer: even a defect in
+// a handler cannot post a message the token was never granted permission to post.
+func TestScopes_NoTeamsSendEver(t *testing.T) {
+	forbidden := []string{
+		"ChatMessage.Send",
+		"Chat.ReadWrite",
+		"ChannelMessage.Send",
+		"ChannelMessage.ReadWrite.All",
+		"Group.ReadWrite",
+		"Group.ReadWrite.All",
+		"OnlineMeetings.ReadWrite",
+	}
+	cases := []config.Config{
+		{},
+		{TeamsEnabled: true},
+		{MailEnabled: true, TeamsEnabled: true},
+		{ContactsEnabled: true, TeamsEnabled: true},
+		{MailEnabled: true, MailManageEnabled: true, ContactsEnabled: true, TeamsEnabled: true},
+	}
+	for i, cfg := range cases {
+		scopes := Scopes(cfg)
+		for _, s := range scopes {
+			for _, bad := range forbidden {
+				if s == bad {
+					t.Errorf("case %d: Scopes() must never include the write scope %q; got %v", i, s, scopes)
+				}
 			}
 		}
 	}

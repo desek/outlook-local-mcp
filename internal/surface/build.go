@@ -19,7 +19,7 @@ import (
 
 // domainOrder is the fixed order domains appear in the manifest. It matches the
 // tool-naming convention list and is independent of map iteration order.
-var domainOrder = []string{"calendar", "mail", "account", "system"}
+var domainOrder = []string{"calendar", "mail", "account", "system", "contacts", "teams"}
 
 // fullConfig returns the configuration in which every optional gate is open, so
 // that BuildVerbsForInspection yields the complete verb surface.
@@ -27,16 +27,21 @@ func fullConfig() config.Config {
 	return config.Config{
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 		AuthMethod:        "auth_code",
 	}
 }
 
-// defaultConfig returns the out-of-box configuration: no optional mail gate
-// enabled and the default device_code auth method, so complete_auth is absent.
+// defaultConfig returns the out-of-box configuration: no optional mail,
+// contacts, or teams gate enabled and the default device_code auth method, so
+// complete_auth is absent and the contacts and teams domains are unregistered.
 func defaultConfig() config.Config {
 	return config.Config{
 		MailEnabled:       false,
 		MailManageEnabled: false,
+		ContactsEnabled:   false,
+		TeamsEnabled:      false,
 		AuthMethod:        "device_code",
 	}
 }
@@ -65,10 +70,18 @@ func gateProbes() []gateProbe {
 	authCode := defaultConfig()
 	authCode.AuthMethod = "auth_code"
 
+	contacts := defaultConfig()
+	contacts.ContactsEnabled = true
+
+	teams := defaultConfig()
+	teams.TeamsEnabled = true
+
 	return []gateProbe{
 		{config.EnvMailEnabled, mailRead},
 		{config.EnvMailManageEnabled, mailManage},
 		{config.EnvAuthMethod, authCode},
+		{config.EnvContactsEnabled, contacts},
+		{config.EnvTeamsEnabled, teams},
 	}
 }
 

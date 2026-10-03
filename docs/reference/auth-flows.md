@@ -31,7 +31,11 @@ When mail access is enabled via `OUTLOOK_MCP_MAIL_ENABLED=true`, the **`Mail.Rea
 
 The `Calendars.ReadWrite` scope is a delegated permission that **does not require admin consent**; users can self-consent. It covers all write operations including creating events with attendees (which automatically sends invitations), cancelling events (which sends cancellation notices), and enabling Teams online meetings via the `isOnlineMeeting` flag. No `Mail.Send` or `OnlineMeetings.ReadWrite` scope is needed.
 
-When calling `msgraphsdk.NewGraphServiceClientWithCredentials`, pass scopes from `auth.Scopes(cfg)`, which returns `[]string{"Calendars.ReadWrite"}` when mail is disabled, or `[]string{"Calendars.ReadWrite", "Mail.Read"}` when mail is enabled. The SDK automatically prefixes the Graph resource URI.
+When contacts resolution is enabled via `OUTLOOK_MCP_CONTACTS_ENABLED=true`, the **`Contacts.Read`** and **`People.Read`** scopes are additionally requested. `Contacts.ReadWrite` is not requested in any configuration.
+
+When Teams reading is enabled via `OUTLOOK_MCP_TEAMS_ENABLED=true`, four delegated read scopes are additionally requested: **`Chat.Read`** for the signed-in user's chats and their messages, **`ChannelMessage.Read.All`** for channel posts and their replies, **`OnlineMeetings.Read`** for resolving a calendar event's join URL to its online meeting, and **`OnlineMeetingTranscript.Read.All`** for that meeting's transcripts. None is requested when the flag is off. No Teams send or write scope (`ChatMessage.Send`, `Chat.ReadWrite`, `ChannelMessage.Send`, `Group.ReadWrite`) is requested under any configuration: the domain registers no verb that posts, edits, or deletes a Teams message, and `teams.compose_reply` returns prepared text the user sends by hand. `OnlineMeetings.Read` is a read scope and does not permit creating or updating a meeting; the calendar domain's own Teams meeting provisioning continues to work through `Calendars.ReadWrite` alone.
+
+When calling `msgraphsdk.NewGraphServiceClientWithCredentials`, pass scopes from `auth.Scopes(cfg)`. The set is additive and built from the configuration: `Calendars.ReadWrite` always, then the mail scope if mail is enabled, the two contacts scopes if contacts are enabled, and the four Teams read scopes if Teams is enabled. With every flag off it is `[]string{"Calendars.ReadWrite"}`. The SDK automatically prefixes the Graph resource URI.
 
 ### Device code flow sequence
 

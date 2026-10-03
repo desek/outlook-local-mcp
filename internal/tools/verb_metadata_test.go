@@ -27,8 +27,8 @@ import (
 	server "github.com/desek/outlook-local-mcp/internal/server"
 )
 
-// buildMetadataTestServer builds a server with all four domain tools registered
-// and all mail features enabled so that every verb is present.
+// buildMetadataTestServer builds a server with every domain tool registered and
+// all optional features enabled so that every verb is present.
 func buildMetadataTestServer(t *testing.T) *mcpserver.MCPServer {
 	t.Helper()
 
@@ -55,6 +55,8 @@ func buildMetadataTestServer(t *testing.T) *mcpserver.MCPServer {
 		AuthMethod:        "browser",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 	}
 	server.RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, r, cfg, nil)
 	return s
@@ -97,7 +99,7 @@ func verbsFromHelp(t *testing.T, s *mcpserver.MCPServer, domain string) []map[st
 // has a non-empty Description field (CR-0065 FR-9, AC-4).
 func TestEveryVerbHasDescription(t *testing.T) {
 	s := buildMetadataTestServer(t)
-	domains := []string{"calendar", "mail", "account", "system"}
+	domains := []string{"calendar", "mail", "account", "system", "contacts", "teams"}
 
 	for _, domain := range domains {
 		verbs := verbsFromHelp(t, s, domain)
@@ -146,17 +148,20 @@ func TestEveryVerbHasClassification(t *testing.T) {
 	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
 	audit.InitAuditLog(false, "")
 
-	// auth_code plus both mail flags registers every verb the server can host.
+	// auth_code plus both mail flags and the contacts gate registers every verb
+	// the server can host.
 	cfg := config.Config{
 		AuthRecordPath:    "/tmp/test",
 		CacheName:         "test",
 		AuthMethod:        "auth_code",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 	}
 	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
 
-	for _, domain := range []string{"calendar", "mail", "account", "system"} {
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts", "teams"} {
 		verbs, ok := verbSets[domain]
 		if !ok {
 			t.Errorf("domain %q missing from verb sets", domain)
@@ -201,7 +206,7 @@ func missingClassificationHints(opts []mcp.ToolOption) []string {
 // at most 80 characters (CR-0065 FR-9, original CR-0060 contract).
 func TestEveryVerbHasSummary(t *testing.T) {
 	s := buildMetadataTestServer(t)
-	domains := []string{"calendar", "mail", "account", "system"}
+	domains := []string{"calendar", "mail", "account", "system", "contacts", "teams"}
 
 	for _, domain := range domains {
 		verbs := verbsFromHelp(t, s, domain)
@@ -227,7 +232,7 @@ func TestEveryVerbHasSummary(t *testing.T) {
 // in that file (CR-0065 FR-11, AC-6).
 func TestSeeDocsAnchorsResolve(t *testing.T) {
 	s := buildMetadataTestServer(t)
-	domains := []string{"calendar", "mail", "account", "system"}
+	domains := []string{"calendar", "mail", "account", "system", "contacts", "teams"}
 
 	// Build heading index: slug -> set of anchor strings derived from "## Heading".
 	headingIndex := buildHeadingIndex(t)
@@ -338,4 +343,77 @@ func headingToAnchor(heading string) string {
 		}
 	}
 	return b.String()
+}
+
+// TestWriteVerbsDeclareNoOutputParameter asserts the project's tiering rule as a
+// derived check over the whole registry rather than as a list of known verbs:
+// a verb whose readOnlyHint is false returns a text confirmation
+// unconditionally, so it MUST NOT publish an output parameter.
+//
+// The cases come from the live verb sets built under the maximal configuration,
+// so a write verb added later is covered without anyone remembering to extend a
+// list here. The schema is read the way the aggregate builder reads it, by
+// materialising the verb's own Schema options onto a throwaway tool, so the
+// property inspected is the one the verb declares rather than the union the
+// aggregate publishes.
+func TestWriteVerbsDeclareNoOutputParameter(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "auth_code",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+		ContactsEnabled:   true,
+		TeamsEnabled:      true,
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	checked := 0
+	for _, domain := range []string{"calendar", "mail", "account", "system", "contacts", "teams"} {
+		for _, v := range verbSets[domain] {
+			if verbIsReadOnly(v.Annotations) {
+				continue
+			}
+			checked++
+			if _, declared := verbSchemaProperties(v.Schema)["output"]; declared {
+				t.Errorf("domain %q verb %q declares an output parameter; a write verb returns a text confirmation unconditionally and must not offer a tier", domain, v.Name)
+			}
+		}
+	}
+	if checked == 0 {
+		t.Error("the check selected no write verbs; the derivation is broken, not the registry")
+	}
+}
+
+// verbIsReadOnly materialises the verb's annotation options and reports the
+// declared readOnlyHint, read from the verb itself rather than inferred from
+// its name.
+func verbIsReadOnly(opts []mcp.ToolOption) bool {
+	var mt mcp.Tool
+	for _, opt := range opts {
+		opt(&mt)
+	}
+	return mt.Annotations.ReadOnlyHint != nil && *mt.Annotations.ReadOnlyHint
+}
+
+// verbSchemaProperties materialises the verb's schema options onto a throwaway
+// tool and returns the property names it declares.
+func verbSchemaProperties(opts []mcp.ToolOption) map[string]any {
+	if len(opts) == 0 {
+		return map[string]any{}
+	}
+	mt := mcp.NewTool("_introspect", opts...)
+	return mt.InputSchema.Properties
 }

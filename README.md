@@ -1,6 +1,6 @@
 # Outlook Local MCP Server
 
-A single-binary MCP server that connects Claude Desktop and Claude Code to Microsoft Outlook via the Microsoft Graph API. Manage your calendar, read email, and compose drafts without leaving your AI assistant.
+A single-binary MCP server that connects Claude Desktop and Claude Code to Microsoft Outlook via the Microsoft Graph API. Manage your calendar, read and triage email, and compose drafts without leaving your AI assistant.
 
 <p align="center">
   <img src="docs/assets/demo.gif" alt="outlook-local-mcp demo">
@@ -32,13 +32,15 @@ Download the `.mcpb` file from the [latest release](https://github.com/desek/out
 
 ## Tool invocation shape
 
-All operations use four aggregate domain tools dispatched by an `operation` verb:
+All operations use four aggregate domain tools dispatched by an `operation` verb, plus two opt-in ones registered only when their variable is set, `contacts` under `OUTLOOK_MCP_CONTACTS_ENABLED` and `teams` under `OUTLOOK_MCP_TEAMS_ENABLED`:
 
 ```
 {tool: "calendar", args: {operation: "list_events", date: "today"}}
 {tool: "mail",     args: {operation: "list_folders"}}
 {tool: "account",  args: {operation: "list"}}
 {tool: "system",   args: {operation: "status"}}
+{tool: "contacts", args: {operation: "search", query: "alex"}}   // OUTLOOK_MCP_CONTACTS_ENABLED
+{tool: "teams",    args: {operation: "search", query: "release checklist"}}   // OUTLOOK_MCP_TEAMS_ENABLED
 ```
 
 Call any domain with `operation: "help"` to list its verbs and parameters.

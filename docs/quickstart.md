@@ -112,10 +112,20 @@ Parameters: `event_id` (required), `timezone`.
 
 Parameters: `query`, `start_datetime`, `end_datetime`, `importance`, `sensitivity`, `is_all_day`, `show_as`, `is_cancelled`, `categories`, `max_results`, `timezone`. All optional; defaults to next 30 days.
 
-**Free/busy** availability:
+**Free/busy** availability on your own calendar, with the subject of each busy period:
 > "When am I free next Monday?"
 
 Parameters: `start_datetime` (required), `end_datetime` (required), `timezone`.
+
+**Schedule** -- free/busy blocks and working hours for one or more mailboxes you are permitted to view:
+> "Is Alice free tomorrow afternoon, and when does she work?"
+
+Parameters: `schedules` (required, comma-separated SMTP addresses, at most 20 per call), a resolvable window supplied either as `date` or as `start_datetime` and `end_datetime` (the explicit datetimes take precedence), `availability_view_interval`, `timezone`. A mailbox you may not view is reported as an error against that mailbox while the others still return their blocks -- see [A mailbox reports an error inside a schedule reply](troubleshooting#schedule-mailbox-error).
+
+**Find meeting times** -- candidate slots for a set of attendees, ranked by confidence:
+> "Find a 30-minute slot next week for alice@example.com and bob@example.com"
+
+Parameters: `attendees` (required, JSON array), `meeting_duration` (ISO 8601, defaults to `PT30M`), `start_datetime` and `end_datetime` (supply both to bound the search, or omit both to let Graph choose the window), `max_candidates`, `minimum_attendee_percentage`, `is_organizer_optional`, `timezone`. This verb only suggests; booking a suggested slot is a separate `create_meeting` call.
 
 ### Write
 
@@ -130,6 +140,25 @@ Optional: `body`, `location`, `attendees` (JSON array), `is_online_meeting`, `is
 
 Required: `event_id`. All other fields are optional.
 
+### Attachments
+
+The files clipped to an event are reachable by the same `event_id` the reads above return. No opt-in flag governs them: an event attachment is calendar data.
+
+**List event attachments** -- metadata only, no file content:
+> "What is attached to the design review invite?"
+
+Parameters: `event_id` (required), `account`, `output`.
+
+**Get event attachment** -- the file's bytes, base64 encoded:
+> "Read the agenda attached to that meeting"
+
+Parameters: `event_id` (required), `attachment_id` (required, from the list above), `account`, `output`. The content is returned only within `OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES` (10 MB by default); a larger attachment is refused rather than truncated.
+
+**Add event attachment** -- attach a file to an existing event:
+> "Attach this PDF to tomorrow's team meeting"
+
+Required: `event_id`, `name`, `content_bytes` (base64). Optional: `mime_type` (defaults to `application/octet-stream`), `account`. A small file goes in one request and a file above roughly 3 MB through a chunked upload session; the confirmation names the path used, the attachment identifier the service assigned, and the size measured after decoding. Attaching a file does not notify attendees. This is a write verb, so read-only mode refuses it -- see [Attachment upload did not complete](troubleshooting#attachment-upload-did-not-complete) if a large file fails to land.
+
 ### Delete
 
 **Delete event**:
@@ -142,6 +171,80 @@ Parameters: `event_id` (required). Cancellation notices are sent to attendees au
 
 Parameters: `event_id` (required), `comment` (optional cancellation message). Only the organizer can cancel.
 
+### Contacts (opt-in)
+
+The verbs above take email addresses, never names. The `contacts` tool supplies the address, and it is one of the two tools that are absent unless asked for: set `OUTLOOK_MCP_CONTACTS_ENABLED=true` in the server's environment and restart the client.
+
+```json
+{
+  "mcpServers": {
+    "outlook-local": {
+      "command": "/absolute/path/to/outlook-local-mcp",
+      "env": {
+        "OUTLOOK_MCP_CONTACTS_ENABLED": "true"
+      }
+    }
+  }
+}
+```
+
+Enabling it adds the `Contacts.Read` and `People.Read` scopes, so the next tool call re-runs the sign-in flow once for incremental consent -- see [Contacts consent prompt on first use](troubleshooting#contacts-consent). If the tool does not appear, see [Contacts tool not listed](troubleshooting#contacts-disabled).
+
+**Search** across saved contacts and relevance-ranked people at once:
+> "What is Alex's email address?"
+
+Parameters: `query` (required), `account`, `output`. Each match is labelled with its source, a contact you saved or a person Graph inferred from your correspondence, so you can judge how much to trust it.
+
+**Get contact** and **get person** fetch one full record by the identifier a search returned:
+> "Show me the full contact record for that Alex"
+
+Parameters: `contact_id` or `person_id` (required), `account`, `output`.
+
+**List people** returns your correspondents in Graph's relevance order, most relevant first:
+> "Who do I email most?"
+
+Parameters: `account`, `output`.
+
+Every contacts verb reads. Nothing in the domain creates, changes, or deletes a contact, and no contact write scope is ever requested. See [Contacts gating](concepts#contacts-gating).
+
+### Teams (opt-in)
+
+The `teams` tool reads Microsoft Teams conversations and meeting transcripts, and it is the other tool absent unless asked for: set `OUTLOOK_MCP_TEAMS_ENABLED=true` in the server's environment and restart the client.
+
+```json
+{
+  "mcpServers": {
+    "outlook-local": {
+      "command": "/absolute/path/to/outlook-local-mcp",
+      "env": {
+        "OUTLOOK_MCP_TEAMS_ENABLED": "true"
+      }
+    }
+  }
+}
+```
+
+Enabling it adds the `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` scopes, so the next tool call re-runs the sign-in flow once for incremental consent. If the tool does not appear, see [Teams tool not listed](troubleshooting#teams-disabled).
+
+**Search** is where every Teams flow starts, because it is what turns a topic into the identifiers the other verbs need:
+> "Find the Teams messages about the release checklist"
+
+Parameters: `query` (required), `account`, `output`. Each hit names the chat, or the team and channel, it came from. Enumerating teams and channels is not offered; a channel is reached this way. See [Teams channel read is missing an identifier](troubleshooting#teams-channel-identifiers).
+
+**Read a thread** with `list_chats`, `list_chat_messages`, and `list_channel_messages`, then escalate one message with `get_chat_message` or `get_channel_message`. Replies to a channel post are listed separately, by `list_channel_message_replies`. Each listing reads one page; pass `max_results` to bound it. A message body is returned as a preview by default; pass `output: "raw"` for the whole thing.
+
+**Recap a meeting** by resolving the join URL a calendar event carries:
+> "Summarise yesterday's project sync from its Teams transcript"
+
+`get_online_meeting` takes exactly one of `meeting_id` or `join_web_url` and returns the meeting-scoped identifier `list_transcripts` and `get_transcript` are keyed by. The full WEBVTT text comes back only under `output: "raw"`. See [Teams meeting or transcript not resolved](troubleshooting#teams-meeting-unresolved).
+
+**Compose a reply** without sending one:
+> "Draft a reply to that message quoting what Sam asked"
+
+Parameters: `body` (required, the reply text), `message_id` (required), plus `chat_id` for a chat message or both `team_id` and `channel_id` for a channel post, and optional `account`. It takes no `output` parameter, because it projects no Graph resource.
+
+`compose_reply` reads the parent message, quotes it, and returns prepared text. It posts nothing: no Teams send scope is requested in any configuration, so pasting the reply into Microsoft Teams is a step the user takes. Every other Teams verb reads. See [Teams gating](concepts#teams-gating).
+
 ## 5. Configuration
 
 All environment variables are prefixed with `OUTLOOK_MCP_`:
@@ -153,6 +256,8 @@ All environment variables are prefixed with `OUTLOOK_MCP_`:
 | `DEFAULT_TIMEZONE` | `UTC` | IANA timezone for calendar operations |
 | `LOG_LEVEL` | `warn` | Log level: `debug`, `info`, `warn`, `error` |
 | `READ_ONLY` | `false` | Disable write tools (create, update, delete, cancel) |
+| `CONTACTS_ENABLED` | `false` | Register the opt-in read-only `contacts` tool; requests `Contacts.Read` and `People.Read` |
+| `TEAMS_ENABLED` | `false` | Register the opt-in read-only `teams` tool; requests `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` |
 | `LOG_FORMAT` | `json` | Log format: `json` or `text` |
 | `LOG_SANITIZE` | `true` | Mask PII in log output |
 | `LOG_FILE` | *(empty = disabled)* | Log file path for persistent file output |
@@ -181,7 +286,7 @@ Fetch a document or a specific section by heading anchor:
 {tool: "system", args: {operation: "get_docs", slug: "troubleshooting", section: "keychain-locked"}}
 ```
 
-The embedded bundle contains `readme`, `quickstart`, and `troubleshooting`. Each document is also exposed as an MCP resource at `doc://outlook-local-mcp/{slug}` for clients that support `resources/list` and `resources/read`. Run `system.status` to discover the base URI and the troubleshooting slug. See CR-0061 for implementation details.
+The embedded bundle contains `readme`, `quickstart`, `concepts`, and `troubleshooting`. Each document is also exposed as an MCP resource at `doc://outlook-local-mcp/{slug}` for clients that support `resources/list` and `resources/read`. Run `system.status` to discover the base URI and the troubleshooting slug.
 
 ## Container deployment {#container-deployment}
 

@@ -41,6 +41,8 @@ const (
 	EnvProvenanceTag          = "OUTLOOK_MCP_PROVENANCE_TAG"
 	EnvMailEnabled            = "OUTLOOK_MCP_MAIL_ENABLED"
 	EnvMailManageEnabled      = "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+	EnvContactsEnabled        = "OUTLOOK_MCP_CONTACTS_ENABLED"
+	EnvTeamsEnabled           = "OUTLOOK_MCP_TEAMS_ENABLED"
 	EnvMaxAttachmentSizeBytes = "OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES"
 )
 
@@ -88,8 +90,10 @@ var inventory = []Variable{
 	{EnvTokenStorage, "auto", "Token storage backend: auto, keychain, or file."},
 	{EnvProvenanceTag, "com.github.desek.outlook-local-mcp.created", "Extended-property tag name for MCP-created events; empty disables provenance tagging."},
 	{EnvMailEnabled, "false", "Enable read-only mail access and request the Mail.Read scope."},
-	{EnvMailManageEnabled, "false", "Enable draft management and request the Mail.ReadWrite scope; implies MAIL_ENABLED."},
-	{EnvMaxAttachmentSizeBytes, "10485760", "Maximum attachment size in bytes returned by get_attachment (default 10 MB)."},
+	{EnvMailManageEnabled, "false", "Enable draft management, draft attachments, and received-message management, and request the Mail.ReadWrite scope; implies MAIL_ENABLED."},
+	{EnvContactsEnabled, "false", "Enable the read-only contacts domain and request the Contacts.Read and People.Read scopes; no contact write scope is ever requested."},
+	{EnvTeamsEnabled, "false", "Enable the read-only Teams domain and request the Chat.Read, ChannelMessage.Read.All, OnlineMeetings.Read, and OnlineMeetingTranscript.Read.All scopes; no Teams send or write scope is ever requested."},
+	{EnvMaxAttachmentSizeBytes, "10485760", "Maximum attachment size in bytes, both downloaded by get_attachment and uploaded by add_attachment (default 10 MB)."},
 }
 
 // Inventory returns the canonical, ordered inventory of every environment

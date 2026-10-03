@@ -1,3 +1,10 @@
+| 52   | Teams help (twelve verbs)         | PASS/FAIL/SKIP | e.g., "all twelve verbs listed; no send verb offered"     |
+| 53   | Search Teams messages             | PASS/FAIL/SKIP | e.g., "hits carry chat or channel ids; blank query refused" |
+| 54   | Read a chat thread                | PASS/FAIL/SKIP | e.g., "messages and one message returned"                |
+| 55   | Read a channel thread             | PASS/FAIL/SKIP | e.g., "messages, one message, replies; or no channel hit" |
+| 56   | Prepare a reply (nothing sent)    | PASS/FAIL/SKIP | e.g., "quoted text returned; thread unchanged on re-read" |
+| 57   | Resolve an online meeting         | PASS/FAIL/SKIP | e.g., "join URL resolved; both identifiers refused"      |
+| 58   | Read a meeting transcript         | PASS/FAIL/SKIP | e.g., "preview by default; full content under raw"       |
 # MCP Tool CRUD Lifecycle Test
 
 Step-by-step instruction for Claude Code to exercise the MCP tools through a complete create-read-update-delete cycle with verification at each stage.
@@ -125,6 +132,7 @@ Treat the following as a user question that you must answer using only the in-se
 - **Record:** `config.identity.client_id` and `config.identity.tenant_id` as the **identity config**.
 - **Record:** `config.storage.token_cache_backend` (either `"keychain"` or `"file"`) as the **auth cache type**.
 - **Record:** `config.features.read_only` as the **read-only mode** setting.
+- **Record:** `config.features.mail_enabled`, `config.features.mail_manage_enabled`, `config.features.contacts_enabled`, and `config.features.teams_enabled` as the **feature gates**. The skip rules in Steps 30, 31, 37, 47, and 52 read these values.
 - **Record:** `config.features.provenance_tag` as the **provenance tag**.
 - **Record:** `config.graph_api.max_retries` and `config.graph_api.request_timeout_seconds` as the **Graph API settings**.
 - **Fail:** Stop and report if `config.logging.log_file` is empty or `config.logging.log_level` is not `"debug"`.
@@ -580,7 +588,7 @@ Call `{tool: "mail", args: {operation: "list_messages", ...}}` four times with t
 
 ### Step 31 -- Create draft (skip if mail management disabled)
 
-If `config.features.mail_manage_enabled` from Step 0c is `false`, **skip** Steps 31 through 35 and record them as SKIP.
+If `config.features.mail_manage_enabled` from Step 0c is `false`, **skip** Steps 31 through 35 and Steps 37 through 41 (received-message management) and record them all as SKIP.
 
 Call `{tool: "mail", args: {operation: "create_draft", to_recipients: "<own UPN>", subject: "CRUD test draft", body: "Created by MCP CRUD lifecycle test.", importance: "normal"}}`.
 
@@ -635,6 +643,230 @@ Call `{tool: "mail", args: {operation: "list_attachments", message_id: "<message
 - **Verify:** Response is plain text with attachment metadata (name, size, content type).
 - **Verify:** If the attachment is within the configured size limit, content is returned (base64); otherwise an explanatory message is returned.
 - **Fail:** If the attachment cannot be retrieved for a valid ID.
+
+### Step 37 -- Mark read and restore (skip if mail management disabled)
+
+Steps 37 through 39 write properties on a real received message and **must restore the original value**. Call `{tool: "mail", args: {operation: "list_messages", folder_id: "Inbox", max_results: 1}}` and record the first message's ID as **triage message ID**. Then call `{tool: "mail", args: {operation: "get_message", message_id: "<triage message ID>", output: "raw"}}` and record its current `isRead`, `flag`, and `categories` values as the **restore values**. If the Inbox is empty, skip Steps 37 through 39.
+
+Call `{tool: "mail", args: {operation: "mark_read", message_id: "<triage message ID>", is_read: <the inverse of the recorded isRead>}}`, then call it a second time with the identical arguments.
+
+- **Verify:** Both calls return a plain text confirmation naming the subject, the message ID, and the resulting read state.
+- **Verify:** The two confirmations are identical, and a subsequent `get_message` shows the written state. The verb is declared idempotent, so a repeat must not change the outcome.
+- **Restore:** Call `mark_read` once more with the recorded `isRead` value.
+- **Fail:** If either call errors, if the state is not reflected, or if the repeat produces a different confirmation.
+
+### Step 38 -- Set follow-up flag and restore
+
+Call `{tool: "mail", args: {operation: "set_flag", message_id: "<triage message ID>", flag_status: "flagged"}}`, then call `{tool: "mail", args: {operation: "set_flag", message_id: "<triage message ID>", flag_status: "urgent"}}`.
+
+- **Verify:** The first call returns a plain text confirmation stating the resulting status is `flagged`, and `list_messages` with `flag_status: "flagged"` now includes the message.
+- **Verify:** The second call is **refused** with an error naming the three accepted values `notFlagged`, `flagged`, and `complete`. An unrecognised status must not silently clear the flag.
+- **Restore:** Call `set_flag` with the recorded original status (`notFlagged` if the message was unflagged).
+- **Fail:** If the invalid status is accepted, or if the confirmation does not state the resulting status.
+
+### Step 39 -- Set categories, clear, and restore
+
+Call `{tool: "mail", args: {operation: "set_categories", message_id: "<triage message ID>", categories: "MCP CRUD test"}}`, then call `{tool: "mail", args: {operation: "set_categories", message_id: "<triage message ID>", categories: "   "}}`.
+
+- **Verify:** The first confirmation lists the resulting category set, read back from the service rather than echoing the request.
+- **Verify:** The second call clears every category and its confirmation states that the message now carries no categories, rather than printing an empty list.
+- **Note:** Graph applies a category on a message whether or not it exists in the mailbox's master category list, so a category set here may render without a colour in Outlook. That is expected; these verbs do not create master categories.
+- **Restore:** Call `set_categories` with the recorded original categories as a comma-separated string, or with an empty string if there were none.
+- **Fail:** If the second call leaves categories in place, or if either confirmation reports the request rather than the response.
+
+### Step 40 -- Move a message and follow the new identifier
+
+Create a disposable subject rather than moving the user's mail: call `{tool: "mail", args: {operation: "create_draft", to_recipients: "<own UPN>", subject: "CRUD test move", body: "Created by MCP CRUD lifecycle test."}}` and record the ID as **move source ID**.
+
+Call `{tool: "mail", args: {operation: "list_folders"}}` and record the ID of the `Deleted Items` folder as **destination folder ID**. Then call `{tool: "mail", args: {operation: "move_message", message_id: "<move source ID>", destination_folder_id: "<destination folder ID>"}}`.
+
+- **Verify:** The confirmation names the destination folder, the original identifier, and a **new** message identifier, and states that the original identifier no longer resolves. Record the new ID as **moved message ID**.
+- **Verify:** `{tool: "mail", args: {operation: "get_message", message_id: "<move source ID>"}}` now errors, and `get_message` with the **moved message ID** succeeds.
+- **Verify (unresolvable destination):** Call `move_message` again with `destination_folder_id: "Archive"` (a folder *name*, not an identifier). The call must fail with an error naming `list_folders` as the way to obtain a destination identifier.
+- **Cleanup:** Call `{tool: "mail", args: {operation: "delete_draft", message_id: "<moved message ID>"}}`.
+- **Fail:** If the confirmation omits the new identifier, if the original identifier still resolves, or if the folder-name destination is accepted.
+
+### Step 41 -- Attach a file to a draft
+
+Create the target rather than using an existing message: call `{tool: "mail", args: {operation: "create_draft", to_recipients: "<own UPN>", subject: "CRUD test attachment", body: "Created by MCP CRUD lifecycle test."}}` and record the ID as **attachment draft ID**.
+
+Call `{tool: "mail", args: {operation: "add_attachment", message_id: "<attachment draft ID>", name: "crud-test.txt", mime_type: "text/plain", content_bytes: "Q1JVRCB0ZXN0IGF0dGFjaG1lbnQu"}}` (the base64 of a short ASCII sentence).
+
+- **Verify:** Response is a plain text confirmation naming the attachment name, the draft subject, the message ID, a new attachment ID, the size in bytes, and which transfer path was used.
+- **Verify:** `{tool: "mail", args: {operation: "list_attachments", message_id: "<attachment draft ID>"}}` lists `crud-test.txt` with the reported attachment ID.
+- **Verify (non-draft refused):** Call `add_attachment` again with the `message_id` of any received message from Step 30. The call must fail with an error stating the message is not a draft, and must not attach anything.
+- **Cleanup:** Call `{tool: "mail", args: {operation: "delete_draft", message_id: "<attachment draft ID>"}}`.
+- **Fail:** If the confirmation omits the attachment ID or the size, if the attachment is absent from `list_attachments`, or if the non-draft target is accepted.
+
+### Step 42 -- Propose meeting slots for a set of attendees
+
+Call `{tool: "calendar", args: {operation: "find_meeting_times", attendees: "[{\"email\":\"<self UPN>\",\"type\":\"required\"}]", meeting_duration: "PT30M", start_datetime: "<test date>T09:00:00", end_datetime: "<test date>T18:00:00", timezone: "Europe/Amsterdam", max_candidates: 5}}`.
+
+- **Verify:** The response is plain text, is a numbered list of at most five candidate slots, and ends with a total count.
+- **Verify:** Each candidate names a start and an end inside the requested window and carries a confidence value.
+- **Verify:** If no slot is offered, the response states the reason Graph gave rather than returning an empty list with no explanation.
+- **Verify (both-or-neither window):** Call again with `start_datetime` supplied and `end_datetime` omitted. The call must fail with an error stating that the two bounds are supplied together or not at all, and must not reach Graph.
+- **Verify (bounds):** Call again with `max_candidates: 0`. The call must fail with an error naming the accepted range.
+- **Fail:** If the default response is not plain text, if a candidate lacks its times or confidence, if the one-sided window is accepted, or if the out-of-range candidate count is accepted.
+
+### Step 43 -- Read free/busy blocks and working hours per mailbox
+
+Call `{tool: "calendar", args: {operation: "get_schedule", schedules: "<self UPN>", date: "<test date>", timezone: "Europe/Amsterdam"}}`.
+
+- **Verify:** The response is plain text with one labeled section for the queried mailbox and a total mailbox count at the end.
+- **Verify:** The section states either the mailbox's busy periods with their times and status, or that it has no busy periods. Both are valid results here: every event this run created on the test date was deleted or cancelled by Step 25, so an empty diary is the expected state and must read as a stated finding rather than a missing section.
+- **Verify:** Where Graph supplies them, the section states the mailbox's working hours, which `get_free_busy` does not report. Record their absence as an observation rather than a failure; Graph omits them for some mailbox types.
+- **Verify (per-mailbox error):** Call again with `schedules: "<self UPN>,definitely-not-a-mailbox@<own domain>"`. The call must succeed, the real mailbox must still return its section, and the unknown address must carry an `Error:` line naming what Graph reported rather than being omitted from the output.
+- **Verify (summary tier):** Call again with `output: "summary"`. The response is structured, attributes every block to its mailbox, and preserves the order the mailboxes were named in.
+- **Fail:** If a per-mailbox failure fails the whole call or silently drops that mailbox, if blocks are not attributable to a mailbox, or if the mailbox order is not the requested order.
+
+### Step 44 -- Attach a file to an event
+
+Create the target rather than reusing an earlier one: every event created before this point was deleted by Step 14 or cancelled by Step 24. Call `{tool: "calendar", args: {operation: "create_event", subject: "MCP CRUD attachment -- <timestamp>", start_datetime: "<test date>T11:00:00", end_datetime: "<test date>T11:30:00", start_timezone: "Europe/Amsterdam", end_timezone: "Europe/Amsterdam", body: "Automated CRUD lifecycle test.", show_as: "free"}}` and record the ID as **attachment event ID**.
+
+Call `{tool: "calendar", args: {operation: "add_event_attachment", event_id: "<attachment event ID>", name: "crud-test.txt", mime_type: "text/plain", content_bytes: "Q1JVRCB0ZXN0IGF0dGFjaG1lbnQu"}}` (the base64 of a short ASCII sentence).
+
+- **Verify:** Response is a plain text confirmation naming the attachment name, the event subject, the event ID, a new attachment ID, the size in bytes, and which transfer path was used. Record the attachment ID as **event attachment ID**.
+- **Verify:** The verb takes no `output` parameter; it is a write and confirms in text unconditionally.
+- **Verify (invalid content):** Call `add_event_attachment` again with `content_bytes: "not base64!!"`. The call must fail with an error stating the content is not standard base64 and saying to re-encode it, and must attach nothing.
+- **Verify (unknown event):** Call `add_event_attachment` with `event_id: "AAAAAAAAAAAAAAAAAAAAAA=="` and otherwise valid arguments. The call must fail naming the event rather than reporting a successful attach.
+- **Fail:** If the confirmation omits the attachment ID or the size, if the malformed content is accepted, or if the unknown event is accepted.
+
+### Step 45 -- List the attachments of an event
+
+Call `{tool: "calendar", args: {operation: "list_event_attachments", event_id: "<attachment event ID>"}}`.
+
+- **Verify:** The default response is plain text, a numbered list naming `crud-test.txt` with the **event attachment ID**, its content type, and its size, and ends with a total count.
+- **Verify:** No content bytes appear in the response at the default tier; this verb returns metadata only.
+- **Verify (summary tier):** Call again with `output: "summary"`. The response is structured and still carries the attachment ID, name, content type, and size.
+- **Fail:** If the attachment added in Step 44 is absent, if the listed ID does not match the one confirmed there, or if content bytes are returned.
+
+### Step 46 -- Download an event attachment
+
+Call `{tool: "calendar", args: {operation: "get_event_attachment", event_id: "<attachment event ID>", attachment_id: "<event attachment ID>"}}`.
+
+- **Verify:** Response is plain text with the attachment metadata (name, content type, size) and the content as base64. Decoding the content yields the sentence sent in Step 44, so the round trip is graded on the bytes rather than on the metadata alone.
+- **Verify (unknown attachment):** Call again with `attachment_id: "AAAAAAAAAAAAAAAAAAAAAA=="`. The call must fail naming the attachment rather than returning empty content.
+- **Cleanup:** Call `{tool: "calendar", args: {operation: "delete_event", event_id: "<attachment event ID>"}}`. Deleting the event removes its attachments with it; there is no separate attachment removal verb.
+- **Fail:** If the returned content does not decode to the bytes sent in Step 44, if the unknown attachment ID is accepted, or if the cleanup delete fails.
+
+### Step 47 -- Contacts domain help (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "help"}}`.
+
+- **Skip:** If `config.features.contacts_enabled` from Step 0c is `false`, or if no `contacts` tool is registered, mark Steps 47-51 SKIP with the reason "contacts disabled" and continue. The domain is opt-in and is absent unless `OUTLOOK_MCP_CONTACTS_ENABLED` is set.
+- **Verify:** The response names all five verbs: `help`, `search`, `get_contact`, `list_people`, `get_person`.
+- **Verify:** Every verb is documented as read-only and non-destructive; no write, create, update, delete, folder, photo, directory, or sync verb is listed.
+- **Fail:** If any of the five verbs is missing, or if any verb that writes a contact is offered.
+
+### Step 48 -- Search contacts and people (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "search", query: "<first name of the attendee from Step 2, or any common name>"}}`.
+
+- **Verify:** The default response is plain text and every match is labelled with the source it came from, so a saved personal contact is distinguishable from a relevance-ranked person.
+- **Verify (summary tier):** Call again with `output: "summary"`. The response is structured and still carries the display name and the email address of each match.
+- **Verify (empty query rejected):** Call again with `query: "   "`. The call must fail naming the `query` parameter and stating what to supply, and no result set is returned.
+- **Record:** A `contact_id` and a `person_id` from the results, if any, for Steps 49 and 51.
+- **Fail:** If a match carries no source label, if the whitespace-only query is accepted, or if the summary tier omits the address.
+
+### Step 49 -- Get one saved contact (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "get_contact", contact_id: "<contact_id from Step 48>"}}`. If Step 48 returned no personal contact, mark this step SKIP with the reason "no personal contact in this mailbox".
+
+- **Verify:** Response is plain text naming the contact's display name and every one of its email addresses.
+- **Verify (invalid identifier):** Call again with `contact_id: ""`. The call must fail naming the `contact_id` parameter, before any Microsoft Graph request is issued.
+- **Fail:** If the addresses are missing, or if the empty identifier is accepted.
+
+### Step 50 -- List relevance-ranked people (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "list_people"}}`.
+
+- **Verify:** The default response is plain text, a numbered list of people ending with a total count.
+- **Verify:** The order is the relevance order Microsoft Graph returned, most relevant first; it is not alphabetical unless Graph returned it that way.
+- **Verify (raw tier):** Call again with `output: "raw"`. The response carries the full payload for each person.
+- **Record:** A `person_id` from the results for Step 51 if Step 48 supplied none.
+- **Fail:** If the response is re-sorted, or if the total count is absent.
+
+### Step 51 -- Get one relevance-ranked person (skip if contacts disabled)
+
+Call `{tool: "contacts", args: {operation: "get_person", person_id: "<person_id from Step 48 or Step 50>"}}`.
+
+- **Verify:** Response is plain text naming the person's display name and every one of its scored email addresses, each address labelled with that same display name.
+- **Verify (invalid identifier):** Call again with `person_id: ""`. The call must fail naming the `person_id` parameter, before any Microsoft Graph request is issued.
+- **Fail:** If any scored address is omitted, or if the empty identifier is accepted.
+
+### Step 52 -- Teams domain help (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "help"}}`.
+
+- **Skip:** If `config.features.teams_enabled` from Step 0c is `false`, or if no `teams` tool is registered, mark Steps 52-58 SKIP with the reason "teams disabled" and continue. The domain is opt-in and is absent unless `OUTLOOK_MCP_TEAMS_ENABLED` is set.
+- **Verify:** The response names all twelve verbs: `help`, `search`, `list_chats`, `list_chat_messages`, `get_chat_message`, `list_channel_messages`, `get_channel_message`, `list_channel_message_replies`, `compose_reply`, `get_online_meeting`, `list_transcripts`, `get_transcript`.
+- **Verify:** Every verb is documented as read-only and non-destructive; no send, post, create, update, delete, presence, recording, or attendance verb is listed, and no verb enumerates joined teams or channels.
+- **Fail:** If any of the twelve verbs is missing, or if any verb that writes to Teams is offered.
+
+### Step 53 -- Search Teams messages (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "search", query: "the"}}`.
+
+- **Verify:** The default response is plain text and each hit is labelled with the chat, or the team and channel, it came from, so the identifiers the other verbs require are obtainable here.
+- **Verify (summary tier):** Call again with `output: "summary"`. The response is the object `{hits, moreResultsAvailable}`, and each entry in `hits` still carries the identifiers of the hit and the service snippet as `bodyPreview`, with no `body` field.
+- **Verify (paging):** Call again with `output: "summary"`, `max_results: 2`, and `from: 0`, then with `from: 2`. Each response holds at most two hits, and the second page does not repeat the hits of the first. Call again with `max_results: 0`; the call must fail naming `max_results`, before any request is issued.
+- **Verify (empty query rejected):** Call again with `query: "   "`. The call must fail naming the `query` parameter and stating what to supply, and no result set is returned.
+- **Record:** From the hits, a `chat_id` and message id for a chat message, and a team id, channel id, and message id for a channel message, for Steps 54 to 56.
+- **Fail:** If a hit carries no chat or channel label, or if the whitespace-only query is accepted.
+
+### Step 54 -- Read a chat thread (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "list_chats"}}`, then `{tool: "teams", args: {operation: "list_chat_messages", chat_id: "<chat_id from Step 53 or from list_chats>"}}`, then `{tool: "teams", args: {operation: "get_chat_message", chat_id: "<same chat_id>", message_id: "<message id from the listing>"}}`.
+
+- **Skip:** If the account is a member of no chat, mark this step SKIP with the reason "no Teams chat in this account".
+- **Verify:** `list_chats` returns a numbered list ending with a total count, each entry carrying enough to tell one chat from another.
+- **Verify:** `list_chat_messages` returns a body preview per message rather than every full body.
+- **Verify (page bound):** Call `list_chat_messages` again with `max_results: 2`. At most two messages are returned, newest first; if the chat holds more, the response says "shown on this page" with a truncation note.
+- **Verify (body escalation):** `get_chat_message` returns a preview by default and states that the full body requires `output=raw`; calling it again with `output: "raw"` returns the full body.
+- **Verify (invalid identifier):** Call `get_chat_message` again with `chat_id: ""`. The call must fail naming the `chat_id` parameter, before any Microsoft Graph request is issued.
+- **Fail:** If the default tier returns full bodies, if the raw tier does not, or if the empty identifier is accepted.
+
+### Step 55 -- Read a channel thread (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "list_channel_messages", team_id: "<team id from Step 53>", channel_id: "<channel id from Step 53>"}}`, then `{tool: "teams", args: {operation: "get_channel_message", team_id: "<same team id>", channel_id: "<same channel id>", message_id: "<message id from the listing>"}}`, then `{tool: "teams", args: {operation: "list_channel_message_replies", team_id: "<same team id>", channel_id: "<same channel id>", message_id: "<same message id>"}}`.
+
+- **Skip:** If Step 53 returned no channel hit, mark this step SKIP with the reason "no Teams channel message reachable from search".
+- **Verify:** `list_channel_messages` returns the thread openers, and the replies under one of them come back only from `list_channel_message_replies`.
+- **Verify (body escalation):** `get_channel_message` returns a preview by default and the full body under `output: "raw"`.
+- **Verify (missing identifier):** Call `list_channel_messages` again with `team_id: ""`. The call must fail naming the `team_id` parameter and pointing at the `search` operation as the way to obtain it, before any Microsoft Graph request is issued.
+- **Fail:** If a channel read succeeds without both identifiers, or if the refusal does not say where the identifier comes from.
+
+### Step 56 -- Prepare a reply without sending it (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "compose_reply", chat_id: "<chat_id from Step 54>", message_id: "<message id from Step 54>", body: "Acknowledged, thank you."}}`.
+
+- **Verify:** The response is the prepared reply text, quoting the message being answered, and it states plainly that nothing was sent or posted.
+- **Verify:** Nothing new appears in the chat. Call `list_chat_messages` for the same `chat_id` again; the message list is unchanged.
+- **Verify (no output parameter):** The `help` output for `compose_reply` declares no `output` parameter; it returns its prepared text unconditionally.
+- **Verify (mixed identifiers refused):** Call again supplying `chat_id`, `team_id`, and `channel_id` together. The call must fail naming which shape to supply.
+- **Fail:** If a message is posted to Teams, if the response does not say the reply is unsent, or if the mixed identifier shape is accepted.
+
+### Step 57 -- Resolve an online meeting (skip if teams disabled)
+
+Call `{tool: "calendar", args: {operation: "list_events", date: "week"}}` and find an event carrying a Teams join URL, then call `{tool: "teams", args: {operation: "get_online_meeting", join_web_url: "<the join URL>"}}`.
+
+- **Skip:** If no event in the range carries a join URL, mark Steps 57 and 58 SKIP with the reason "no Teams meeting in range".
+- **Verify:** The response carries the meeting-scoped identifier the transcript verbs are keyed by.
+- **Verify (both identifiers refused):** Call again supplying both `meeting_id` and `join_web_url`. The call must fail naming both parameters, before any Microsoft Graph request is issued.
+- **Verify (neither identifier refused):** Call again supplying neither. The call must fail naming both parameters and pointing at the calendar `get_event` operation as the source of the join URL.
+- **Record:** The meeting identifier for Step 58.
+- **Fail:** If either malformed call is accepted, or if no meeting identifier is returned.
+
+### Step 58 -- Read a meeting transcript (skip if teams disabled)
+
+Call `{tool: "teams", args: {operation: "list_transcripts", meeting_id: "<meeting id from Step 57>"}}`, then `{tool: "teams", args: {operation: "get_transcript", meeting_id: "<same meeting id>", transcript_id: "<transcript id from the listing>"}}`.
+
+- **Skip:** If the meeting holds no transcript, mark this step SKIP with the reason "meeting holds no transcript".
+- **Verify:** `list_transcripts` returns metadata only; no transcript text is delivered by it.
+- **Verify (content escalation):** `get_transcript` returns metadata and a short preview by default and states that the full text requires `output=raw`; calling it again with `output: "raw"` returns the full WEBVTT text.
+- **Verify (invalid identifier):** Call `get_transcript` again with `transcript_id: ""`. The call must fail naming the `transcript_id` parameter, before any Microsoft Graph request is issued.
+- **Fail:** If the listing delivers transcript content, if the default tier returns the full text, or if the empty identifier is accepted.
 
 ## Reporting
 
@@ -707,6 +939,21 @@ After all steps, print a summary table. Every row **MUST** include a short `Comm
 | 34   | Delete drafts                     | PASS/FAIL/SKIP | e.g., "both drafts deleted, 404 on re-fetch"             |
 | 35   | Get conversation                  | PASS/FAIL/SKIP | e.g., "thread returned in chronological order"           |
 | 36   | Get attachment                    | PASS/FAIL/SKIP | e.g., "metadata + base64 under size limit"               |
+| 37   | Mark read (idempotent + restore)  | PASS/FAIL/SKIP | e.g., "state written, repeat identical, original restored" |
+| 38   | Set flag (+ invalid refused)      | PASS/FAIL/SKIP | e.g., "flagged written; 'urgent' refused naming 3 values" |
+| 39   | Set categories (+ clear)          | PASS/FAIL/SKIP | e.g., "set from response; empty value cleared all"       |
+| 40   | Move message (new ID follows)     | PASS/FAIL/SKIP | e.g., "new id returned; original 404s; name destination refused" |
+| 41   | Add attachment to a draft         | PASS/FAIL/SKIP | e.g., "attachment id and size confirmed; non-draft refused" |
+| 42   | Find meeting times (candidates)   | PASS/FAIL      | e.g., "5 slots with confidence; one-sided window refused" |
+| 43   | Get schedule (per-mailbox)        | PASS/FAIL      | e.g., "self section returned; unknown mailbox carried Error:" |
+| 44   | Add attachment to an event        | PASS/FAIL      | e.g., "attachment id and size confirmed; bad base64 refused" |
+| 45   | List event attachments            | PASS/FAIL      | e.g., "crud-test.txt listed, metadata only, no content"  |
+| 46   | Get event attachment (round trip) | PASS/FAIL      | e.g., "base64 decodes to the bytes sent; event deleted"  |
+| 47   | Contacts help (five verbs)        | PASS/FAIL/SKIP | e.g., "help, search, get_contact, list_people, get_person" |
+| 48   | Search contacts and people        | PASS/FAIL/SKIP | e.g., "matches labelled by source; blank query refused"  |
+| 49   | Get one saved contact             | PASS/FAIL/SKIP | e.g., "all email addresses returned; empty id refused"   |
+| 50   | List relevance-ranked people      | PASS/FAIL/SKIP | e.g., "relevance order preserved; total count present"   |
+| 51   | Get one relevance-ranked person   | PASS/FAIL/SKIP | e.g., "scored addresses labelled with display name"      |
 ```
 
 Then print the **environment** section using all values recorded in Steps 0c and 1:

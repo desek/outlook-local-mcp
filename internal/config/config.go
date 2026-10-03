@@ -145,6 +145,27 @@ type Config struct {
 	// via OUTLOOK_MCP_MAIL_MANAGE_ENABLED (default: "false").
 	MailManageEnabled bool
 
+	// ContactsEnabled controls whether the read-only contacts domain is active.
+	// When true, the Contacts.Read and People.Read OAuth scopes are requested
+	// during authentication and the contacts aggregate tool is registered as an
+	// opt-in fifth top-level tool. When false (the default), no contacts tool is
+	// registered and neither scope is requested. Unlike MailManageEnabled it
+	// implies no other flag, and no contact write scope is ever requested.
+	// Configurable via OUTLOOK_MCP_CONTACTS_ENABLED (default: "false").
+	ContactsEnabled bool
+
+	// TeamsEnabled controls whether the read-only Teams domain is active. When
+	// true, the Chat.Read, ChannelMessage.Read.All, OnlineMeetings.Read, and
+	// OnlineMeetingTranscript.Read.All OAuth scopes are requested during
+	// authentication and the teams aggregate tool is registered as an opt-in
+	// top-level tool. When false (the default), no teams tool is registered and
+	// none of those scopes is requested. Like ContactsEnabled it implies no
+	// other flag, and no Teams send or write scope is ever requested in any
+	// configuration: preparing a reply is a read plus local text, and posting
+	// it stays a user action performed in Teams.
+	// Configurable via OUTLOOK_MCP_TEAMS_ENABLED (default: "false").
+	TeamsEnabled bool
+
 	// MaxAttachmentSizeBytes is the maximum size in bytes for attachment
 	// content returned by the mail_get_attachment tool. Attachments whose
 	// reported size exceeds this value cause the tool to return an error
@@ -312,6 +333,14 @@ func LoadConfig() Config {
 	if cfg.MailManageEnabled {
 		cfg.MailEnabled = true
 	}
+
+	// The contacts domain is independent: it gates only its own tool and its own
+	// two read scopes, and implies no other flag.
+	cfg.ContactsEnabled = strings.EqualFold(GetEnv(EnvContactsEnabled, "false"), "true")
+
+	// The Teams domain is likewise independent: it gates only its own tool and
+	// its own four read scopes, and implies no other flag.
+	cfg.TeamsEnabled = strings.EqualFold(GetEnv(EnvTeamsEnabled, "false"), "true")
 
 	maxAttachStr := GetEnv(EnvMaxAttachmentSizeBytes, "10485760")
 	maxAttach, err := strconv.ParseInt(maxAttachStr, 10, 64)

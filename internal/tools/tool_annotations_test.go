@@ -1,6 +1,6 @@
-// Package tools_test contains cross-cutting annotation tests for the four
-// aggregate MCP domain tools (calendar, mail, account, system). Each test
-// verifies that the five MCP annotations (Title, ReadOnlyHint, DestructiveHint,
+// Package tools_test contains cross-cutting annotation tests for the aggregate
+// MCP domain tools (calendar, mail, account, system, and the opt-in contacts).
+// Each test verifies that the five MCP annotations (Title, ReadOnlyHint, DestructiveHint,
 // IdempotentHint, OpenWorldHint) on the aggregate tool use the most conservative
 // value across all verbs it hosts, per CR-0060 AC-9 and FR-9.
 //
@@ -38,8 +38,9 @@ type aggregateAnnotationExpectation struct {
 	openWorld   bool
 }
 
-// buildTestServer registers all four domain tools and returns the server for
-// inspection. Uses no-op metrics, tracer, and identity middleware.
+// buildTestServer registers every domain tool the given config enables and
+// returns the server for inspection. Uses no-op metrics, tracer, and identity
+// middleware.
 func buildTestServer(t *testing.T, cfg config.Config) *mcpserver.MCPServer {
 	t.Helper()
 
@@ -289,6 +290,117 @@ func TestSystemAnnotationsOpenWorldWithAuthCode(t *testing.T) {
 	}
 }
 
+// TestContactsAggregateIsReadOnly verifies the folded annotation on the
+// "contacts" domain tool under the configuration that registers it.
+//
+// Every registered contacts verb is a read, so the conservative fold must
+// report readOnly=true, destructive=false and idempotent=true; openWorld is
+// true because four of the five verbs reach Graph. This is the safety property
+// the domain's read-only guarantee rests on: a client that gates writes behind
+// a confirmation prompt reads these four values and nothing else, so a write
+// verb reaching the domain would have to move them before it could reach a
+// user unprompted.
+func TestContactsAggregateIsReadOnly(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath:  "/tmp/test",
+		CacheName:       "test",
+		AuthMethod:      "browser",
+		ContactsEnabled: true,
+	})
+	tool := getRegisteredTool(t, s, "contacts")
+	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
+		title:       "Contacts",
+		readOnly:    true,
+		destructive: false,
+		idempotent:  true,
+		openWorld:   true,
+	})
+}
+
+// TestTeamsAggregateIsReadOnly verifies the folded annotation on the "teams"
+// domain tool under the configuration that registers it.
+//
+// Every registered teams verb is a read, so the conservative fold must report
+// readOnly=true, destructive=false and idempotent=true; openWorld is true
+// because twelve of the thirteen verbs reach Graph. The domain's central claim
+// is that it never communicates, and these four values are the machine-readable
+// form of that claim: a client that gates writes behind a confirmation prompt
+// reads them and nothing else, so a verb that posted anything would have to move
+// them before it could reach a user unprompted.
+func TestTeamsAggregateIsReadOnly(t *testing.T) {
+	s := buildTestServer(t, config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+		TeamsEnabled:   true,
+	})
+	tool := getRegisteredTool(t, s, "teams")
+	assertAggregateAnnotations(t, tool, aggregateAnnotationExpectation{
+		title:       "Teams",
+		readOnly:    true,
+		destructive: false,
+		idempotent:  true,
+		openWorld:   true,
+	})
+}
+
+// TestTeamsVerbAnnotations asserts the four hint values every registered teams
+// verb declares, read from the registry under the configuration that registers
+// the domain.
+//
+// The aggregate fold above is lossy in the direction that matters here: it
+// reports one openWorld value for the whole tool, and the domain has two kinds
+// of verb, twelve that reach Graph and one, help, that renders the registry
+// locally and reaches nothing. The folded true hides help's false, which is the
+// value its own help output publishes and the one a caller reasons about when
+// deciding whether an operation leaves the machine.
+//
+// The cases are derived from the registered verbs rather than listed, so a
+// fourteenth verb added later is asserted here without anyone extending a list.
+func TestTeamsVerbAnnotations(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+		TeamsEnabled:   true,
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	verbs := verbSets["teams"]
+	if len(verbs) == 0 {
+		t.Fatal("the teams domain registers no verbs under the configuration that enables it")
+	}
+
+	for _, v := range verbs {
+		readOnly, destructive, idempotent, openWorld, declared := verbHints(v.Annotations)
+		if !declared {
+			t.Errorf("verb %q leaves at least one of the four hints undeclared", v.Name)
+			continue
+		}
+
+		// help renders the registry in process; every other verb issues a Graph
+		// request, so openWorld is the one hint that splits the domain.
+		wantOpenWorld := v.Name != "help"
+
+		if !readOnly || destructive || !idempotent || openWorld != wantOpenWorld {
+			t.Errorf("verb %q hints = readOnly:%t destructive:%t idempotent:%t openWorld:%t, want readOnly:true destructive:false idempotent:true openWorld:%t",
+				v.Name, readOnly, destructive, idempotent, openWorld, wantOpenWorld)
+		}
+	}
+}
+
 // TestAggregateAnnotations_NoOldToolNames verifies that no old
 // {domain}_{operation} tool names survive registration after CR-0060 (AC-1).
 func TestAggregateAnnotations_NoOldToolNames(t *testing.T) {
@@ -384,9 +496,11 @@ func TestPerVerbAnnotations_DocumentedInHelp(t *testing.T) {
 		AuthMethod:        "browser",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 	})
 
-	domains := []string{"calendar", "mail", "account", "system"}
+	domains := []string{"calendar", "mail", "account", "system", "contacts", "teams"}
 	for _, domain := range domains {
 		t.Run(domain, func(t *testing.T) {
 			msg := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"` + domain + `","arguments":{"operation":"help"}}}`
@@ -416,5 +530,280 @@ func TestPerVerbAnnotations_DocumentedInHelp(t *testing.T) {
 				t.Error("help text is empty")
 			}
 		})
+	}
+}
+
+// verbHints materialises a verb's annotation options onto a throwaway tool and
+// returns the four hint values. A nil pointer is reported as false alongside a
+// false ok, so an undeclared hint is distinguishable from a declared false.
+func verbHints(opts []mcp.ToolOption) (readOnly, destructive, idempotent, openWorld bool, ok bool) {
+	var mt mcp.Tool
+	for _, opt := range opts {
+		opt(&mt)
+	}
+	a := mt.Annotations
+	if a.ReadOnlyHint == nil || a.DestructiveHint == nil || a.IdempotentHint == nil || a.OpenWorldHint == nil {
+		return false, false, false, false, false
+	}
+	return *a.ReadOnlyHint, *a.DestructiveHint, *a.IdempotentHint, *a.OpenWorldHint, true
+}
+
+// TestMailManagementVerbAnnotations asserts the four hint values each
+// received-message write verb declares, per the project's classification matrix.
+//
+// It sits alongside the aggregate annotation tests because those assert only the
+// folded result, and a fold is lossy: three of these four verbs declare
+// destructiveHint false, and that value is invisible in an aggregate that folds
+// to true because of a sibling verb. The per-verb values are what the domain's
+// help output publishes and what a caller reasons about, so they are asserted
+// directly.
+//
+// move_message is the one that differs: it removes the message from its source
+// folder and mints a new identifier, so it is destructive and not idempotent,
+// while the three property writes set a value that repeats to the same state.
+func TestMailManagementVerbAnnotations(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "browser",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	byName := make(map[string][]mcp.ToolOption)
+	for _, v := range verbSets["mail"] {
+		byName[v.Name] = v.Annotations
+	}
+
+	want := map[string]aggregateAnnotationExpectation{
+		"move_message":   {readOnly: false, destructive: true, idempotent: false, openWorld: true},
+		"set_flag":       {readOnly: false, destructive: false, idempotent: true, openWorld: true},
+		"set_categories": {readOnly: false, destructive: false, idempotent: true, openWorld: true},
+		"mark_read":      {readOnly: false, destructive: false, idempotent: true, openWorld: true},
+	}
+
+	for name, exp := range want {
+		opts, present := byName[name]
+		if !present {
+			t.Errorf("verb %q is not registered under the maximal mail configuration", name)
+			continue
+		}
+		readOnly, destructive, idempotent, openWorld, declared := verbHints(opts)
+		if !declared {
+			t.Errorf("verb %q leaves at least one of the four hints undeclared", name)
+			continue
+		}
+		if readOnly != exp.readOnly || destructive != exp.destructive ||
+			idempotent != exp.idempotent || openWorld != exp.openWorld {
+			t.Errorf("verb %q hints = readOnly:%t destructive:%t idempotent:%t openWorld:%t, want readOnly:%t destructive:%t idempotent:%t openWorld:%t",
+				name, readOnly, destructive, idempotent, openWorld,
+				exp.readOnly, exp.destructive, exp.idempotent, exp.openWorld)
+		}
+	}
+}
+
+// TestAddAttachmentAnnotations asserts the four hints the draft-attachment verb
+// declares, read from the registry under the manage gate.
+//
+// The values are asserted per-verb because the aggregate fold hides them: the
+// mail tool already publishes destructiveHint true because of delete_draft and
+// idempotentHint false because of create_draft, so add_attachment's own
+// declaration of destructive false is invisible in the folded result while
+// being exactly what the domain's help output publishes and what a caller
+// reasons about.
+//
+// It is non-destructive because it only adds: the draft and its existing
+// attachments are untouched and nothing becomes unaddressable. It is
+// non-idempotent because the service mints a new attachment identifier on every
+// successful call, so a repeated call with identical arguments leaves a second
+// attachment rather than the same end state.
+func TestAddAttachmentAnnotations(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath:    "/tmp/test",
+		CacheName:         "test",
+		AuthMethod:        "browser",
+		MailEnabled:       true,
+		MailManageEnabled: true,
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	var opts []mcp.ToolOption
+	present := false
+	for _, v := range verbSets["mail"] {
+		if v.Name == "add_attachment" {
+			opts, present = v.Annotations, true
+			break
+		}
+	}
+	if !present {
+		t.Fatal("verb \"add_attachment\" is not registered under the maximal mail configuration")
+	}
+
+	readOnly, destructive, idempotent, openWorld, declared := verbHints(opts)
+	if !declared {
+		t.Fatal("verb \"add_attachment\" leaves at least one of the four hints undeclared")
+	}
+	exp := aggregateAnnotationExpectation{readOnly: false, destructive: false, idempotent: false, openWorld: true}
+	if readOnly != exp.readOnly || destructive != exp.destructive ||
+		idempotent != exp.idempotent || openWorld != exp.openWorld {
+		t.Errorf("verb \"add_attachment\" hints = readOnly:%t destructive:%t idempotent:%t openWorld:%t, want readOnly:%t destructive:%t idempotent:%t openWorld:%t",
+			readOnly, destructive, idempotent, openWorld,
+			exp.readOnly, exp.destructive, exp.idempotent, exp.openWorld)
+	}
+}
+
+// TestSchedulingReadVerbAnnotations asserts the four hint values each calendar
+// scheduling read declares, per the project's classification matrix.
+//
+// The values are asserted per-verb because the aggregate fold hides them: the
+// calendar tool already publishes readOnlyHint false, destructiveHint true, and
+// idempotentHint false because create_event and delete_event force them, so a
+// read verb misclassified as a write would move nothing in the folded result
+// while publishing the wrong classification in the domain's help output, which
+// is what a caller actually reasons about.
+//
+// Both are POST-with-a-body reads: the request body carries the query rather
+// than a mutation, which is a Graph convention for a read whose input is too
+// large for a query string. The HTTP verb does not make either a write, so both
+// are read-only, non-destructive, and idempotent, and both call Graph, so both
+// are open-world.
+func TestSchedulingReadVerbAnnotations(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	byName := make(map[string][]mcp.ToolOption)
+	for _, v := range verbSets["calendar"] {
+		byName[v.Name] = v.Annotations
+	}
+
+	want := map[string]aggregateAnnotationExpectation{
+		"find_meeting_times": {readOnly: true, destructive: false, idempotent: true, openWorld: true},
+		"get_schedule":       {readOnly: true, destructive: false, idempotent: true, openWorld: true},
+	}
+
+	for name, exp := range want {
+		opts, present := byName[name]
+		if !present {
+			t.Errorf("verb %q is not registered in the calendar domain", name)
+			continue
+		}
+		readOnly, destructive, idempotent, openWorld, declared := verbHints(opts)
+		if !declared {
+			t.Errorf("verb %q leaves at least one of the four hints undeclared", name)
+			continue
+		}
+		if readOnly != exp.readOnly || destructive != exp.destructive ||
+			idempotent != exp.idempotent || openWorld != exp.openWorld {
+			t.Errorf("verb %q hints = readOnly:%t destructive:%t idempotent:%t openWorld:%t, want readOnly:%t destructive:%t idempotent:%t openWorld:%t",
+				name, readOnly, destructive, idempotent, openWorld,
+				exp.readOnly, exp.destructive, exp.idempotent, exp.openWorld)
+		}
+	}
+}
+
+// TestCalendarAttachmentVerbAnnotations asserts the four hint values each of
+// the calendar event-attachment verbs declares, per the project's
+// classification matrix.
+//
+// The values are asserted per-verb because the aggregate fold hides them: the
+// calendar tool already publishes readOnlyHint false, destructiveHint true, and
+// idempotentHint false because create_event and delete_event force them, so
+// each of these three could be misclassified without moving the folded result
+// at all, while publishing the wrong classification in the domain's help
+// output, which is what a caller actually reasons about.
+//
+// The add is non-destructive because it only appends: it removes nothing and
+// leaves the event and its existing attachments as they were. It is
+// non-idempotent because it is a POST minting a new attachment identifier on
+// every successful call, so a repeated call leaves a second attachment behind.
+func TestCalendarAttachmentVerbAnnotations(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	identityMW := func(h mcpserver.ToolHandlerFunc) mcpserver.ToolHandlerFunc { return h }
+
+	r := auth.NewAccountRegistry()
+	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
+	audit.InitAuditLog(false, "")
+
+	cfg := config.Config{
+		AuthRecordPath: "/tmp/test",
+		CacheName:      "test",
+		AuthMethod:     "browser",
+	}
+	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
+
+	byName := make(map[string][]mcp.ToolOption)
+	for _, v := range verbSets["calendar"] {
+		byName[v.Name] = v.Annotations
+	}
+
+	want := map[string]aggregateAnnotationExpectation{
+		"list_event_attachments": {readOnly: true, destructive: false, idempotent: true, openWorld: true},
+		"get_event_attachment":   {readOnly: true, destructive: false, idempotent: true, openWorld: true},
+		"add_event_attachment":   {readOnly: false, destructive: false, idempotent: false, openWorld: true},
+	}
+
+	for name, exp := range want {
+		opts, present := byName[name]
+		if !present {
+			t.Errorf("verb %q is not registered in the calendar domain", name)
+			continue
+		}
+		readOnly, destructive, idempotent, openWorld, declared := verbHints(opts)
+		if !declared {
+			t.Errorf("verb %q leaves at least one of the four hints undeclared", name)
+			continue
+		}
+		if readOnly != exp.readOnly || destructive != exp.destructive ||
+			idempotent != exp.idempotent || openWorld != exp.openWorld {
+			t.Errorf("verb %q hints = readOnly:%t destructive:%t idempotent:%t openWorld:%t, want readOnly:%t destructive:%t idempotent:%t openWorld:%t",
+				name, readOnly, destructive, idempotent, openWorld,
+				exp.readOnly, exp.destructive, exp.idempotent, exp.openWorld)
+		}
 	}
 }

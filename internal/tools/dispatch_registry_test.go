@@ -28,7 +28,7 @@ import (
 // the canonical form "domain.operation ro=%t de=%t id=%t ow=%t", sorted.
 //
 // It is generated under the maximal configuration (AuthMethod "auth_code" plus
-// both mail flags) so every gateable verb is present. This is deliberately a
+// both mail flags and the contacts gate) so every gateable verb is present. This is deliberately a
 // golden list rather than a count: a count would pass if one verb were dropped
 // and another added, which is exactly the shape a framework migration failure
 // takes. Per the project's standard on golden diffs, a failure here is a
@@ -44,14 +44,19 @@ var verbInventoryGolden = []string{
 	"account.logout ro=false de=false id=true ow=false",
 	"account.refresh ro=false de=false id=true ow=true",
 	"account.remove ro=false de=true id=true ow=false",
+	"calendar.add_event_attachment ro=false de=false id=false ow=true",
 	"calendar.cancel_meeting ro=false de=true id=true ow=true",
 	"calendar.create_event ro=false de=false id=false ow=true",
 	"calendar.create_meeting ro=false de=false id=false ow=true",
 	"calendar.delete_event ro=false de=true id=true ow=true",
+	"calendar.find_meeting_times ro=true de=false id=true ow=true",
 	"calendar.get_event ro=true de=false id=true ow=true",
+	"calendar.get_event_attachment ro=true de=false id=true ow=true",
 	"calendar.get_free_busy ro=true de=false id=true ow=true",
+	"calendar.get_schedule ro=true de=false id=true ow=true",
 	"calendar.help ro=true de=false id=true ow=false",
 	"calendar.list_calendars ro=true de=false id=true ow=true",
+	"calendar.list_event_attachments ro=true de=false id=true ow=true",
 	"calendar.list_events ro=true de=false id=true ow=true",
 	"calendar.reschedule_event ro=false de=false id=true ow=true",
 	"calendar.reschedule_meeting ro=false de=false id=true ow=true",
@@ -59,6 +64,12 @@ var verbInventoryGolden = []string{
 	"calendar.search_events ro=true de=false id=true ow=true",
 	"calendar.update_event ro=false de=false id=true ow=true",
 	"calendar.update_meeting ro=false de=false id=true ow=true",
+	"contacts.get_contact ro=true de=false id=true ow=true",
+	"contacts.get_person ro=true de=false id=true ow=true",
+	"contacts.help ro=true de=false id=true ow=false",
+	"contacts.list_people ro=true de=false id=true ow=true",
+	"contacts.search ro=true de=false id=true ow=true",
+	"mail.add_attachment ro=false de=false id=false ow=true",
 	"mail.create_draft ro=false de=false id=false ow=true",
 	"mail.create_forward_draft ro=false de=false id=false ow=true",
 	"mail.create_reply_draft ro=false de=false id=false ow=true",
@@ -70,7 +81,11 @@ var verbInventoryGolden = []string{
 	"mail.list_attachments ro=true de=false id=true ow=true",
 	"mail.list_folders ro=true de=false id=true ow=true",
 	"mail.list_messages ro=true de=false id=true ow=true",
+	"mail.mark_read ro=false de=false id=true ow=true",
+	"mail.move_message ro=false de=true id=false ow=true",
 	"mail.search_messages ro=true de=false id=true ow=true",
+	"mail.set_categories ro=false de=false id=true ow=true",
+	"mail.set_flag ro=false de=false id=true ow=true",
 	"mail.update_draft ro=false de=false id=true ow=true",
 	"system.about ro=true de=false id=true ow=false",
 	"system.complete_auth ro=false de=false id=false ow=true",
@@ -79,6 +94,18 @@ var verbInventoryGolden = []string{
 	"system.list_docs ro=true de=false id=true ow=false",
 	"system.search_docs ro=true de=false id=true ow=false",
 	"system.status ro=true de=false id=true ow=false",
+	"teams.compose_reply ro=true de=false id=true ow=true",
+	"teams.get_channel_message ro=true de=false id=true ow=true",
+	"teams.get_chat_message ro=true de=false id=true ow=true",
+	"teams.get_online_meeting ro=true de=false id=true ow=true",
+	"teams.get_transcript ro=true de=false id=true ow=true",
+	"teams.help ro=true de=false id=true ow=false",
+	"teams.list_channel_message_replies ro=true de=false id=true ow=true",
+	"teams.list_channel_messages ro=true de=false id=true ow=true",
+	"teams.list_chat_messages ro=true de=false id=true ow=true",
+	"teams.list_chats ro=true de=false id=true ow=true",
+	"teams.list_transcripts ro=true de=false id=true ow=true",
+	"teams.search ro=true de=false id=true ow=true",
 }
 
 // buildFullVerbInventory returns the canonical, sorted inventory lines for every
@@ -100,13 +127,16 @@ func buildFullVerbInventory(t *testing.T) []string {
 	r := auth.NewAccountRegistry()
 	_ = r.Add(&auth.AccountEntry{Label: "default", Authenticated: true})
 
-	// auth_code plus both mail flags registers every verb the server can host.
+	// auth_code plus both mail flags and the contacts gate registers every verb
+	// the server can host.
 	cfg := config.Config{
 		AuthRecordPath:    "/tmp/test",
 		CacheName:         "test",
 		AuthMethod:        "auth_code",
 		MailEnabled:       true,
 		MailManageEnabled: true,
+		ContactsEnabled:   true,
+		TeamsEnabled:      true,
 	}
 	verbSets := server.BuildDomainVerbSets(cfg, graph.RetryConfig{}, 30*time.Second, m, tracer, identityMW, r)
 

@@ -2,7 +2,7 @@
 
 Reference documentation for the server's component layout, middleware chain, MCP transport, tool registration, error handling, pagination, configuration, startup sequence, and Claude Desktop integration.
 
-> **Status note:** The tool definitions in this document describe the original tool-per-operation surface that predates CR-0060. As of v0.6.0 the server exposes four aggregate domain tools (`calendar`, `mail`, `account`, `system`) dispatched by an `operation` verb. The verb-level semantics described below remain accurate; only the registration shape changed.
+> **Status note:** The tool definitions in this document describe the original tool-per-operation surface that predates CR-0060. As of v0.6.0 the server exposes four aggregate domain tools by default (`calendar`, `mail`, `account`, `system`), plus two opt-in ones registered only when their variable is set, `contacts` under `OUTLOOK_MCP_CONTACTS_ENABLED` and `teams` under `OUTLOOK_MCP_TEAMS_ENABLED`, each dispatched by an `operation` verb. The verb-level semantics described below remain accurate; only the registration shape changed.
 
 ---
 
@@ -75,7 +75,7 @@ internal/
   buildinfo/      Build identity and host environment snapshot (consumed by system.about; see CR-0067)
   server/         RegisterTools, ReadOnlyGuard, AwaitShutdownSignal, BuildVerbsForInspection
   surface/        Code-derived surface record and its deterministic serialization (consumed by cmd/gen-surface; see CR-0073)
-  tools/          4 aggregate domain tools dispatching verb sets
+  tools/          4 default aggregate domain tools plus the opt-in contacts and teams tools, dispatching verb sets
   docs/           Catalog, search, llms.txt; consumes docs.Bundle from docs/embed.go
 ```
 
@@ -263,6 +263,8 @@ Every `OUTLOOK_MCP_` variable name is spelled exactly once, as an `Env*` constan
 | `OUTLOOK_MCP_LOG_FORMAT` | `json` | Log output format: `json` for structured JSON lines, `text` for human-readable `key=value` format. Both include source file and line number. |
 | `OUTLOOK_MCP_LOG_FILE` | *(empty)* | Optional file path for persistent log output. When set, log records are written to both stderr and the file via a `MultiHandler`. File is opened append-mode with `0600` permissions. See CR-0023. |
 | `OUTLOOK_MCP_MAIL_ENABLED` | `false` | Enable read-only mail access. When `true`, adds `Mail.Read` OAuth scope and registers mail verbs. See CR-0043. |
+| `OUTLOOK_MCP_CONTACTS_ENABLED` | `false` | Enable the opt-in read-only `contacts` domain. When `true`, adds the `Contacts.Read` and `People.Read` OAuth scopes and registers a fifth top-level tool; when `false` the tool is not registered at all, unlike `mail`, which is always registered and gates its verbs. No contact write scope is requested in any configuration. |
+| `OUTLOOK_MCP_TEAMS_ENABLED` | `false` | Enable the opt-in read-only `teams` domain. When `true`, adds the `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` OAuth scopes and registers a sixth top-level tool; when `false` the tool is not registered at all. No Teams send or write scope is requested in any configuration, and no verb in the domain posts a message: `teams.compose_reply` returns prepared text for the user to send by hand. |
 | `OUTLOOK_MCP_PROVENANCE_TAG` | `com.github.desek.outlook-local-mcp.created` | Name for the provenance extended property stamped on MCP-created events. Combined with a dedicated GUID to form the full MAPI property ID. Set to empty string to disable provenance tagging entirely. See CR-0040. |
 
 ---
@@ -517,7 +519,7 @@ The published website states no figure of its own. Every tool count, verb name, 
 
 `internal/surface` builds a **surface record** from the live surface, performing no network call and reading no credential:
 
-* It calls `server.BuildVerbsForInspection` to construct the four domain verb slices twice, once with every gate open and once under the default configuration, using zero-value dependencies and no-op middleware. `TestBuildVerbsRequiresNoCredentials` asserts this needs no credentials.
+* It calls `server.BuildVerbsForInspection` to construct every domain's verb slice twice, once with every gate open and once under the default configuration, using zero-value dependencies and no-op middleware. `TestBuildVerbsRequiresNoCredentials` asserts this needs no credentials.
 * It pairs the verbs with the declarative configuration inventory from `internal/config` (see [Configuration](#configuration)).
 * Per domain it records the domain name, the ordered verb list, and for each verb its name, one-line summary, read-only flag, and the configuration key that gates it or an explicit null. It records both the full verb count and the count exposed under the default configuration, per domain and in total, each **derived by counting the built verbs** rather than stated as a literal.
 

@@ -92,10 +92,40 @@
           "summary": "get free/busy availability for a time range; returns busy periods with times",
           "readOnly": true,
           "gate": null
+        },
+        {
+          "name": "find_meeting_times",
+          "summary": "propose meeting slots that suit a set of attendees, ranked by confidence",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "get_schedule",
+          "summary": "read free/busy blocks and working hours for one or more mailboxes",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "list_event_attachments",
+          "summary": "list attachment metadata (id, name, contentType, size) for an event",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "get_event_attachment",
+          "summary": "download an event attachment; returns metadata and base64 content",
+          "readOnly": true,
+          "gate": null
+        },
+        {
+          "name": "add_event_attachment",
+          "summary": "attach a file to an existing event; bytes supplied base64 in content_bytes",
+          "readOnly": false,
+          "gate": null
         }
       ],
-      "fullCount": 15,
-      "defaultCount": 15
+      "fullCount": 20,
+      "defaultCount": 20
     },
     {
       "name": "mail",
@@ -177,9 +207,39 @@
           "summary": "permanently delete a draft message (irreversible; non-draft messages rejected)",
           "readOnly": false,
           "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "move_message",
+          "summary": "move a message to another folder; the move mints a new message ID",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "set_flag",
+          "summary": "set a message's follow-up flag: notFlagged, flagged, or complete",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "set_categories",
+          "summary": "replace a message's categories; an empty value clears every category",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "mark_read",
+          "summary": "mark a message read or unread; is_read is a required boolean",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
+        },
+        {
+          "name": "add_attachment",
+          "summary": "attach a file to an existing draft; bytes supplied base64 in content_bytes",
+          "readOnly": false,
+          "gate": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED"
         }
       ],
-      "fullCount": 13,
+      "fullCount": 18,
       "defaultCount": 5
     },
     {
@@ -279,11 +339,127 @@
       ],
       "fullCount": 7,
       "defaultCount": 6
+    },
+    {
+      "name": "contacts",
+      "verbs": [
+        {
+          "name": "help",
+          "summary": "show detailed documentation for all verbs or a single named verb",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        },
+        {
+          "name": "search",
+          "summary": "free-text search over saved contacts and relevance-ranked people",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        },
+        {
+          "name": "get_contact",
+          "summary": "get one saved personal contact by ID with all of its email addresses",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        },
+        {
+          "name": "list_people",
+          "summary": "list relevance-ranked people, most relevant correspondent first",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        },
+        {
+          "name": "get_person",
+          "summary": "get one relevance-ranked person by ID with all of its scored addresses",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_CONTACTS_ENABLED"
+        }
+      ],
+      "fullCount": 5,
+      "defaultCount": 0
+    },
+    {
+      "name": "teams",
+      "verbs": [
+        {
+          "name": "help",
+          "summary": "show detailed documentation for all verbs or a single named verb",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "search",
+          "summary": "free-text search over Teams chat and channel messages",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_chats",
+          "summary": "list the chats the signed-in user is a member of",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_chat_messages",
+          "summary": "list the messages in one chat, each with a body preview",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "get_chat_message",
+          "summary": "get one chat message; the full body requires output=raw",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_channel_messages",
+          "summary": "list the top-level posts in one channel",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "get_channel_message",
+          "summary": "get one channel post; the full body requires output=raw",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_channel_message_replies",
+          "summary": "list the replies hanging under one channel post",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "compose_reply",
+          "summary": "prepare reply text quoting a message; nothing is sent",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "get_online_meeting",
+          "summary": "resolve a meeting id or join URL to its online meeting",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "list_transcripts",
+          "summary": "list the transcript metadata one online meeting holds",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        },
+        {
+          "name": "get_transcript",
+          "summary": "get one transcript; the full WEBVTT text requires output=raw",
+          "readOnly": true,
+          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
+        }
+      ],
+      "fullCount": 12,
+      "defaultCount": 0
     }
   ],
   "totals": {
-    "fullCount": 42,
-    "defaultCount": 33
+    "fullCount": 69,
+    "defaultCount": 38
   },
   "config": [
     {
@@ -409,12 +585,22 @@
     {
       "name": "OUTLOOK_MCP_MAIL_MANAGE_ENABLED",
       "default": "false",
-      "description": "Enable draft management and request the Mail.ReadWrite scope; implies MAIL_ENABLED."
+      "description": "Enable draft management, draft attachments, and received-message management, and request the Mail.ReadWrite scope; implies MAIL_ENABLED."
+    },
+    {
+      "name": "OUTLOOK_MCP_CONTACTS_ENABLED",
+      "default": "false",
+      "description": "Enable the read-only contacts domain and request the Contacts.Read and People.Read scopes; no contact write scope is ever requested."
+    },
+    {
+      "name": "OUTLOOK_MCP_TEAMS_ENABLED",
+      "default": "false",
+      "description": "Enable the read-only Teams domain and request the Chat.Read, ChannelMessage.Read.All, OnlineMeetings.Read, and OnlineMeetingTranscript.Read.All scopes; no Teams send or write scope is ever requested."
     },
     {
       "name": "OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES",
       "default": "10485760",
-      "description": "Maximum attachment size in bytes returned by get_attachment (default 10 MB)."
+      "description": "Maximum attachment size in bytes, both downloaded by get_attachment and uploaded by add_attachment (default 10 MB)."
     }
   ]
 }

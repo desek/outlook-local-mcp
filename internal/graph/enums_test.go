@@ -97,6 +97,33 @@ func TestParseShowAs(t *testing.T) {
 	}
 }
 
+// TestParseFlagStatus validates follow-up flag status parsing for all valid
+// values and unknown input. Unknown values default to
+// NOTFLAGGED_FOLLOWUPFLAGSTATUS, which clears a flag; the default is asserted
+// here precisely because it is destructive and must be gated upstream by
+// validate.ValidateFlagStatus and the verb's schema enum.
+func TestParseFlagStatus(t *testing.T) {
+	tests := []struct {
+		input string
+		want  models.FollowupFlagStatus
+	}{
+		{"notFlagged", models.NOTFLAGGED_FOLLOWUPFLAGSTATUS},
+		{"flagged", models.FLAGGED_FOLLOWUPFLAGSTATUS},
+		{"complete", models.COMPLETE_FOLLOWUPFLAGSTATUS},
+		{"NOTFLAGGED", models.NOTFLAGGED_FOLLOWUPFLAGSTATUS},
+		{"Flagged", models.FLAGGED_FOLLOWUPFLAGSTATUS},
+		{"COMPLETE", models.COMPLETE_FOLLOWUPFLAGSTATUS},
+		{"", models.NOTFLAGGED_FOLLOWUPFLAGSTATUS},
+		{"urgent", models.NOTFLAGGED_FOLLOWUPFLAGSTATUS},
+	}
+	for _, tt := range tests {
+		got := ParseFlagStatus(tt.input)
+		if got != tt.want {
+			t.Errorf("ParseFlagStatus(%q) = %v, want %v", tt.input, got, tt.want)
+		}
+	}
+}
+
 // TestParseRecurrencePatternType validates recurrence pattern type parsing for
 // all valid values. Unknown values default to DAILY_RECURRENCEPATTERNTYPE.
 func TestParseRecurrencePatternType(t *testing.T) {

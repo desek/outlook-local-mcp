@@ -34,7 +34,7 @@ export interface SurfaceVerb {
 /**
  * SurfaceDomain is one aggregate MCP tool and its verbs.
  *
- * @property name  The domain (aggregate tool) name: calendar, mail, account, or system.
+ * @property name  The domain (aggregate tool) name: calendar, mail, account, system, or one of the opt-in contacts and teams.
  * @property verbs  The ordered verbs the domain registers.
  * @property fullCount  Verbs exposed with every gate open.
  * @property defaultCount  Verbs exposed under the default configuration.
@@ -60,7 +60,7 @@ export interface SurfaceConfigVar {
 }
 
 /**
- * SurfaceManifest is the whole generated record: the four domains, the totals, and the
+ * SurfaceManifest is the whole generated record: the domains, the totals, and the
  * configuration inventory.
  */
 export interface SurfaceManifest {
@@ -78,7 +78,7 @@ export const domains: readonly SurfaceDomain[] = surface.domains
 /** The configuration inventory, in manifest order. */
 export const configVars: readonly SurfaceConfigVar[] = surface.config
 
-/** The number of aggregate domain tools (calendar, mail, account, system). */
+/** The number of aggregate domain tools recorded by the generated manifest. */
 export const domainCount = surface.domains.length
 
 /** Total verbs exposed with every gate open. */

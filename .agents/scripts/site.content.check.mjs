@@ -248,7 +248,7 @@ await assertNoBareClaims('site/src')
 await assertNoBareClaims('site/content')
 
 // Tool-surface shape assertion (CR-0073 AC-5, AC-6): the served landing page must present
-// verbs as `operation` values of the four aggregate tools, never as flat top-level tool
+// verbs as `operation` values of the aggregate domain tools, never as flat top-level tool
 // names, and must not name a domain the server does not have. The obsolete flat names are
 // derived from the manifest itself (every `domain_verb` concatenation), so a verb added or
 // renamed in the code is covered without editing this script.

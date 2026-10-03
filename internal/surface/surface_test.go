@@ -110,3 +110,110 @@ func TestEveryVerbCarriesSummaryAndGate(t *testing.T) {
 		t.Fatal("record contains no verbs")
 	}
 }
+
+// TestContactsDomainRecordedGatedAndFull asserts that the record carries the
+// contacts domain with all five of its verbs and none of them in the default
+// set, each attributed to the contacts gate.
+//
+// The domain is gated whole rather than verb by verb, which is a shape no other
+// domain has: every one of its verbs must carry the gate, and its default count
+// must be zero rather than merely lower.
+//
+// The domain is selected by name rather than by position. Position is not the
+// property under test, and a later gated domain appended after this one would
+// otherwise fail this check while nothing about contacts had changed.
+func TestContactsDomainRecordedGatedAndFull(t *testing.T) {
+	rec := BuildRecord()
+
+	if len(rec.Domains) == 0 {
+		t.Fatal("record contains no domains")
+	}
+
+	var contacts *Domain
+	for i := range rec.Domains {
+		if rec.Domains[i].Name == "contacts" {
+			contacts = &rec.Domains[i]
+			break
+		}
+	}
+	if contacts == nil {
+		t.Fatal("the record carries no contacts domain; domainOrder omits it")
+	}
+
+	if contacts.FullCount != 5 {
+		t.Errorf("contacts FullCount = %d, want 5", contacts.FullCount)
+	}
+	if contacts.DefaultCount != 0 {
+		t.Errorf("contacts DefaultCount = %d, want 0; the whole domain is gated", contacts.DefaultCount)
+	}
+
+	for _, v := range contacts.Verbs {
+		if v.Gate == nil {
+			t.Errorf("contacts verb %q carries no gate although the domain is gated whole", v.Name)
+			continue
+		}
+		if *v.Gate != config.EnvContactsEnabled {
+			t.Errorf("contacts verb %q gate = %q, want %q", v.Name, *v.Gate, config.EnvContactsEnabled)
+		}
+	}
+}
+
+// TestTeamsDomainRecordedGatedAndFull asserts that the record carries the teams
+// domain with all twelve of its verbs and none of them in the default set,
+// each attributed to the teams gate, and that the gate variable itself is
+// enumerated in the record's configuration inventory.
+//
+// The website derives every figure it states about the tool surface from this
+// record and states no number of its own, so the domain's counts and its gate
+// attribution are the published contract rather than an internal detail. The
+// configuration clause is asserted here too: a verb attributed to a variable the
+// inventory does not enumerate would render as a gate a reader cannot look up.
+//
+// The domain is selected by name rather than by position, so a later gated
+// domain appended after this one does not fail this check while nothing about
+// teams has changed.
+func TestTeamsDomainRecordedGatedAndFull(t *testing.T) {
+	rec := BuildRecord()
+
+	var teams *Domain
+	for i := range rec.Domains {
+		if rec.Domains[i].Name == "teams" {
+			teams = &rec.Domains[i]
+			break
+		}
+	}
+	if teams == nil {
+		t.Fatal("the record carries no teams domain; domainOrder omits it")
+	}
+
+	if teams.FullCount != 12 {
+		t.Errorf("teams FullCount = %d, want 12", teams.FullCount)
+	}
+	if teams.DefaultCount != 0 {
+		t.Errorf("teams DefaultCount = %d, want 0; the whole domain is gated", teams.DefaultCount)
+	}
+	if len(teams.Verbs) != 12 {
+		t.Errorf("teams records %d verbs, want 12", len(teams.Verbs))
+	}
+
+	for _, v := range teams.Verbs {
+		if v.Gate == nil {
+			t.Errorf("teams verb %q carries no gate although the domain is gated whole", v.Name)
+			continue
+		}
+		if *v.Gate != config.EnvTeamsEnabled {
+			t.Errorf("teams verb %q gate = %q, want %q", v.Name, *v.Gate, config.EnvTeamsEnabled)
+		}
+	}
+
+	var enumerated bool
+	for _, c := range rec.Config {
+		if c.Name == config.EnvTeamsEnabled {
+			enumerated = true
+			break
+		}
+	}
+	if !enumerated {
+		t.Errorf("the record's config inventory does not enumerate %s, so every teams verb is attributed to a gate a reader cannot look up", config.EnvTeamsEnabled)
+	}
+}

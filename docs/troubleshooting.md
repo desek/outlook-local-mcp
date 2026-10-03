@@ -203,9 +203,9 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 
 ## Mail management disabled
 
-**Symptom:** Draft operations (`create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, `delete_draft`) return `mail management is not enabled` or `unknown operation`.
+**Symptom:** Draft operations (`create_draft`, `create_reply_draft`, `create_forward_draft`, `update_draft`, `delete_draft`, `add_attachment`) or received-message writes (`move_message`, `set_flag`, `set_categories`, `mark_read`) return `mail management is not enabled` or `unknown operation`.
 
-**Cause:** `OUTLOOK_MCP_MAIL_MANAGE_ENABLED` is not set. Draft management is a separate opt-in that implies `MAIL_ENABLED`.
+**Cause:** `OUTLOOK_MCP_MAIL_MANAGE_ENABLED` is not set. Mail management is a separate opt-in that implies `MAIL_ENABLED`, and it gates draft management, draft attachments, and received-message management.
 
 **Remediation:**
 
@@ -214,6 +214,205 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 3. On first enable, a new OAuth consent for `Mail.ReadWrite` is required (supersedes `Mail.Read`). The authentication flow triggers automatically on the next tool call.
 
 **Note:** The server never requests `Mail.Send`. Drafts are created in the Outlook Drafts folder; the user sends them manually from Outlook.
+
+---
+
+## Contacts tool not listed {#contacts-disabled}
+
+**Symptom:** The client's tool list shows only `calendar`, `mail`, `account`, and `system`, and a call to `{tool: "contacts", ...}` fails with an unknown-tool error rather than an unknown-operation error.
+
+**Cause:** `OUTLOOK_MCP_CONTACTS_ENABLED` is not set (default is `false`). Unlike `mail`, which is always registered and gates its verbs, the whole `contacts` tool is registered only when the flag is set, because every contacts verb needs a scope the default configuration does not request. An absent tool is the expected default state, not a fault. See [Contacts gating](concepts#contacts-gating).
+
+**Remediation:**
+
+1. Set `OUTLOOK_MCP_CONTACTS_ENABLED=true` in the server's environment configuration and restart the server.
+2. Verify with `{tool: "system", args: {operation: "status", output: "summary"}}` and check `config.features.contacts_enabled`, or list tools in the client: a tool named `contacts` should be present alongside the four default ones. `{tool: "contacts", args: {operation: "help"}}` returns the verb list and needs no authentication.
+3. If the tool is still missing, confirm the variable reached the server process rather than only the shell: environment variables set in a Claude Desktop or Claude Code configuration file take effect only after the client restarts the server.
+
+**Note:** `system.status` does not report a contacts feature flag. The presence of the `contacts` tool in the tool list is the check.
+
+---
+
+## Contacts consent prompt on first use {#contacts-consent}
+
+**Symptom:** After enabling `OUTLOOK_MCP_CONTACTS_ENABLED=true`, the next tool call, including a calendar or mail call, opens a Microsoft sign-in page asking to approve permissions the account has already approved before.
+
+**Cause:** Enabling contacts adds `Contacts.Read` and `People.Read` to the requested scope set. Consent is incremental, so the cached token no longer covers the requested scopes and the configured authentication flow runs again. The consent screen lists the previously granted scopes alongside the two new ones; that is the identity platform restating the full set, not a request for anything wider.
+
+**Remediation:**
+
+1. Complete the sign-in once. The refreshed token covers the new scope set and subsequent calls authenticate silently.
+2. Confirm what was requested in the server's startup log record `graph client initialized`, whose `scopes` field names every requested scope.
+3. Expect exactly `Contacts.Read` and `People.Read` to be added. `Contacts.ReadWrite` is never requested; if a consent screen names it, the prompt is not coming from this server.
+4. In a work or school tenant where user consent is restricted, the sign-in ends in an administrator-approval message. Ask an administrator to grant the two delegated read scopes, or unset the flag to return to the previous scope set.
+
+**Note:** Turning the flag back off does not revoke consent already granted. It stops the scopes being requested and removes the tool; revoke the grant in the account's Microsoft app-permissions page if that is the intent.
+
+---
+
+## Teams tool not listed {#teams-disabled}
+
+**Symptom:** The client's tool list does not include `teams`, and a call to `{tool: "teams", ...}` fails with an unknown-tool error rather than an unknown-operation error.
+
+**Cause:** `OUTLOOK_MCP_TEAMS_ENABLED` is not set (default is `false`). The whole `teams` tool is registered only when the flag is set, because every Teams verb needs a scope the default configuration does not request. An absent tool is the expected default state, not a fault. See [Teams gating](concepts#teams-gating).
+
+**Remediation:**
+
+1. Set `OUTLOOK_MCP_TEAMS_ENABLED=true` in the server's environment configuration and restart the server.
+2. Verify with `{tool: "system", args: {operation: "status", output: "summary"}}` and check `config.features.teams_enabled`. `{tool: "teams", args: {operation: "help"}}` returns the verb list and needs no authentication.
+3. If the tool is still missing, confirm the variable reached the server process rather than only the shell: environment variables set in a Claude Desktop or Claude Code configuration file take effect only after the client restarts the server.
+4. Expect a sign-in prompt on the first call after enabling: four read scopes are added to the requested set and consent is incremental. `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` are the only Teams scopes this server ever requests; if a consent screen names a send or write scope, the prompt is not coming from this server. In a work or school tenant where user consent is restricted, the sign-in ends in an administrator-approval message and an administrator must grant the four delegated read scopes.
+
+**Note:** Nothing in the domain sends, posts, edits, or deletes a Teams message. `teams.compose_reply` returns prepared text for the user to paste; it posts nothing.
+
+---
+
+## Teams meeting or transcript not resolved {#teams-meeting-unresolved}
+
+**Symptom:** `{tool: "teams", args: {operation: "get_online_meeting", ...}}` is refused for naming neither or both of `meeting_id` and `join_web_url`, resolves a join URL to no meeting, or a following `list_transcripts` or `get_transcript` call reports the meeting identifier is unusable.
+
+**Cause:** Transcript reads are keyed by a meeting-scoped identifier that a calendar event does not carry. An event carries the meeting's join URL, so the identifier is obtained by resolving that URL first. A join URL resolves only for a meeting in the signed-in account's own tenant, and only exactly one identifier may be supplied, because there is no unfiltered meeting listing to fall back on.
+
+**Remediation:**
+
+1. Read the event with `{tool: "calendar", args: {operation: "get_event", ...}}` and take the complete `https` join link it carries, not a fragment of it.
+2. Resolve it with `{tool: "teams", args: {operation: "get_online_meeting", join_web_url: "<the join URL>"}}`, supplying `join_web_url` or `meeting_id` but never both.
+3. Use the returned meeting identifier for `list_transcripts`, then read one transcript with `get_transcript`. The full WEBVTT text is returned only under `output: "raw"`.
+4. If the URL still resolves to nothing, confirm the event belongs to this account. A meeting organised on another tenant is not resolvable here, and a meeting that was never recorded with transcription on holds no transcript to list.
+
+---
+
+## Teams transcript access is disabled or unattributed {#teams-transcript-policy}
+
+**Symptom:** `list_transcripts` or `get_transcript` fails with the code `GraphAccessToTranscriptsDisabled`, or `get_transcript` returns `contentFormat` `application/vnd.microsoft.graph.transcript+text` with no speaker names.
+
+**Cause:** Both are tenant policies. `GraphAccessToTranscriptsDisabled` means the tenant blocks transcript access through Microsoft Graph. When the tenant does not allow speaker attribution, Graph refuses the WEBVTT format with `SpeakerAttributionNotAllowed`, and the server reads the transcript again as text without speaker names.
+
+**Remediation:**
+
+1. For `GraphAccessToTranscriptsDisabled`, ask a Teams administrator to allow Graph access to transcripts in the Teams admin center or with `Set-CsTeamsMeetingConfiguration`. No retry, consent, or request change can work until the policy changes.
+2. Verify with `{tool: "teams", args: {operation: "list_transcripts", meeting_id: "<id>"}}`, which returns metadata when access is allowed.
+3. For the unattributed format, no action in this server changes the result. Speaker names return only when the tenant allows speaker attribution.
+
+---
+
+## Teams channel read is missing an identifier {#teams-channel-identifiers}
+
+**Symptom:** `{tool: "teams", args: {operation: "list_channel_messages", ...}}`, `get_channel_message`, `list_channel_message_replies`, or a channel-shaped `compose_reply` is refused before any request is issued, with an error naming `team_id` or `channel_id`.
+
+**Cause:** A channel is addressed by a team identifier and a channel identifier together; neither alone identifies it. This server offers no verb that enumerates joined teams or their channels, so the pair is not obtained by browsing.
+
+**Remediation:**
+
+1. Locate a message in the channel with `{tool: "teams", args: {operation: "search", query: "<text from the channel>"}}`. Each channel hit carries the `teamId` and `channelId` the channel reads require, alongside the message `id`.
+2. Pass both identifiers on every channel call, and the message `id` as `message_id` where the verb also names one.
+3. For a chat rather than a channel, use `chat_id` instead: `list_chats` returns it, as does the `chatId` of a chat search hit. `compose_reply` takes `chat_id` or both `team_id` and `channel_id`, never a mixture of the two shapes.
+
+---
+
+## Attachment target is not a draft {#attachment-target-not-a-draft}
+
+**Symptom:** `{tool: "mail", args: {operation: "add_attachment", ...}}` fails with `message is not a draft: this tool only operates on messages with isDraft=true`, and nothing is attached.
+
+**Cause:** `message_id` names a message that has already been sent or received. A file can only be attached to a message still in composition; the service does not allow the content of a delivered message to change, so the refusal is issued before any upload is started rather than surfaced as a Graph rejection mid-transfer.
+
+The usual source of the wrong identifier is a `list_messages` or `search_messages` result taken from the Inbox rather than from Drafts, or a stale identifier from before a `move_message`, which mints a new identifier for the moved copy.
+
+**Remediation:**
+
+1. Create the target with `{tool: "mail", args: {operation: "create_draft", ...}}`, or with `create_reply_draft` or `create_forward_draft` when replying or forwarding, and use the identifier the confirmation reports.
+2. To attach to an existing draft, locate it with `{tool: "mail", args: {operation: "list_messages", folder_id: "Drafts"}}` and use that identifier.
+3. Confirm the target before retrying: `{tool: "mail", args: {operation: "get_message", message_id: "<id>"}}` reports whether the message is a draft.
+
+**Note:** To put a file on a message that is already sent, forward it with `create_forward_draft` and attach to the forward draft.
+
+**Note:** This restriction is a mail one. A calendar event accepts an attachment at any point in its life through `{tool: "calendar", args: {operation: "add_event_attachment", ...}}`, and attaching a file to an event does not notify its attendees.
+
+---
+
+## Attachment upload did not complete {#attachment-upload-did-not-complete}
+
+**Symptom:** `add_attachment` on a mail draft, or `add_event_attachment` on a calendar event, fails on a large file with a transfer error, or with a request timeout, and the attachment does not appear on the draft or the event. Small files attach normally.
+
+**Cause:** Both write paths choose their transfer the same way. Above roughly 3 MB the file is transferred as a chunked upload session rather than a single request, so it is exposed to a longer window in which the connection can drop, the request timeout can elapse, or the service-side session can expire. A session that does not complete is reported as a failure, never as a partial success: no half-written attachment is left behind, and the draft or event is unchanged. The confirmation of a successful call names the path it used, so a call that reported `Transfer: chunked upload session` is the one this entry describes.
+
+The upload URL the service issues carries a pre-authenticated token, so it is redacted from every error. An error that names `[upload URL redacted]` is this failure mode, not a configuration problem.
+
+**Remediation:**
+
+1. Retry the call. A dropped or expired session is not resumable, but a retry starts a fresh session and the earlier failure leaves nothing to clean up.
+2. Confirm the target is unchanged before retrying, so a successful upload reported as a timeout is not duplicated: `{tool: "mail", args: {operation: "list_attachments", message_id: "<draft id>"}}` for a draft, `{tool: "calendar", args: {operation: "list_event_attachments", event_id: "<event id>"}}` for an event.
+3. On a timeout, raise `OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS` and restart the server; a large file on a slow link can need more than the default.
+4. Prefer a smaller file where the content allows it. The upper bound is `OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES`, which governs both domains, and a file above it is refused before any transfer starts, with an error naming the measured size and the bound.
+
+**Note:** No verb removes an attachment in either domain, so a duplicate left by a retry has to be deleted from Outlook directly. Checking the target first, as in step 2, is what avoids that.
+
+---
+
+## Event not found {#event-not-found}
+
+**Symptom:** A calendar verb taking an `event_id` (`get_event`, `update_event`, `reschedule_event`, `list_event_attachments`, `get_event_attachment`, `add_event_attachment`) fails with a Graph `ErrorItemNotFound` or `ErrorInvalidIdMalformed`, and nothing is read or written.
+
+**Cause:** `event_id` does not resolve to an event on the signed-in mailbox. The usual sources are a stale identifier from a conversation held before the event was deleted or moved between calendars, an identifier taken from a different account than the one the call names, or a value that is not an event identifier at all, such as a subject line. An identifier that is not well-formed is refused before any request is issued; one that is well-formed but no longer resolves is refused by the service.
+
+An event attachment adds a second identifier with the same failure shape: `attachment_id` is scoped to one event, so an identifier read from one event does not resolve on another.
+
+**Remediation:**
+
+1. Re-resolve the event rather than reusing an identifier from earlier in the conversation: `{tool: "calendar", args: {operation: "search_events", query: "<subject>"}}` or `{tool: "calendar", args: {operation: "list_events", start_datetime: "...", end_datetime: "..."}}`, and use the `id` those return.
+2. If the call names an `account`, resolve the event under that same account. Event identifiers do not transfer between mailboxes.
+3. For an attachment, re-read the identifier from `{tool: "calendar", args: {operation: "list_event_attachments", event_id: "<event id>"}}` on the same event you are downloading from.
+4. If the event genuinely no longer exists, create it again rather than retrying; a deleted event's identifier never resolves after deletion.
+
+---
+
+## Move destination not found {#move-destination-not-found}
+
+**Symptom:** `{tool: "mail", args: {operation: "move_message", ...}}` fails with a Graph `ErrorItemNotFound` or `ErrorInvalidIdMalformed`, and the message has not moved.
+
+**Cause:** `destination_folder_id` does not resolve to a mail folder on the signed-in mailbox. The parameter takes a folder **identifier**, not a folder name, so a value such as `Archive` or `Deleted Items` is refused. The identifier is also mailbox-specific: one obtained under a different account will not resolve.
+
+The other cause of the same Graph error is a stale `message_id`. A move mints a new identifier for the moved message and the original stops resolving, so re-issuing a move with the identifier from before an earlier move fails here rather than at the destination.
+
+**Remediation:**
+
+1. Obtain a valid destination identifier with `{tool: "mail", args: {operation: "list_folders", output: "summary"}}` and pass the `id` of the target folder, not its display name.
+2. If the call names an `account`, list folders under that same account, because folder identifiers do not transfer between mailboxes.
+3. If the message was moved before, re-read it with `list_messages` or `search_messages` to obtain its current identifier; the confirmation from the previous move also carries it.
+4. Verify the outcome by listing the destination folder's messages, not by re-issuing the move: the move is not idempotent, and a second successful call moves the message again.
+
+---
+
+## A mailbox reports an error inside a schedule reply {#schedule-mailbox-error}
+
+**Symptom:** `{tool: "calendar", args: {operation: "get_schedule", ...}}` succeeds, but one of the named mailboxes carries an `Error:` line instead of its busy periods, typically `ErrorAccessDenied` or `MailboxNotEnabledForRESTAPI`. The other mailboxes in the same call return their blocks normally.
+
+**Cause:** Microsoft Graph grades each mailbox in a schedule query separately and reports a per-mailbox failure inside an otherwise successful reply. The whole call is not failed, so the reply is a mixture: mailboxes the signed-in user may view, and mailboxes it may not. The usual causes are a mailbox that has not shared free/busy with the signed-in user, a room or shared mailbox the account has no permission on, an address that is a distribution list rather than a mailbox, and an address misspelled into one that does not exist.
+
+This is why a mailbox with an error is stated rather than omitted: an omitted mailbox is indistinguishable from a mailbox with nothing in the diary, and "nobody is busy" is the wrong conclusion to draw from "you may not look".
+
+**Remediation:**
+
+1. Read the error text and the response code on the mailbox's own section. They come from Graph unchanged and name which of the causes above applies.
+2. Confirm the address is a mailbox and is spelled correctly. A distribution list address is accepted by the request and refused per-mailbox.
+3. If the call names an `account`, confirm that account has permission on the mailbox. Free/busy visibility is granted per mailbox, so an address readable under one account is not necessarily readable under another.
+4. For a mailbox the signed-in user genuinely cannot view, ask its owner or the tenant administrator to grant free/busy visibility; no parameter on this call can substitute for that permission.
+5. Verify by re-running the same call: a mailbox whose permission has been granted returns blocks and working hours in place of the error line, while the other mailboxes' output is unchanged.
+
+---
+
+## find_meeting_times fails on a personal Microsoft account {#find-meeting-times-personal-account}
+
+**Symptom:** `{tool: "calendar", args: {operation: "find_meeting_times", ...}}` returns a Graph error on a signed-in account that is a personal Microsoft account (an `@outlook.com`, `@hotmail.com`, or `@live.com` identity, or any account registered with `TENANT_ID=consumers`), while `get_free_busy` and `list_events` on the same account succeed. The error text states that the account must be a work or school account.
+
+**Cause:** Microsoft Graph does not support `POST /me/findMeetingTimes` for personal Microsoft accounts; the endpoint's permissions table lists the delegated personal-account case as "Not supported". The server still offers the verb on every account because the account type is not known until Graph answers, so the refusal arrives from Graph rather than from the server's own validation.
+
+**Remediation:**
+
+1. Confirm the account type with `{tool: "account", args: {operation: "list_accounts"}}`. A personal account cannot be made to work with this verb; no parameter substitutes for a work or school identity.
+2. If a work or school account is also registered, repeat the call with `account` set to that identity.
+3. If only a personal account is available, use `get_schedule` to read the attendees' free/busy blocks and choose a slot from them, or use `get_free_busy` for the signed-in user's own busy periods.
+4. Verify by re-running the same `find_meeting_times` call under the work or school account: it returns ranked suggestions in place of the error.
 
 ---
 

@@ -785,6 +785,24 @@ func TestRegisterTools_MailEnabled(t *testing.T) {
 	if got := len(registered); got != expectedTotal {
 		t.Errorf("expected %d tools with mail enabled, got %d", expectedTotal, got)
 	}
+
+	// MailEnabled alone grants read scope only, so the received-message write
+	// verbs must stay out of the published enum. This is the negative half of
+	// the gate: without it, a verb accidentally registered on the read flag
+	// would still pass every positive assertion above.
+	ops := registeredOperations(t, s, "mail")
+	for _, name := range mailManagementVerbs() {
+		if ops[name] {
+			t.Errorf("verb %q is published with MailEnabled alone; it is gated on MailManageEnabled", name)
+		}
+	}
+
+	// add_attachment writes mailbox state, so the read flag must not publish
+	// it. The default surface guarantee is a negative claim, and only a
+	// negative assertion can grade it.
+	if ops["add_attachment"] {
+		t.Error("verb \"add_attachment\" is published with MailEnabled alone; it is gated on MailManageEnabled")
+	}
 }
 
 // TestRegisterTools_MailAggregate_HelpVerb verifies that the mail aggregate
@@ -832,5 +850,372 @@ func TestRegisterTools_MailAggregate_HelpVerb(t *testing.T) {
 	}
 	if !strings.Contains(tc.Text, "list_folders") {
 		t.Errorf("mail help output should mention 'list_folders', got: %q", tc.Text)
+	}
+}
+
+// registeredOperations returns the set of operation names published in the
+// enum of an aggregate domain tool's operation parameter. The enum is what a
+// client reads to learn which verbs the running configuration hosts, so it is
+// the surface a gating assertion belongs on.
+func registeredOperations(t *testing.T, s *mcpserver.MCPServer, domain string) map[string]bool {
+	t.Helper()
+
+	tool, ok := s.ListTools()[domain]
+	if !ok {
+		t.Fatalf("aggregate %q tool is not registered", domain)
+	}
+	raw, ok := tool.Tool.InputSchema.Properties["operation"]
+	if !ok {
+		t.Fatalf("aggregate %q tool publishes no operation parameter", domain)
+	}
+	schema, ok := raw.(map[string]any)
+	if !ok {
+		t.Fatalf("aggregate %q operation schema is %T, want map[string]any", domain, raw)
+	}
+	values, ok := schema["enum"].([]string)
+	if !ok {
+		t.Fatalf("aggregate %q operation schema carries no string enum, got %T", domain, schema["enum"])
+	}
+	out := make(map[string]bool, len(values))
+	for _, v := range values {
+		out[v] = true
+	}
+	return out
+}
+
+// mailManagementVerbs names the received-message write verbs whose registration
+// is gated on MailManageEnabled. Both the positive and the negative test read
+// this list, so the pair cannot drift apart.
+func mailManagementVerbs() []string {
+	return []string{"move_message", "set_flag", "set_categories", "mark_read"}
+}
+
+// TestRegisterTools_MailManage_RegistersManagementVerbs verifies that with
+// MailManageEnabled set, the received-message write verbs appear in the mail
+// tool's published operation enum and no new top-level tool is registered
+// alongside them: the surface grows by verbs, not by tools.
+func TestRegisterTools_MailManage_RegistersManagementVerbs(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+
+	audit.InitAuditLog(false, "")
+
+	cfg := testConfig()
+	cfg.MailEnabled = true
+	cfg.MailManageEnabled = true
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
+
+	ops := registeredOperations(t, s, "mail")
+	for _, name := range mailManagementVerbs() {
+		if !ops[name] {
+			t.Errorf("verb %q is absent from the mail operation enum with MailManageEnabled=true", name)
+		}
+	}
+
+	const expectedTotal = 4
+	if got := len(s.ListTools()); got != expectedTotal {
+		t.Errorf("expected %d aggregate tools, got %d; new verbs must not add a top-level tool", expectedTotal, got)
+	}
+}
+
+// TestRegisterTools_MailManage_RegistersAddAttachment verifies that the
+// attachment verb reaches the published operation enum under the manage gate,
+// and that it arrives as a verb rather than as a fifth top-level tool.
+func TestRegisterTools_MailManage_RegistersAddAttachment(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+
+	audit.InitAuditLog(false, "")
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), maximalMailConfig(), nil)
+
+	if ops := registeredOperations(t, s, "mail"); !ops["add_attachment"] {
+		t.Error("verb \"add_attachment\" is absent from the mail operation enum with MailManageEnabled=true")
+	}
+
+	const expectedTotal = 4
+	if got := len(s.ListTools()); got != expectedTotal {
+		t.Errorf("expected %d aggregate tools, got %d; new verbs must not add a top-level tool", expectedTotal, got)
+	}
+}
+
+// TestMailIntroNamesEveryGatedWriteVerb asserts that the mail domain
+// introduction accounts for every verb the manage gate registers.
+//
+// The introduction enumerates those verbs by name, so it reads as exhaustive to
+// a model deciding whether a capability exists. The cases are derived by
+// diffing the registry built with the gate off against the registry built with
+// it on, rather than listed here: a future gated verb added without an
+// introduction edit then fails the build instead of shipping an introduction
+// that describes a smaller server than the one registered.
+func TestMailIntroNamesEveryGatedWriteVerb(t *testing.T) {
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+
+	audit.InitAuditLog(false, "")
+
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), maximalMailConfig(), nil)
+
+	tool, ok := s.ListTools()["mail"]
+	if !ok {
+		t.Fatal("aggregate \"mail\" tool is not registered")
+	}
+	intro := tool.Tool.Description
+
+	readOnlyCfg := testConfig()
+	readOnlyCfg.MailEnabled = true
+	ungated, _ := buildMailVerbs(mailVerbsConfig{cfg: readOnlyCfg, m: m, tracer: tracer, authMW: identityMW, accountResolverMW: identityMW})
+	gated, _ := buildMailVerbs(mailVerbsConfig{cfg: maximalMailConfig(), m: m, tracer: tracer, authMW: identityMW, accountResolverMW: identityMW})
+
+	present := make(map[string]bool, len(ungated))
+	for _, v := range ungated {
+		present[v.Name] = true
+	}
+	for _, v := range gated {
+		if present[v.Name] {
+			continue
+		}
+		if !strings.Contains(intro, v.Name) {
+			t.Errorf("the mail introduction does not name the MailManageEnabled-gated verb %q, so it describes a smaller server than the one registered", v.Name)
+		}
+	}
+}
+
+// TestRegisterTools_CalendarSchedulingReads verifies that both calendar
+// scheduling reads appear in the calendar tool's published operation enum in
+// every configuration, and that publishing them adds no top-level tool.
+//
+// The calendar domain has no feature gate, so the claim being graded is that
+// neither verb acquired one by accident: the enum is read under the default
+// configuration and again under the configuration that turns every mail flag
+// on, and both must carry both verbs. The tool count is asserted alongside
+// because the surface rule is that a new verb joins an existing aggregate
+// rather than becoming a fifth tool.
+func TestRegisterTools_CalendarSchedulingReads(t *testing.T) {
+	meter := noop.NewMeterProvider().Meter("test")
+	m, err := observability.InitMetrics(meter)
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	maximal := testConfig()
+	maximal.MailEnabled = true
+	maximal.MailManageEnabled = true
+
+	configurations := map[string]config.Config{
+		"default": testConfig(),
+		"maximal": maximal,
+	}
+
+	for label, cfg := range configurations {
+		s := mcpserver.NewMCPServer("test-server", "0.0.1",
+			mcpserver.WithToolCapabilities(false),
+			mcpserver.WithRecovery(),
+		)
+		RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
+
+		ops := registeredOperations(t, s, "calendar")
+		for _, name := range []string{"find_meeting_times", "get_schedule"} {
+			if !ops[name] {
+				t.Errorf("%s configuration: verb %q is absent from the calendar operation enum", label, name)
+			}
+		}
+
+		const expectedTotal = 4
+		if got := len(s.ListTools()); got != expectedTotal {
+			t.Errorf("%s configuration: expected %d aggregate tools, got %d", label, expectedTotal, got)
+		}
+	}
+}
+
+// TestRegisterTools_ContactsEnabled_RegistersFifthTool asserts that enabling
+// the contacts flag registers a fifth top-level tool named contacts, publishing
+// its five verbs in the operation enum.
+func TestRegisterTools_ContactsEnabled_RegistersFifthTool(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	cfg := testConfig()
+	cfg.ContactsEnabled = true
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
+
+	registered := s.ListTools()
+	if _, ok := registered["contacts"]; !ok {
+		t.Fatal("aggregate 'contacts' tool is absent although the contacts flag is set")
+	}
+
+	const expectedTotal = 5
+	if got := len(registered); got != expectedTotal {
+		t.Errorf("expected %d tools with contacts enabled, got %d", expectedTotal, got)
+	}
+
+	ops := registeredOperations(t, s, "contacts")
+	for _, name := range []string{"help", "search", "get_contact", "list_people", "get_person"} {
+		if !ops[name] {
+			t.Errorf("verb %q is absent from the contacts operation enum", name)
+		}
+	}
+	if got := len(ops); got != 5 {
+		t.Errorf("contacts publishes %d operations, want 5; the domain is scoped to reads only", got)
+	}
+}
+
+// TestRegisterTools_TeamsEnabled_RegistersSixthTool asserts that enabling the
+// teams flag registers a sixth top-level tool named teams, publishing its
+// twelve verbs in the operation enum. The contacts flag is set alongside it,
+// because the sixth position is only reachable with the fifth domain present.
+func TestRegisterTools_TeamsEnabled_RegistersSixthTool(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	cfg := testConfig()
+	cfg.ContactsEnabled = true
+	cfg.TeamsEnabled = true
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), cfg, nil)
+
+	registered := s.ListTools()
+	if _, ok := registered["teams"]; !ok {
+		t.Fatal("aggregate 'teams' tool is absent although the teams flag is set")
+	}
+
+	const expectedTotal = 6
+	if got := len(registered); got != expectedTotal {
+		t.Errorf("expected %d tools with contacts and teams enabled, got %d", expectedTotal, got)
+	}
+
+	ops := registeredOperations(t, s, "teams")
+	for _, name := range []string{
+		"help", "search", "list_chats", "list_chat_messages", "get_chat_message",
+		"list_channel_messages", "get_channel_message",
+		"list_channel_message_replies", "compose_reply", "get_online_meeting",
+		"list_transcripts", "get_transcript",
+	} {
+		if !ops[name] {
+			t.Errorf("verb %q is absent from the teams operation enum", name)
+		}
+	}
+	if got := len(ops); got != 12 {
+		t.Errorf("teams publishes %d operations, want 12; the domain is scoped to reads and the draft-only reply", got)
+	}
+}
+
+// TestRegisterTools_TeamsDisabled_NoTeamsTool asserts that the default surface
+// is unchanged by this domain's existence, graded by name and not only by
+// count: a tool registered under a different name would pass a count assertion
+// alone.
+func TestRegisterTools_TeamsDisabled_NoTeamsTool(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), testConfig(), nil)
+
+	registered := s.ListTools()
+	if _, ok := registered["teams"]; ok {
+		t.Error("aggregate 'teams' tool is registered although the teams flag is unset")
+	}
+
+	want := map[string]bool{"calendar": true, "mail": true, "account": true, "system": true}
+	for name := range registered {
+		if !want[name] {
+			t.Errorf("unexpected tool %q in the default surface", name)
+		}
+	}
+	for name := range want {
+		if _, ok := registered[name]; !ok {
+			t.Errorf("default tool %q is missing", name)
+		}
+	}
+}
+
+// TestRegisterTools_ContactsDisabled_StaysFourTools asserts that the default
+// surface is unchanged by this domain's existence, graded by name and not only
+// by count: a fifth tool registered under a different name would pass a count
+// assertion alone.
+func TestRegisterTools_ContactsDisabled_StaysFourTools(t *testing.T) {
+	s := mcpserver.NewMCPServer("test-server", "0.0.1",
+		mcpserver.WithToolCapabilities(false),
+		mcpserver.WithRecovery(),
+	)
+
+	m, err := observability.InitMetrics(noop.NewMeterProvider().Meter("test"))
+	if err != nil {
+		t.Fatalf("InitMetrics() error: %v", err)
+	}
+	tracer := tracenoop.NewTracerProvider().Tracer("test")
+	audit.InitAuditLog(false, "")
+
+	RegisterTools(s, graph.RetryConfig{}, 30*time.Second, m, tracer, false, identityMW, testRegistry(), testConfig(), nil)
+
+	registered := s.ListTools()
+	if _, ok := registered["contacts"]; ok {
+		t.Error("aggregate 'contacts' tool is registered although the contacts flag is unset")
+	}
+
+	want := map[string]bool{"calendar": true, "mail": true, "account": true, "system": true}
+	for name := range registered {
+		if !want[name] {
+			t.Errorf("unexpected tool %q in the default surface", name)
+		}
+	}
+	for name := range want {
+		if _, ok := registered[name]; !ok {
+			t.Errorf("default tool %q is missing", name)
+		}
 	}
 }
