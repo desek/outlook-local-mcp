@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-rc.2](https://github.com/desek/outlook-local-mcp/compare/v1.0.0-rc.1...v1.0.0-rc.2) (2026-10-03)
+
+
+### Features
+
+* **plugin:** plugin bundle for Anthropic's directory with digest-verified launcher ([0f8d6d6](https://github.com/desek/outlook-local-mcp/commit/0f8d6d605c3e2ed37aafe8022e741701158728b9))
+
+
+### Bug Fixes
+
+* **deps:** bump mcp-go to 1.1.1, msgraph-sdk-go to 1.103.0, azure identity and kiota ([9255239](https://github.com/desek/outlook-local-mcp/commit/92552394ec479722baecc4b0375d36ce9cb385ce))
+* **release:** use the jsonpath key release-please expects for the plugin extra-file ([0b0e79e](https://github.com/desek/outlook-local-mcp/commit/0b0e79e293ff4cd8f993e7b03203606108c6ca45))
+
 ## [1.0.0-rc.1](https://github.com/desek/outlook-local-mcp/compare/v0.6.0...v1.0.0-rc.1) (2026-10-03)
 
 
