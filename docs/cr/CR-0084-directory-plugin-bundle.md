@@ -2,7 +2,7 @@
 id: "CR-0084"
 name: directory-plugin-bundle
 description: Add a Claude plugin bundle at plugin/ so the server can be listed in Anthropic's directory, complete the privacy policy to the directory's required coverage, and keep the MCPB desktop extension as the unchanged Claude Desktop install path.
-status: "approved"
+status: "implemented"
 date: 2026-10-03
 requestor: desek
 stakeholders:
@@ -930,6 +930,19 @@ policy, leaving the MCPB extension untouched", because it is the only shape the 
 does not block for a compiled local server, it matches the one Go plugin already in the
 catalog while tightening its verification, it reuses the release artefacts without a
 second build pipeline, and it adds a distribution channel instead of replacing one.
+
+## Implementation Status
+
+* **Started:** 2026-10-03
+* **Completed:** 2026-10-03 (branch `docs/cr-0084-directory-plugin-bundle`)
+* **Deployed to Production:** pending merge and the next release
+* **Notes:**
+  * `make ci` exits 0; `shellcheck` clean; `claude plugin validate ./plugin` passes with no warnings on 2.1.288; 16 tests in `internal/plugin`, 2 in `internal/docs`.
+  * Scenario `.agents/scenarios/2026-10-03-plugin-bundle-loads-in-claude-code.md`: the plugin loads in Claude Code and the tool answers, 1 of 1.
+  * **Raw binary assets do not exist for `v1.0.0-rc.1`.** The release job now publishes them, so the first release after this change (the next rc or 1.0.0) is the first version the plugin can cold-start against without `OUTLOOK_MCP_PLUGIN_BIN`. `plugin/checksums.txt` therefore has no version block yet; the digest-pin pull request fills it on that release. Decision needed: back-fill `v1.0.0-rc.1` by uploading the raw binaries and a regenerated `checksums.txt` to the published release, or wait for the next release.
+  * FR-4 deviation: `auth_method` default is `device_code` (the MCPB value), not the server's empty-means-infer default, because an empty string cannot be a member of `options`. Cowork requires a default.
+  * The digest-pin step also captures the Windows `.exe` line; harmless, and the test expects it.
+  * Portal **Validate** not yet run (needs a logged-in paid account); Phase 4 step 5 remains for the publisher.
 
 ## Related Items
 
