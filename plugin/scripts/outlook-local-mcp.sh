@@ -26,10 +26,14 @@ fi
 ROOT=${CLAUDE_PLUGIN_ROOT:?CLAUDE_PLUGIN_ROOT is not set; start this launcher through Claude Code}
 DATA=${CLAUDE_PLUGIN_DATA:?CLAUDE_PLUGIN_DATA is not set; start this launcher through Claude Code}
 
-version=$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$ROOT/.claude-plugin/plugin.json" | head -n 1)
-[ -n "$version" ] || fail "no version found in $ROOT/.claude-plugin/plugin.json" \
-	"(a) reinstall the plugin; (b) restore the \"version\" field in plugin.json" \
-	"plugin.json contains a line \"version\": \"<x.y.z>\""
+# The version lives in a one-line text file (first token; the trailing comment is the
+# release-please annotation that bumps it). The launcher deliberately reads nothing
+# else in the plugin, so the directory's scanner follows only this file and
+# checksums.txt from here.
+version=$(sed -n '1s/^[[:space:]]*\([^[:space:]#]*\).*/\1/p' "$ROOT/VERSION")
+[ -n "$version" ] || fail "no version found in $ROOT/VERSION" \
+	"(a) reinstall the plugin; (b) restore $ROOT/VERSION to one line: <x.y.z> # x-release-please-version" \
+	"$ROOT/VERSION starts with the plugin version"
 
 case "$(uname -s)-$(uname -m)" in
 	Darwin-arm64) platform=darwin-arm64 ;;

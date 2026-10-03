@@ -57,7 +57,8 @@ func newLauncherEnv(t *testing.T, kernel, machine string) *launcherEnv {
 	return e
 }
 
-// copyPlugin copies plugin/ to a temp dir with the test version in plugin.json.
+// copyPlugin copies plugin/ to a temp dir with the test version in plugin.json
+// and in VERSION, the file the launcher reads.
 func copyPlugin(t *testing.T) string {
 	t.Helper()
 	src := filepath.Join(repoRoot(t), "plugin")
@@ -83,6 +84,7 @@ func copyPlugin(t *testing.T) string {
 	b, _ := os.ReadFile(mp)
 	v, _ := readJSON(t, manifestPath)["version"].(string)
 	writeFile(t, mp, strings.Replace(string(b), `"version": "`+v+`"`, `"version": "`+testVersion+`"`, 1), 0o644)
+	writeFile(t, filepath.Join(dst, "VERSION"), testVersion+" # x-release-please-version\n", 0o644)
 	return dst
 }
 

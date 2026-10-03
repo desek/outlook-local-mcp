@@ -128,7 +128,7 @@ Until that pull request merges, the launcher finds no committed pin for the vers
 
 ### Version
 
-release-please bumps `version` in `plugin/.claude-plugin/plugin.json` through `extra-files`, so the plugin version is always the tag version.
+release-please bumps the plugin version in two files through `extra-files`: `version` in `plugin/.claude-plugin/plugin.json` (the version the directory lists) and the first token of `plugin/VERSION` (the version the launcher reads, annotated `x-release-please-version` for the generic updater). The launcher reads `VERSION` rather than `plugin.json` on purpose: the directory's scanner follows every file a launcher names, and `plugin.json` names `icon.png`, which raised an "image file the plugin's code could run" hold on the first submission. A test asserts both files carry the release manifest version.
 
 ### Tracked ref: the `plugin-stable` tag
 
