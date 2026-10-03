@@ -30,6 +30,8 @@ See [Container deployment](docs/quickstart.md#container-deployment) for the full
 
 Download the `.mcpb` file from the [latest release](https://github.com/desek/outlook-local-mcp/releases/latest) and open it in Claude Desktop via **Settings > Extensions > Install from file**.
 
+**Claude Code or Cowork plugin**: install the plugin from the Claude directory with `/plugin`. See [the quickstart](docs/quickstart.md#2c-install-as-a-claude-code-or-cowork-plugin).
+
 ## Tool invocation shape
 
 All operations use four aggregate domain tools dispatched by an `operation` verb, plus two opt-in ones registered only when their variable is set, `contacts` under `OUTLOOK_MCP_CONTACTS_ENABLED` and `teams` under `OUTLOOK_MCP_TEAMS_ENABLED`:
@@ -55,6 +57,10 @@ Call any domain with `operation: "help"` to list its verbs and parameters.
 | [docs/troubleshooting.md](docs/troubleshooting.md) | Auth errors, Keychain issues, Graph throttling, and account lifecycle |
 
 For LLM clients: see [llms.txt](llms.txt) for a machine-readable index.
+
+## Privacy Policy
+
+The server runs locally and sends your data only to Microsoft services with your own credentials. Read the full [privacy policy](PRIVACY.md) for what it accesses, keeps, and contacts.
 
 ## Acknowledgements
 

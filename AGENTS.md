@@ -30,6 +30,7 @@ outlook-mcp/
     tools/                     # The 4 default aggregate domain tools, the opt-in contacts and teams tools, and their verb registries
   docs/
     ...
+  plugin/                      # Claude plugin bundle for Anthropic's directory: manifest, launcher, skill (CR-0084)
 ```
 
 **Build:** `go build ./cmd/outlook-local-mcp/`

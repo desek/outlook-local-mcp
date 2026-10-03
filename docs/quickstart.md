@@ -72,6 +72,23 @@ Add an `.mcp.json` file to your project root:
 
 Replace `/absolute/path/to/outlook-local-mcp` with the actual path to the built binary.
 
+## 2c. Install as a Claude Code or Cowork plugin
+
+Install the plugin from the Claude directory with `/plugin` in Claude Code. From a checkout of this repository, run `claude --plugin-dir ./plugin`.
+
+The plugin launcher does these steps on first start of a version:
+
+1. It downloads the raw release binary that matches the plugin version.
+2. It verifies the SHA-256 digest of the binary.
+3. It keeps the binary under `${CLAUDE_PLUGIN_DATA}`.
+4. It starts the binary.
+
+A later start uses the kept binary and makes no network call. Set `OUTLOOK_MCP_PLUGIN_BIN` to the path of a local binary to skip the download and the verification.
+
+The plugin supports macOS arm64 and Linux amd64 only. On Windows, use the Claude Desktop extension (`.mcpb`) or the release zip.
+
+At install, the plugin asks for the same options as the Claude Desktop extension. Each answer sets one variable: client ID (`OUTLOOK_MCP_CLIENT_ID`), tenant ID (`OUTLOOK_MCP_TENANT_ID`), authentication method (`OUTLOOK_MCP_AUTH_METHOD`), and timezone (`OUTLOOK_MCP_DEFAULT_TIMEZONE`).
+
 ## 3. Authenticate and Verify
 
 Restart Claude Desktop (or reload MCP servers in Claude Code) and verify the server is reachable:

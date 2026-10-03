@@ -54,6 +54,10 @@ Set `OUTLOOK_MCP_READ_ONLY=true` to disable all write operations. All write verb
 OUTLOOK_MCP_READ_ONLY=true ./outlook-local-mcp
 ```
 
+## Install surfaces
+
+The MCPB extension loads in Claude Desktop. The plugin bundle loads in Claude Code and in Cowork desktop sessions. The container image and the release binaries run with any MCP client. Chat in claude.ai does not load local servers.
+
 ## Mail gating
 
 Mail access is disabled by default and enabled in two tiers via environment variables:
