@@ -11,9 +11,9 @@
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-400-normal-DTRLJnHl.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-600-normal-V-KvD_pi.woff2" />
     <meta name="description" content="Install Outlook Local MCP, configure Claude Desktop or Claude Code, authenticate, and make your first calendar and mail tool call, all on your local machine." />
-      <meta name="build:commit" content="2cce019aaa908f96659dfe4edeaa8f336ea7b667" />
-    <meta name="build:time" content="2026-08-24T18:05:30.937Z" />
-    <meta name="build:run" content="32760374403" />
+      <meta name="build:commit" content="92ab5fe36a7304a210ecf281b88a61e1993f6733" />
+    <meta name="build:time" content="2026-10-03T14:22:40.430Z" />
+    <meta name="build:run" content="37129364401" />
     <meta name="build:environment" content="ci" />
       <link rel="canonical" href="https://outlook-local-mcp.com/quickstart.html" />
     <meta property="og:title" content="Quick Start — Outlook Local MCP" />
@@ -159,11 +159,21 @@ go build ./cmd/outlook-local-mcp/
 <p>&quot;Find all high-importance meetings in the next two weeks&quot;</p>
 </blockquote>
 <p>Parameters: <code>query</code>, <code>start_datetime</code>, <code>end_datetime</code>, <code>importance</code>, <code>sensitivity</code>, <code>is_all_day</code>, <code>show_as</code>, <code>is_cancelled</code>, <code>categories</code>, <code>max_results</code>, <code>timezone</code>. All optional; defaults to next 30 days.</p>
-<p><strong>Free/busy</strong> availability:</p>
+<p><strong>Free/busy</strong> availability on your own calendar, with the subject of each busy period:</p>
 <blockquote>
 <p>&quot;When am I free next Monday?&quot;</p>
 </blockquote>
 <p>Parameters: <code>start_datetime</code> (required), <code>end_datetime</code> (required), <code>timezone</code>.</p>
+<p><strong>Schedule</strong> -- free/busy blocks and working hours for one or more mailboxes you are permitted to view:</p>
+<blockquote>
+<p>&quot;Is Alice free tomorrow afternoon, and when does she work?&quot;</p>
+</blockquote>
+<p>Parameters: <code>schedules</code> (required, comma-separated SMTP addresses, at most 20 per call), a resolvable window supplied either as <code>date</code> or as <code>start_datetime</code> and <code>end_datetime</code> (the explicit datetimes take precedence), <code>availability_view_interval</code>, <code>timezone</code>. A mailbox you may not view is reported as an error against that mailbox while the others still return their blocks -- see <a href="troubleshooting#schedule-mailbox-error">A mailbox reports an error inside a schedule reply</a>.</p>
+<p><strong>Find meeting times</strong> -- candidate slots for a set of attendees, ranked by confidence:</p>
+<blockquote>
+<p>&quot;Find a 30-minute slot next week for <a href="mailto:alice@example.com">alice@example.com</a> and <a href="mailto:bob@example.com">bob@example.com</a>&quot;</p>
+</blockquote>
+<p>Parameters: <code>attendees</code> (required, JSON array), <code>meeting_duration</code> (ISO 8601, defaults to <code>PT30M</code>), <code>start_datetime</code> and <code>end_datetime</code> (supply both to bound the search, or omit both to let Graph choose the window), <code>max_candidates</code>, <code>minimum_attendee_percentage</code>, <code>is_organizer_optional</code>, <code>timezone</code>. This verb only suggests; booking a suggested slot is a separate <code>create_meeting</code> call.</p>
 <h3 id="write">Write</h3>
 <p><strong>Create event</strong>:</p>
 <blockquote>
@@ -176,6 +186,23 @@ Optional: <code>body</code>, <code>location</code>, <code>attendees</code> (JSON
 <p>&quot;Move my 2pm meeting to 3pm&quot;</p>
 </blockquote>
 <p>Required: <code>event_id</code>. All other fields are optional.</p>
+<h3 id="attachments">Attachments</h3>
+<p>The files clipped to an event are reachable by the same <code>event_id</code> the reads above return. No opt-in flag governs them: an event attachment is calendar data.</p>
+<p><strong>List event attachments</strong> -- metadata only, no file content:</p>
+<blockquote>
+<p>&quot;What is attached to the design review invite?&quot;</p>
+</blockquote>
+<p>Parameters: <code>event_id</code> (required), <code>account</code>, <code>output</code>.</p>
+<p><strong>Get event attachment</strong> -- the file&#39;s bytes, base64 encoded:</p>
+<blockquote>
+<p>&quot;Read the agenda attached to that meeting&quot;</p>
+</blockquote>
+<p>Parameters: <code>event_id</code> (required), <code>attachment_id</code> (required, from the list above), <code>account</code>, <code>output</code>. The content is returned only within <code>OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES</code> (10 MB by default); a larger attachment is refused rather than truncated.</p>
+<p><strong>Add event attachment</strong> -- attach a file to an existing event:</p>
+<blockquote>
+<p>&quot;Attach this PDF to tomorrow&#39;s team meeting&quot;</p>
+</blockquote>
+<p>Required: <code>event_id</code>, <code>name</code>, <code>content_bytes</code> (base64). Optional: <code>mime_type</code> (defaults to <code>application/octet-stream</code>), <code>account</code>. A small file goes in one request and a file above roughly 3 MB through a chunked upload session; the confirmation names the path used, the attachment identifier the service assigned, and the size measured after decoding. Attaching a file does not notify attendees. This is a write verb, so read-only mode refuses it -- see <a href="troubleshooting#attachment-upload-did-not-complete">Attachment upload did not complete</a> if a large file fails to land.</p>
 <h3 id="delete">Delete</h3>
 <p><strong>Delete event</strong>:</p>
 <blockquote>
@@ -187,6 +214,67 @@ Optional: <code>body</code>, <code>location</code>, <code>attendees</code> (JSON
 <p>&quot;Cancel tomorrow&#39;s team meeting and let everyone know it&#39;s rescheduled&quot;</p>
 </blockquote>
 <p>Parameters: <code>event_id</code> (required), <code>comment</code> (optional cancellation message). Only the organizer can cancel.</p>
+<h3 id="contacts-opt-in">Contacts (opt-in)</h3>
+<p>The verbs above take email addresses, never names. The <code>contacts</code> tool supplies the address, and it is one of the two tools that are absent unless asked for: set <code>OUTLOOK_MCP_CONTACTS_ENABLED=true</code> in the server&#39;s environment and restart the client.</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;outlook-local&quot;: {
+      &quot;command&quot;: &quot;/absolute/path/to/outlook-local-mcp&quot;,
+      &quot;env&quot;: {
+        &quot;OUTLOOK_MCP_CONTACTS_ENABLED&quot;: &quot;true&quot;
+      }
+    }
+  }
+}
+</code></pre>
+<p>Enabling it adds the <code>Contacts.Read</code> and <code>People.Read</code> scopes, so the next tool call re-runs the sign-in flow once for incremental consent -- see <a href="troubleshooting#contacts-consent">Contacts consent prompt on first use</a>. If the tool does not appear, see <a href="troubleshooting#contacts-disabled">Contacts tool not listed</a>.</p>
+<p><strong>Search</strong> across saved contacts and relevance-ranked people at once:</p>
+<blockquote>
+<p>&quot;What is Alex&#39;s email address?&quot;</p>
+</blockquote>
+<p>Parameters: <code>query</code> (required), <code>account</code>, <code>output</code>. Each match is labelled with its source, a contact you saved or a person Graph inferred from your correspondence, so you can judge how much to trust it.</p>
+<p><strong>Get contact</strong> and <strong>get person</strong> fetch one full record by the identifier a search returned:</p>
+<blockquote>
+<p>&quot;Show me the full contact record for that Alex&quot;</p>
+</blockquote>
+<p>Parameters: <code>contact_id</code> or <code>person_id</code> (required), <code>account</code>, <code>output</code>.</p>
+<p><strong>List people</strong> returns your correspondents in Graph&#39;s relevance order, most relevant first:</p>
+<blockquote>
+<p>&quot;Who do I email most?&quot;</p>
+</blockquote>
+<p>Parameters: <code>account</code>, <code>output</code>.</p>
+<p>Every contacts verb reads. Nothing in the domain creates, changes, or deletes a contact, and no contact write scope is ever requested. See <a href="concepts#contacts-gating">Contacts gating</a>.</p>
+<h3 id="teams-opt-in">Teams (opt-in)</h3>
+<p>The <code>teams</code> tool reads Microsoft Teams conversations and meeting transcripts, and it is the other tool absent unless asked for: set <code>OUTLOOK_MCP_TEAMS_ENABLED=true</code> in the server&#39;s environment and restart the client.</p>
+<pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;outlook-local&quot;: {
+      &quot;command&quot;: &quot;/absolute/path/to/outlook-local-mcp&quot;,
+      &quot;env&quot;: {
+        &quot;OUTLOOK_MCP_TEAMS_ENABLED&quot;: &quot;true&quot;
+      }
+    }
+  }
+}
+</code></pre>
+<p>Enabling it adds the <code>Chat.Read</code>, <code>ChannelMessage.Read.All</code>, <code>OnlineMeetings.Read</code>, and <code>OnlineMeetingTranscript.Read.All</code> scopes, so the next tool call re-runs the sign-in flow once for incremental consent. If the tool does not appear, see <a href="troubleshooting#teams-disabled">Teams tool not listed</a>.</p>
+<p><strong>Search</strong> is where every Teams flow starts, because it is what turns a topic into the identifiers the other verbs need:</p>
+<blockquote>
+<p>&quot;Find the Teams messages about the release checklist&quot;</p>
+</blockquote>
+<p>Parameters: <code>query</code> (required), <code>account</code>, <code>output</code>. Each hit names the chat, or the team and channel, it came from. Enumerating teams and channels is not offered; a channel is reached this way. See <a href="troubleshooting#teams-channel-identifiers">Teams channel read is missing an identifier</a>.</p>
+<p><strong>Read a thread</strong> with <code>list_chats</code>, <code>list_chat_messages</code>, and <code>list_channel_messages</code>, then escalate one message with <code>get_chat_message</code> or <code>get_channel_message</code>. Replies to a channel post are listed separately, by <code>list_channel_message_replies</code>. Each listing reads one page; pass <code>max_results</code> to bound it. A message body is returned as a preview by default; pass <code>output: &quot;raw&quot;</code> for the whole thing.</p>
+<p><strong>Recap a meeting</strong> by resolving the join URL a calendar event carries:</p>
+<blockquote>
+<p>&quot;Summarise yesterday&#39;s project sync from its Teams transcript&quot;</p>
+</blockquote>
+<p><code>get_online_meeting</code> takes exactly one of <code>meeting_id</code> or <code>join_web_url</code> and returns the meeting-scoped identifier <code>list_transcripts</code> and <code>get_transcript</code> are keyed by. The full WEBVTT text comes back only under <code>output: &quot;raw&quot;</code>. See <a href="troubleshooting#teams-meeting-unresolved">Teams meeting or transcript not resolved</a>.</p>
+<p><strong>Compose a reply</strong> without sending one:</p>
+<blockquote>
+<p>&quot;Draft a reply to that message quoting what Sam asked&quot;</p>
+</blockquote>
+<p>Parameters: <code>body</code> (required, the reply text), <code>message_id</code> (required), plus <code>chat_id</code> for a chat message or both <code>team_id</code> and <code>channel_id</code> for a channel post, and optional <code>account</code>. It takes no <code>output</code> parameter, because it projects no Graph resource.</p>
+<p><code>compose_reply</code> reads the parent message, quotes it, and returns prepared text. It posts nothing: no Teams send scope is requested in any configuration, so pasting the reply into Microsoft Teams is a step the user takes. Every other Teams verb reads. See <a href="concepts#teams-gating">Teams gating</a>.</p>
 <h2 id="5-configuration">5. Configuration</h2>
 <p>All environment variables are prefixed with <code>OUTLOOK_MCP_</code>:</p>
 <table>
@@ -223,6 +311,16 @@ Optional: <code>body</code>, <code>location</code>, <code>attendees</code> (JSON
 <td>Disable write tools (create, update, delete, cancel)</td>
 </tr>
 <tr>
+<td><code>CONTACTS_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Register the opt-in read-only <code>contacts</code> tool; requests <code>Contacts.Read</code> and <code>People.Read</code></td>
+</tr>
+<tr>
+<td><code>TEAMS_ENABLED</code></td>
+<td><code>false</code></td>
+<td>Register the opt-in read-only <code>teams</code> tool; requests <code>Chat.Read</code>, <code>ChannelMessage.Read.All</code>, <code>OnlineMeetings.Read</code>, and <code>OnlineMeetingTranscript.Read.All</code></td>
+</tr>
+<tr>
 <td><code>LOG_FORMAT</code></td>
 <td><code>json</code></td>
 <td>Log format: <code>json</code> or <code>text</code></td>
@@ -255,7 +353,7 @@ Optional: <code>body</code>, <code>location</code>, <code>attendees</code> (JSON
 <pre><code>{tool: &quot;system&quot;, args: {operation: &quot;get_docs&quot;, slug: &quot;troubleshooting&quot;}}
 {tool: &quot;system&quot;, args: {operation: &quot;get_docs&quot;, slug: &quot;troubleshooting&quot;, section: &quot;keychain-locked&quot;}}
 </code></pre>
-<p>The embedded bundle contains <code>readme</code>, <code>quickstart</code>, and <code>troubleshooting</code>. Each document is also exposed as an MCP resource at <code>doc://outlook-local-mcp/{slug}</code> for clients that support <code>resources/list</code> and <code>resources/read</code>. Run <code>system.status</code> to discover the base URI and the troubleshooting slug. See CR-0061 for implementation details.</p>
+<p>The embedded bundle contains <code>readme</code>, <code>quickstart</code>, <code>concepts</code>, and <code>troubleshooting</code>. Each document is also exposed as an MCP resource at <code>doc://outlook-local-mcp/{slug}</code> for clients that support <code>resources/list</code> and <code>resources/read</code>. Run <code>system.status</code> to discover the base URI and the troubleshooting slug.</p>
 <h2 id="container-deployment">Container deployment</h2>
 <p>The server is available as an OCI image at <code>ghcr.io/desek/outlook-local-mcp</code>. No Go toolchain is required.</p>
 <h3 id="recommended-invocation">Recommended invocation</h3>

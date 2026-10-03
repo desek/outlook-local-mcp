@@ -11,9 +11,9 @@
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-400-normal-DTRLJnHl.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-600-normal-V-KvD_pi.woff2" />
     <meta name="description" content="Recover from common Outlook Local MCP failures: auth errors, token refresh, Keychain access, Graph throttling, mail flags, and account lifecycle issues." />
-      <meta name="build:commit" content="2cce019aaa908f96659dfe4edeaa8f336ea7b667" />
-    <meta name="build:time" content="2026-08-24T18:05:30.937Z" />
-    <meta name="build:run" content="32760374403" />
+      <meta name="build:commit" content="92ab5fe36a7304a210ecf281b88a61e1993f6733" />
+    <meta name="build:time" content="2026-10-03T14:22:40.430Z" />
+    <meta name="build:run" content="37129364401" />
     <meta name="build:environment" content="ci" />
       <link rel="canonical" href="https://outlook-local-mcp.com/troubleshooting.html" />
     <meta property="og:title" content="Troubleshooting — Outlook Local MCP" />
@@ -190,8 +190,8 @@
 </ol>
 <hr>
 <h2 id="mail-management-disabled">Mail management disabled</h2>
-<p><strong>Symptom:</strong> Draft operations (<code>create_draft</code>, <code>create_reply_draft</code>, <code>create_forward_draft</code>, <code>update_draft</code>, <code>delete_draft</code>) return <code>mail management is not enabled</code> or <code>unknown operation</code>.</p>
-<p><strong>Cause:</strong> <code>OUTLOOK_MCP_MAIL_MANAGE_ENABLED</code> is not set. Draft management is a separate opt-in that implies <code>MAIL_ENABLED</code>.</p>
+<p><strong>Symptom:</strong> Draft operations (<code>create_draft</code>, <code>create_reply_draft</code>, <code>create_forward_draft</code>, <code>update_draft</code>, <code>delete_draft</code>, <code>add_attachment</code>) or received-message writes (<code>move_message</code>, <code>set_flag</code>, <code>set_categories</code>, <code>mark_read</code>) return <code>mail management is not enabled</code> or <code>unknown operation</code>.</p>
+<p><strong>Cause:</strong> <code>OUTLOOK_MCP_MAIL_MANAGE_ENABLED</code> is not set. Mail management is a separate opt-in that implies <code>MAIL_ENABLED</code>, and it gates draft management, draft attachments, and received-message management.</p>
 <p><strong>Remediation:</strong></p>
 <ol>
 <li>Set <code>OUTLOOK_MCP_MAIL_MANAGE_ENABLED=true</code> (this automatically enables <code>MAIL_ENABLED</code> as well) and restart the server.</li>
@@ -199,6 +199,146 @@
 <li>On first enable, a new OAuth consent for <code>Mail.ReadWrite</code> is required (supersedes <code>Mail.Read</code>). The authentication flow triggers automatically on the next tool call.</li>
 </ol>
 <p><strong>Note:</strong> The server never requests <code>Mail.Send</code>. Drafts are created in the Outlook Drafts folder; the user sends them manually from Outlook.</p>
+<hr>
+<h2 id="contacts-disabled">Contacts tool not listed</h2>
+<p><strong>Symptom:</strong> The client&#39;s tool list shows only <code>calendar</code>, <code>mail</code>, <code>account</code>, and <code>system</code>, and a call to <code>{tool: &quot;contacts&quot;, ...}</code> fails with an unknown-tool error rather than an unknown-operation error.</p>
+<p><strong>Cause:</strong> <code>OUTLOOK_MCP_CONTACTS_ENABLED</code> is not set (default is <code>false</code>). Unlike <code>mail</code>, which is always registered and gates its verbs, the whole <code>contacts</code> tool is registered only when the flag is set, because every contacts verb needs a scope the default configuration does not request. An absent tool is the expected default state, not a fault. See <a href="concepts#contacts-gating">Contacts gating</a>.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Set <code>OUTLOOK_MCP_CONTACTS_ENABLED=true</code> in the server&#39;s environment configuration and restart the server.</li>
+<li>Verify with <code>{tool: &quot;system&quot;, args: {operation: &quot;status&quot;, output: &quot;summary&quot;}}</code> and check <code>config.features.contacts_enabled</code>, or list tools in the client: a tool named <code>contacts</code> should be present alongside the four default ones. <code>{tool: &quot;contacts&quot;, args: {operation: &quot;help&quot;}}</code> returns the verb list and needs no authentication.</li>
+<li>If the tool is still missing, confirm the variable reached the server process rather than only the shell: environment variables set in a Claude Desktop or Claude Code configuration file take effect only after the client restarts the server.</li>
+</ol>
+<p><strong>Note:</strong> <code>system.status</code> does not report a contacts feature flag. The presence of the <code>contacts</code> tool in the tool list is the check.</p>
+<hr>
+<h2 id="contacts-consent">Contacts consent prompt on first use</h2>
+<p><strong>Symptom:</strong> After enabling <code>OUTLOOK_MCP_CONTACTS_ENABLED=true</code>, the next tool call, including a calendar or mail call, opens a Microsoft sign-in page asking to approve permissions the account has already approved before.</p>
+<p><strong>Cause:</strong> Enabling contacts adds <code>Contacts.Read</code> and <code>People.Read</code> to the requested scope set. Consent is incremental, so the cached token no longer covers the requested scopes and the configured authentication flow runs again. The consent screen lists the previously granted scopes alongside the two new ones; that is the identity platform restating the full set, not a request for anything wider.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Complete the sign-in once. The refreshed token covers the new scope set and subsequent calls authenticate silently.</li>
+<li>Confirm what was requested in the server&#39;s startup log record <code>graph client initialized</code>, whose <code>scopes</code> field names every requested scope.</li>
+<li>Expect exactly <code>Contacts.Read</code> and <code>People.Read</code> to be added. <code>Contacts.ReadWrite</code> is never requested; if a consent screen names it, the prompt is not coming from this server.</li>
+<li>In a work or school tenant where user consent is restricted, the sign-in ends in an administrator-approval message. Ask an administrator to grant the two delegated read scopes, or unset the flag to return to the previous scope set.</li>
+</ol>
+<p><strong>Note:</strong> Turning the flag back off does not revoke consent already granted. It stops the scopes being requested and removes the tool; revoke the grant in the account&#39;s Microsoft app-permissions page if that is the intent.</p>
+<hr>
+<h2 id="teams-disabled">Teams tool not listed</h2>
+<p><strong>Symptom:</strong> The client&#39;s tool list does not include <code>teams</code>, and a call to <code>{tool: &quot;teams&quot;, ...}</code> fails with an unknown-tool error rather than an unknown-operation error.</p>
+<p><strong>Cause:</strong> <code>OUTLOOK_MCP_TEAMS_ENABLED</code> is not set (default is <code>false</code>). The whole <code>teams</code> tool is registered only when the flag is set, because every Teams verb needs a scope the default configuration does not request. An absent tool is the expected default state, not a fault. See <a href="concepts#teams-gating">Teams gating</a>.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Set <code>OUTLOOK_MCP_TEAMS_ENABLED=true</code> in the server&#39;s environment configuration and restart the server.</li>
+<li>Verify with <code>{tool: &quot;system&quot;, args: {operation: &quot;status&quot;, output: &quot;summary&quot;}}</code> and check <code>config.features.teams_enabled</code>. <code>{tool: &quot;teams&quot;, args: {operation: &quot;help&quot;}}</code> returns the verb list and needs no authentication.</li>
+<li>If the tool is still missing, confirm the variable reached the server process rather than only the shell: environment variables set in a Claude Desktop or Claude Code configuration file take effect only after the client restarts the server.</li>
+<li>Expect a sign-in prompt on the first call after enabling: four read scopes are added to the requested set and consent is incremental. <code>Chat.Read</code>, <code>ChannelMessage.Read.All</code>, <code>OnlineMeetings.Read</code>, and <code>OnlineMeetingTranscript.Read.All</code> are the only Teams scopes this server ever requests; if a consent screen names a send or write scope, the prompt is not coming from this server. In a work or school tenant where user consent is restricted, the sign-in ends in an administrator-approval message and an administrator must grant the four delegated read scopes.</li>
+</ol>
+<p><strong>Note:</strong> Nothing in the domain sends, posts, edits, or deletes a Teams message. <code>teams.compose_reply</code> returns prepared text for the user to paste; it posts nothing.</p>
+<hr>
+<h2 id="teams-meeting-unresolved">Teams meeting or transcript not resolved</h2>
+<p><strong>Symptom:</strong> <code>{tool: &quot;teams&quot;, args: {operation: &quot;get_online_meeting&quot;, ...}}</code> is refused for naming neither or both of <code>meeting_id</code> and <code>join_web_url</code>, resolves a join URL to no meeting, or a following <code>list_transcripts</code> or <code>get_transcript</code> call reports the meeting identifier is unusable.</p>
+<p><strong>Cause:</strong> Transcript reads are keyed by a meeting-scoped identifier that a calendar event does not carry. An event carries the meeting&#39;s join URL, so the identifier is obtained by resolving that URL first. A join URL resolves only for a meeting in the signed-in account&#39;s own tenant, and only exactly one identifier may be supplied, because there is no unfiltered meeting listing to fall back on.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Read the event with <code>{tool: &quot;calendar&quot;, args: {operation: &quot;get_event&quot;, ...}}</code> and take the complete <code>https</code> join link it carries, not a fragment of it.</li>
+<li>Resolve it with <code>{tool: &quot;teams&quot;, args: {operation: &quot;get_online_meeting&quot;, join_web_url: &quot;&lt;the join URL&gt;&quot;}}</code>, supplying <code>join_web_url</code> or <code>meeting_id</code> but never both.</li>
+<li>Use the returned meeting identifier for <code>list_transcripts</code>, then read one transcript with <code>get_transcript</code>. The full WEBVTT text is returned only under <code>output: &quot;raw&quot;</code>.</li>
+<li>If the URL still resolves to nothing, confirm the event belongs to this account. A meeting organised on another tenant is not resolvable here, and a meeting that was never recorded with transcription on holds no transcript to list.</li>
+</ol>
+<hr>
+<h2 id="teams-transcript-policy">Teams transcript access is disabled or unattributed</h2>
+<p><strong>Symptom:</strong> <code>list_transcripts</code> or <code>get_transcript</code> fails with the code <code>GraphAccessToTranscriptsDisabled</code>, or <code>get_transcript</code> returns <code>contentFormat</code> <code>application/vnd.microsoft.graph.transcript+text</code> with no speaker names.</p>
+<p><strong>Cause:</strong> Both are tenant policies. <code>GraphAccessToTranscriptsDisabled</code> means the tenant blocks transcript access through Microsoft Graph. When the tenant does not allow speaker attribution, Graph refuses the WEBVTT format with <code>SpeakerAttributionNotAllowed</code>, and the server reads the transcript again as text without speaker names.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>For <code>GraphAccessToTranscriptsDisabled</code>, ask a Teams administrator to allow Graph access to transcripts in the Teams admin center or with <code>Set-CsTeamsMeetingConfiguration</code>. No retry, consent, or request change can work until the policy changes.</li>
+<li>Verify with <code>{tool: &quot;teams&quot;, args: {operation: &quot;list_transcripts&quot;, meeting_id: &quot;&lt;id&gt;&quot;}}</code>, which returns metadata when access is allowed.</li>
+<li>For the unattributed format, no action in this server changes the result. Speaker names return only when the tenant allows speaker attribution.</li>
+</ol>
+<hr>
+<h2 id="teams-channel-identifiers">Teams channel read is missing an identifier</h2>
+<p><strong>Symptom:</strong> <code>{tool: &quot;teams&quot;, args: {operation: &quot;list_channel_messages&quot;, ...}}</code>, <code>get_channel_message</code>, <code>list_channel_message_replies</code>, or a channel-shaped <code>compose_reply</code> is refused before any request is issued, with an error naming <code>team_id</code> or <code>channel_id</code>.</p>
+<p><strong>Cause:</strong> A channel is addressed by a team identifier and a channel identifier together; neither alone identifies it. This server offers no verb that enumerates joined teams or their channels, so the pair is not obtained by browsing.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Locate a message in the channel with <code>{tool: &quot;teams&quot;, args: {operation: &quot;search&quot;, query: &quot;&lt;text from the channel&gt;&quot;}}</code>. Each channel hit carries the <code>teamId</code> and <code>channelId</code> the channel reads require, alongside the message <code>id</code>.</li>
+<li>Pass both identifiers on every channel call, and the message <code>id</code> as <code>message_id</code> where the verb also names one.</li>
+<li>For a chat rather than a channel, use <code>chat_id</code> instead: <code>list_chats</code> returns it, as does the <code>chatId</code> of a chat search hit. <code>compose_reply</code> takes <code>chat_id</code> or both <code>team_id</code> and <code>channel_id</code>, never a mixture of the two shapes.</li>
+</ol>
+<hr>
+<h2 id="attachment-target-not-a-draft">Attachment target is not a draft</h2>
+<p><strong>Symptom:</strong> <code>{tool: &quot;mail&quot;, args: {operation: &quot;add_attachment&quot;, ...}}</code> fails with <code>message is not a draft: this tool only operates on messages with isDraft=true</code>, and nothing is attached.</p>
+<p><strong>Cause:</strong> <code>message_id</code> names a message that has already been sent or received. A file can only be attached to a message still in composition; the service does not allow the content of a delivered message to change, so the refusal is issued before any upload is started rather than surfaced as a Graph rejection mid-transfer.</p>
+<p>The usual source of the wrong identifier is a <code>list_messages</code> or <code>search_messages</code> result taken from the Inbox rather than from Drafts, or a stale identifier from before a <code>move_message</code>, which mints a new identifier for the moved copy.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Create the target with <code>{tool: &quot;mail&quot;, args: {operation: &quot;create_draft&quot;, ...}}</code>, or with <code>create_reply_draft</code> or <code>create_forward_draft</code> when replying or forwarding, and use the identifier the confirmation reports.</li>
+<li>To attach to an existing draft, locate it with <code>{tool: &quot;mail&quot;, args: {operation: &quot;list_messages&quot;, folder_id: &quot;Drafts&quot;}}</code> and use that identifier.</li>
+<li>Confirm the target before retrying: <code>{tool: &quot;mail&quot;, args: {operation: &quot;get_message&quot;, message_id: &quot;&lt;id&gt;&quot;}}</code> reports whether the message is a draft.</li>
+</ol>
+<p><strong>Note:</strong> To put a file on a message that is already sent, forward it with <code>create_forward_draft</code> and attach to the forward draft.</p>
+<p><strong>Note:</strong> This restriction is a mail one. A calendar event accepts an attachment at any point in its life through <code>{tool: &quot;calendar&quot;, args: {operation: &quot;add_event_attachment&quot;, ...}}</code>, and attaching a file to an event does not notify its attendees.</p>
+<hr>
+<h2 id="attachment-upload-did-not-complete">Attachment upload did not complete</h2>
+<p><strong>Symptom:</strong> <code>add_attachment</code> on a mail draft, or <code>add_event_attachment</code> on a calendar event, fails on a large file with a transfer error, or with a request timeout, and the attachment does not appear on the draft or the event. Small files attach normally.</p>
+<p><strong>Cause:</strong> Both write paths choose their transfer the same way. Above roughly 3 MB the file is transferred as a chunked upload session rather than a single request, so it is exposed to a longer window in which the connection can drop, the request timeout can elapse, or the service-side session can expire. A session that does not complete is reported as a failure, never as a partial success: no half-written attachment is left behind, and the draft or event is unchanged. The confirmation of a successful call names the path it used, so a call that reported <code>Transfer: chunked upload session</code> is the one this entry describes.</p>
+<p>The upload URL the service issues carries a pre-authenticated token, so it is redacted from every error. An error that names <code>[upload URL redacted]</code> is this failure mode, not a configuration problem.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Retry the call. A dropped or expired session is not resumable, but a retry starts a fresh session and the earlier failure leaves nothing to clean up.</li>
+<li>Confirm the target is unchanged before retrying, so a successful upload reported as a timeout is not duplicated: <code>{tool: &quot;mail&quot;, args: {operation: &quot;list_attachments&quot;, message_id: &quot;&lt;draft id&gt;&quot;}}</code> for a draft, <code>{tool: &quot;calendar&quot;, args: {operation: &quot;list_event_attachments&quot;, event_id: &quot;&lt;event id&gt;&quot;}}</code> for an event.</li>
+<li>On a timeout, raise <code>OUTLOOK_MCP_REQUEST_TIMEOUT_SECONDS</code> and restart the server; a large file on a slow link can need more than the default.</li>
+<li>Prefer a smaller file where the content allows it. The upper bound is <code>OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES</code>, which governs both domains, and a file above it is refused before any transfer starts, with an error naming the measured size and the bound.</li>
+</ol>
+<p><strong>Note:</strong> No verb removes an attachment in either domain, so a duplicate left by a retry has to be deleted from Outlook directly. Checking the target first, as in step 2, is what avoids that.</p>
+<hr>
+<h2 id="event-not-found">Event not found</h2>
+<p><strong>Symptom:</strong> A calendar verb taking an <code>event_id</code> (<code>get_event</code>, <code>update_event</code>, <code>reschedule_event</code>, <code>list_event_attachments</code>, <code>get_event_attachment</code>, <code>add_event_attachment</code>) fails with a Graph <code>ErrorItemNotFound</code> or <code>ErrorInvalidIdMalformed</code>, and nothing is read or written.</p>
+<p><strong>Cause:</strong> <code>event_id</code> does not resolve to an event on the signed-in mailbox. The usual sources are a stale identifier from a conversation held before the event was deleted or moved between calendars, an identifier taken from a different account than the one the call names, or a value that is not an event identifier at all, such as a subject line. An identifier that is not well-formed is refused before any request is issued; one that is well-formed but no longer resolves is refused by the service.</p>
+<p>An event attachment adds a second identifier with the same failure shape: <code>attachment_id</code> is scoped to one event, so an identifier read from one event does not resolve on another.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Re-resolve the event rather than reusing an identifier from earlier in the conversation: <code>{tool: &quot;calendar&quot;, args: {operation: &quot;search_events&quot;, query: &quot;&lt;subject&gt;&quot;}}</code> or <code>{tool: &quot;calendar&quot;, args: {operation: &quot;list_events&quot;, start_datetime: &quot;...&quot;, end_datetime: &quot;...&quot;}}</code>, and use the <code>id</code> those return.</li>
+<li>If the call names an <code>account</code>, resolve the event under that same account. Event identifiers do not transfer between mailboxes.</li>
+<li>For an attachment, re-read the identifier from <code>{tool: &quot;calendar&quot;, args: {operation: &quot;list_event_attachments&quot;, event_id: &quot;&lt;event id&gt;&quot;}}</code> on the same event you are downloading from.</li>
+<li>If the event genuinely no longer exists, create it again rather than retrying; a deleted event&#39;s identifier never resolves after deletion.</li>
+</ol>
+<hr>
+<h2 id="move-destination-not-found">Move destination not found</h2>
+<p><strong>Symptom:</strong> <code>{tool: &quot;mail&quot;, args: {operation: &quot;move_message&quot;, ...}}</code> fails with a Graph <code>ErrorItemNotFound</code> or <code>ErrorInvalidIdMalformed</code>, and the message has not moved.</p>
+<p><strong>Cause:</strong> <code>destination_folder_id</code> does not resolve to a mail folder on the signed-in mailbox. The parameter takes a folder <strong>identifier</strong>, not a folder name, so a value such as <code>Archive</code> or <code>Deleted Items</code> is refused. The identifier is also mailbox-specific: one obtained under a different account will not resolve.</p>
+<p>The other cause of the same Graph error is a stale <code>message_id</code>. A move mints a new identifier for the moved message and the original stops resolving, so re-issuing a move with the identifier from before an earlier move fails here rather than at the destination.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Obtain a valid destination identifier with <code>{tool: &quot;mail&quot;, args: {operation: &quot;list_folders&quot;, output: &quot;summary&quot;}}</code> and pass the <code>id</code> of the target folder, not its display name.</li>
+<li>If the call names an <code>account</code>, list folders under that same account, because folder identifiers do not transfer between mailboxes.</li>
+<li>If the message was moved before, re-read it with <code>list_messages</code> or <code>search_messages</code> to obtain its current identifier; the confirmation from the previous move also carries it.</li>
+<li>Verify the outcome by listing the destination folder&#39;s messages, not by re-issuing the move: the move is not idempotent, and a second successful call moves the message again.</li>
+</ol>
+<hr>
+<h2 id="schedule-mailbox-error">A mailbox reports an error inside a schedule reply</h2>
+<p><strong>Symptom:</strong> <code>{tool: &quot;calendar&quot;, args: {operation: &quot;get_schedule&quot;, ...}}</code> succeeds, but one of the named mailboxes carries an <code>Error:</code> line instead of its busy periods, typically <code>ErrorAccessDenied</code> or <code>MailboxNotEnabledForRESTAPI</code>. The other mailboxes in the same call return their blocks normally.</p>
+<p><strong>Cause:</strong> Microsoft Graph grades each mailbox in a schedule query separately and reports a per-mailbox failure inside an otherwise successful reply. The whole call is not failed, so the reply is a mixture: mailboxes the signed-in user may view, and mailboxes it may not. The usual causes are a mailbox that has not shared free/busy with the signed-in user, a room or shared mailbox the account has no permission on, an address that is a distribution list rather than a mailbox, and an address misspelled into one that does not exist.</p>
+<p>This is why a mailbox with an error is stated rather than omitted: an omitted mailbox is indistinguishable from a mailbox with nothing in the diary, and &quot;nobody is busy&quot; is the wrong conclusion to draw from &quot;you may not look&quot;.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Read the error text and the response code on the mailbox&#39;s own section. They come from Graph unchanged and name which of the causes above applies.</li>
+<li>Confirm the address is a mailbox and is spelled correctly. A distribution list address is accepted by the request and refused per-mailbox.</li>
+<li>If the call names an <code>account</code>, confirm that account has permission on the mailbox. Free/busy visibility is granted per mailbox, so an address readable under one account is not necessarily readable under another.</li>
+<li>For a mailbox the signed-in user genuinely cannot view, ask its owner or the tenant administrator to grant free/busy visibility; no parameter on this call can substitute for that permission.</li>
+<li>Verify by re-running the same call: a mailbox whose permission has been granted returns blocks and working hours in place of the error line, while the other mailboxes&#39; output is unchanged.</li>
+</ol>
+<hr>
+<h2 id="find-meeting-times-personal-account">find_meeting_times fails on a personal Microsoft account</h2>
+<p><strong>Symptom:</strong> <code>{tool: &quot;calendar&quot;, args: {operation: &quot;find_meeting_times&quot;, ...}}</code> returns a Graph error on a signed-in account that is a personal Microsoft account (an <code>@outlook.com</code>, <code>@hotmail.com</code>, or <code>@live.com</code> identity, or any account registered with <code>TENANT_ID=consumers</code>), while <code>get_free_busy</code> and <code>list_events</code> on the same account succeed. The error text states that the account must be a work or school account.</p>
+<p><strong>Cause:</strong> Microsoft Graph does not support <code>POST /me/findMeetingTimes</code> for personal Microsoft accounts; the endpoint&#39;s permissions table lists the delegated personal-account case as &quot;Not supported&quot;. The server still offers the verb on every account because the account type is not known until Graph answers, so the refusal arrives from Graph rather than from the server&#39;s own validation.</p>
+<p><strong>Remediation:</strong></p>
+<ol>
+<li>Confirm the account type with <code>{tool: &quot;account&quot;, args: {operation: &quot;list_accounts&quot;}}</code>. A personal account cannot be made to work with this verb; no parameter substitutes for a work or school identity.</li>
+<li>If a work or school account is also registered, repeat the call with <code>account</code> set to that identity.</li>
+<li>If only a personal account is available, use <code>get_schedule</code> to read the attendees&#39; free/busy blocks and choose a slot from them, or use <code>get_free_busy</code> for the signed-in user&#39;s own busy periods.</li>
+<li>Verify by re-running the same <code>find_meeting_times</code> call under the work or school account: it returns ranked suggestions in place of the error.</li>
+</ol>
 <hr>
 <h2 id="read-only-mode">Read-only mode</h2>
 <p><strong>Symptom:</strong> Write tool calls (create, update, delete, cancel, draft operations) return <code>server is in read-only mode</code>.</p>

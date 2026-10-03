@@ -6,7 +6,7 @@ A Model Context Protocol server that connects Claude — or any MCP client — d
 
 ## Ask for your week, book the meeting, find the thread, send the reply. Claude does it in Outlook, not in a copy of it.
 
-### Calendar Management15 verbs
+### Calendar Management20 verbs
 
 Read, search, create, update, and delete calendar events and meetings. Check free/busy availability across accounts.
 

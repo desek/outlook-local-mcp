@@ -11,9 +11,9 @@
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-400-normal-DTRLJnHl.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-600-normal-V-KvD_pi.woff2" />
     <meta name="description" content="Core concepts for Outlook Local MCP: output tiers, the multi-account model, mail gating, OAuth scopes, and observability for the local Microsoft Outlook MCP server." />
-      <meta name="build:commit" content="2cce019aaa908f96659dfe4edeaa8f336ea7b667" />
-    <meta name="build:time" content="2026-08-24T18:05:30.937Z" />
-    <meta name="build:run" content="32760374403" />
+      <meta name="build:commit" content="92ab5fe36a7304a210ecf281b88a61e1993f6733" />
+    <meta name="build:time" content="2026-10-03T14:22:40.430Z" />
+    <meta name="build:run" content="37129364401" />
     <meta name="build:environment" content="ci" />
       <link rel="canonical" href="https://outlook-local-mcp.com/concepts.html" />
     <meta property="og:title" content="Concepts — Outlook Local MCP" />
@@ -77,7 +77,7 @@
 <p>Multi-account features (account selection prompts, inline authentication during <code>account.add</code>) use the MCP Elicitation API. The server declares the <code>elicitation</code> capability at startup. MCP clients that support elicitation receive interactive prompts; clients that do not fall back to the default account for account selection and receive authentication feedback as tool result text.</p>
 <p>For <code>device_code</code> auth without elicitation, <code>account.add</code> uses a two-call pattern: the first call returns the device code and keeps the authentication goroutine alive in the background; the second call with the same label picks up the completed authentication and registers the account.</p>
 <h2 id="read-only-mode">Read-only mode</h2>
-<p>Set <code>OUTLOOK_MCP_READ_ONLY=true</code> to disable all write operations. All write verbs (<code>calendar.create_event</code>, <code>calendar.create_meeting</code>, <code>calendar.update_event</code>, <code>calendar.update_meeting</code>, <code>calendar.delete_event</code>, <code>calendar.cancel_meeting</code>, <code>calendar.respond_event</code>, <code>calendar.reschedule_event</code>, <code>calendar.reschedule_meeting</code>, <code>mail.create_draft</code>, <code>mail.create_reply_draft</code>, <code>mail.create_forward_draft</code>, <code>mail.update_draft</code>, <code>mail.delete_draft</code>) return an error when invoked. Read and search verbs remain fully functional.</p>
+<p>Set <code>OUTLOOK_MCP_READ_ONLY=true</code> to disable all write operations. All write verbs (<code>calendar.create_event</code>, <code>calendar.create_meeting</code>, <code>calendar.update_event</code>, <code>calendar.update_meeting</code>, <code>calendar.delete_event</code>, <code>calendar.cancel_meeting</code>, <code>calendar.respond_event</code>, <code>calendar.reschedule_event</code>, <code>calendar.reschedule_meeting</code>, <code>calendar.add_event_attachment</code>, <code>mail.create_draft</code>, <code>mail.create_reply_draft</code>, <code>mail.create_forward_draft</code>, <code>mail.update_draft</code>, <code>mail.delete_draft</code>, <code>mail.add_attachment</code>, <code>mail.move_message</code>, <code>mail.set_flag</code>, <code>mail.set_categories</code>, <code>mail.mark_read</code>) return an error when invoked. Read and search verbs remain fully functional.</p>
 <pre><code class="language-bash">OUTLOOK_MCP_READ_ONLY=true ./outlook-local-mcp
 </code></pre>
 <h2 id="mail-gating">Mail gating</h2>
@@ -103,12 +103,57 @@
 <tr>
 <td><code>MAIL_MANAGE_ENABLED</code></td>
 <td><code>true</code></td>
-<td>Enables all mail verbs including draft management (implies <code>MAIL_ENABLED</code>); requests <code>Mail.ReadWrite</code> scope</td>
+<td>Enables all mail verbs, including draft management (<code>create_draft</code>, <code>create_reply_draft</code>, <code>create_forward_draft</code>, <code>update_draft</code>, <code>delete_draft</code>), draft attachments (<code>add_attachment</code>), and received-message management (<code>move_message</code>, <code>set_flag</code>, <code>set_categories</code>, <code>mark_read</code>) (implies <code>MAIL_ENABLED</code>); requests <code>Mail.ReadWrite</code> scope</td>
 </tr>
 </tbody></table>
 <p><code>Mail.Send</code> is <strong>never</strong> requested under any configuration. The model prepares drafts that land in Outlook Drafts for manual review; email is never sent automatically. Enabling mail read for the first time triggers an incremental consent prompt; upgrading to mail manage triggers re-consent.</p>
+<h2 id="contacts-gating">Contacts gating</h2>
+<p>The <code>contacts</code> domain is off by default. It is one of the two aggregate tools that are not registered unless they are asked for, so a user who enables neither opt-in sees four tools, no contacts verb, and no contacts consent prompt.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Value</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>OUTLOOK_MCP_CONTACTS_ENABLED</code></td>
+<td><code>false</code> (default)</td>
+<td>The <code>contacts</code> tool is not registered; the surface stays at four aggregate tools and no contacts OAuth scope is requested</td>
+</tr>
+<tr>
+<td><code>OUTLOOK_MCP_CONTACTS_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Registers the opt-in aggregate tool <code>contacts</code> with its read verbs (<code>contacts.search</code>, <code>contacts.get_contact</code>, <code>contacts.list_people</code>, <code>contacts.get_person</code>) and the mandatory <code>contacts.help</code>; requests <code>Contacts.Read</code> and <code>People.Read</code></td>
+</tr>
+</tbody></table>
+<p>Both scopes are read scopes. No contact write scope (<code>Contacts.ReadWrite</code>) is requested under any configuration, and the domain registers no verb that creates, updates, deletes, or moves a contact, person, or folder. Enabling contacts for the first time triggers an incremental consent prompt.</p>
+<h2 id="teams-gating">Teams gating</h2>
+<p>The <code>teams</code> domain is off by default, the second of the two opt-in aggregate tools. It reads Microsoft Teams conversations and meeting transcripts and writes nothing: it registers no verb that sends, posts, edits, or deletes a message, and no Teams send or write scope is requested in any configuration.</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Value</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>OUTLOOK_MCP_TEAMS_ENABLED</code></td>
+<td><code>false</code> (default)</td>
+<td>The <code>teams</code> tool is not registered; no Teams OAuth scope is requested</td>
+</tr>
+<tr>
+<td><code>OUTLOOK_MCP_TEAMS_ENABLED</code></td>
+<td><code>true</code></td>
+<td>Registers the opt-in aggregate tool <code>teams</code> with its read verbs (<code>teams.search</code>, <code>teams.list_chats</code>, <code>teams.list_chat_messages</code>, <code>teams.get_chat_message</code>, <code>teams.list_channel_messages</code>, <code>teams.get_channel_message</code>, <code>teams.list_channel_message_replies</code>, <code>teams.compose_reply</code>, <code>teams.get_online_meeting</code>, <code>teams.list_transcripts</code>, <code>teams.get_transcript</code>) and the mandatory <code>teams.help</code>; requests <code>Chat.Read</code>, <code>ChannelMessage.Read.All</code>, <code>OnlineMeetings.Read</code>, and <code>OnlineMeetingTranscript.Read.All</code></td>
+</tr>
+</tbody></table>
+<p>All four scopes are read scopes. <code>teams.compose_reply</code> is named for what it does: it reads the message being answered, quotes it, and hands the prepared text back to the caller. Posting that text is a manual action the user performs in Microsoft Teams; the server cannot post it, because it never holds a send scope.</p>
+<p>Enumerating teams and channels is not offered. A channel is reached by searching for a message in it, and every channel read is addressed by a team identifier and a channel identifier together, both carried by a search hit. Transcript reads are keyed by a meeting-scoped identifier that a calendar event does not carry, so <code>teams.get_online_meeting</code> resolves the event&#39;s join URL to it first. Enabling Teams for the first time triggers an incremental consent prompt.</p>
 <h2 id="tool-annotation-semantics">Tool annotation semantics</h2>
-<p>The four aggregate tools (<code>calendar</code>, <code>mail</code>, <code>account</code>, <code>system</code>) each publish the five MCP annotations (<code>title</code>, <code>readOnlyHint</code>, <code>destructiveHint</code>, <code>idempotentHint</code>, <code>openWorldHint</code>) at tool granularity. Because a single tool hosts many verbs whose individual classifications differ, each aggregate annotation is computed as a <strong>conservative fold</strong> over the verbs actually registered in the running configuration, not hard-coded:</p>
+<p>The four default aggregate tools (<code>calendar</code>, <code>mail</code>, <code>account</code>, <code>system</code>), and the opt-in <code>contacts</code> and <code>teams</code> tools when they are registered, each publish the five MCP annotations (<code>title</code>, <code>readOnlyHint</code>, <code>destructiveHint</code>, <code>idempotentHint</code>, <code>openWorldHint</code>) at tool granularity. Because a single tool hosts many verbs whose individual classifications differ, each aggregate annotation is computed as a <strong>conservative fold</strong> over the verbs actually registered in the running configuration, not hard-coded:</p>
 <ul>
 <li><code>readOnlyHint</code> is <code>true</code> only when <strong>every</strong> registered verb is read-only.</li>
 <li><code>destructiveHint</code> is <code>true</code> when <strong>at least one</strong> registered verb is destructive.</li>
@@ -174,7 +219,7 @@
 </thead>
 <tbody><tr>
 <td>Calendar (always active)</td>
-<td><code>Calendars.ReadWrite</code></td>
+<td><code>Calendars.ReadWrite</code>; <code>Calendars.Read.Shared</code>, because <code>find_meeting_times</code> reads the availability of other mailboxes; <code>User.Read</code>, to look up the email address of the account</td>
 </tr>
 <tr>
 <td><code>MAIL_ENABLED=false</code> (default)</td>
@@ -189,11 +234,27 @@
 <td><code>Mail.ReadWrite</code></td>
 </tr>
 <tr>
+<td><code>OUTLOOK_MCP_CONTACTS_ENABLED=false</code> (default)</td>
+<td><em>(none)</em></td>
+</tr>
+<tr>
+<td><code>OUTLOOK_MCP_CONTACTS_ENABLED=true</code></td>
+<td><code>Contacts.Read</code>, <code>People.Read</code></td>
+</tr>
+<tr>
+<td><code>OUTLOOK_MCP_TEAMS_ENABLED=false</code> (default)</td>
+<td><em>(none)</em></td>
+</tr>
+<tr>
+<td><code>OUTLOOK_MCP_TEAMS_ENABLED=true</code></td>
+<td><code>Chat.Read</code>, <code>ChannelMessage.Read.All</code>, <code>OnlineMeetings.Read</code>, <code>OnlineMeetingTranscript.Read.All</code></td>
+</tr>
+<tr>
 <td>Refresh tokens (always)</td>
 <td><code>offline_access</code> (added automatically by the identity library)</td>
 </tr>
 </tbody></table>
-<p><code>Mail.Send</code> is never requested under any configuration.</p>
+<p><code>Mail.Send</code> is never requested under any configuration, and neither is <code>Contacts.ReadWrite</code> nor any Teams send or write scope.</p>
 <h2 id="well-known-client-ids">Well-known client IDs</h2>
 <p><code>OUTLOOK_MCP_CLIENT_ID</code> accepts friendly names in addition to raw UUIDs. Resolution is case-insensitive.</p>
 <table>
@@ -267,7 +328,7 @@
 <h3 id="supported">Supported</h3>
 <p>Running inside a container supports the full feature set over stdio:</p>
 <ul>
-<li>All four aggregate domain tools: <code>calendar</code>, <code>mail</code>, <code>account</code>, <code>system</code></li>
+<li>All four default aggregate domain tools: <code>calendar</code>, <code>mail</code>, <code>account</code>, <code>system</code>, plus the opt-in <code>contacts</code> tool when <code>OUTLOOK_MCP_CONTACTS_ENABLED</code> is set and the opt-in <code>teams</code> tool when <code>OUTLOOK_MCP_TEAMS_ENABLED</code> is set</li>
 <li>Microsoft Graph API access (ca-certs are included in every variant)</li>
 <li>Multi-account support with file-backed token storage</li>
 <li>Observability: structured logs written to stderr, OpenTelemetry metrics and traces</li>
