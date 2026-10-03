@@ -11,6 +11,10 @@
           "type": "json",
           "path": "plugin/.claude-plugin/plugin.json",
           "jsonpath": "$.version"
+        },
+        {
+          "type": "generic",
+          "path": "plugin/VERSION"
         }
       ]
     }

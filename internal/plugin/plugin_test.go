@@ -128,15 +128,34 @@ func TestPluginVersionMatchesReleaseManifest(t *testing.T) {
 	if got := readJSON(t, manifestPath)["version"]; got != rel["."] {
 		t.Errorf("plugin.json version %v != release manifest %v", got, rel["."])
 	}
+	// VERSION is what the launcher reads: first token on the first line, followed
+	// by the annotation release-please's generic updater rewrites.
+	line := strings.TrimSpace(strings.SplitN(string(readRepoFile(t, "plugin/VERSION")), "\n", 2)[0])
+	fields := strings.Fields(line)
+	if len(fields) == 0 || fields[0] != rel["."] {
+		t.Errorf("plugin/VERSION first token %q != release manifest %v", line, rel["."])
+	}
+	if !strings.Contains(line, "x-release-please-version") {
+		t.Errorf("plugin/VERSION lacks the x-release-please-version annotation: %q", line)
+	}
 	pkg := readJSON(t, "release-please-config.json")["packages"].(map[string]any)["."].(map[string]any)
 	extras, _ := pkg["extra-files"].([]any)
+	var haveJSON, haveGeneric bool
 	for _, e := range extras {
 		ef, _ := e.(map[string]any)
 		if ef["path"] == manifestPath && ef["jsonpath"] == "$.version" && ef["type"] == "json" {
-			return
+			haveJSON = true
+		}
+		if ef["path"] == "plugin/VERSION" && ef["type"] == "generic" {
+			haveGeneric = true
 		}
 	}
-	t.Errorf("release-please-config.json extra-files does not bump %s at $.version", manifestPath)
+	if !haveJSON {
+		t.Errorf("release-please-config.json extra-files does not bump %s at $.version", manifestPath)
+	}
+	if !haveGeneric {
+		t.Error("release-please-config.json extra-files does not bump plugin/VERSION (generic)")
+	}
 }
 
 // TestPluginChecksumsCoverPublishedPlatforms requires each pinned version
