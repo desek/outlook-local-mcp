@@ -140,7 +140,7 @@ purpose and caveats in its own docstring.
 
 ## Dependencies
 
-pnpm 11.18.0 does **not** read a `pnpm` field from `package.json`. Overrides and pnpm
+pnpm (12.9.0 as of 2026-10-03; the same held for 11.18.0) does **not** read a `pnpm` field from `package.json`. Overrides and pnpm
 settings live in `site/pnpm-workspace.yaml`, and an override placed in `package.json` is
 silently ignored while appearing to have been applied. Confirm an override took by
 grepping the resolved version out of `site/pnpm-lock.yaml`, not by trusting that
