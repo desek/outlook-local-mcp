@@ -321,8 +321,9 @@ flowchart LR
 4. `plugin.json` **MUST** declare `userConfig` options `client_id`, `tenant_id`,
    `auth_method`, `timezone`, `mail_enabled`, `mail_manage_enabled`, `contacts_enabled`,
    and `teams_enabled`, each with `type`, `title`, `description`, and a `default` equal
-   to the server's own default for that variable; `auth_method` **MUST** carry `options`
-   `["device_code", "browser", "auth_code"]`.
+   to the server's own default for that variable; `auth_method` **MUST** name the accepted values
+   `device_code`, `browser`, and `auth_code` in its description and **MUST NOT** declare
+   `options`, which the directory validator does not accept.
 5. The plugin folder **MUST NOT** contain a top-level `bin/` directory, any compiled
    executable, any file over 256 KiB, any `.mcpb` or `.dxt` file, any package-manager
    configuration file, or any symbolic link.
@@ -630,7 +631,7 @@ Affected components: `docs/quickstart.md`, `docs/reference/release.md`,
 |-----------|-----------|-------------|--------|-----------------|
 | `internal/plugin/plugin_test.go` | `TestPluginManifestDeclaresListingFields` | Every FR-2 field present and every URL is `https://` | `plugin/.claude-plugin/plugin.json` | pass |
 | `internal/plugin/plugin_test.go` | `TestPluginServerEnvReferencesDeclaredOptions` | Each `${user_config.KEY}` in `mcpServers.outlook.env` names a `userConfig` key with a default | manifest | pass; a stray key fails |
-| `internal/plugin/plugin_test.go` | `TestPluginAuthMethodOptionsMatchServer` | `auth_method.options` equals the server's accepted set | manifest, `internal/config` | pass |
+| `internal/plugin/plugin_test.go` | `TestPluginAuthMethodNamesAcceptedValues` | `auth_method` names the accepted set in its description, defaults to device_code, and declares no `options` | manifest | pass |
 | `internal/plugin/plugin_test.go` | `TestPluginFolderHasNoBlockedFiles` | No `bin/`, no file over 256 KiB, no `.mcpb`/`.dxt`, launcher is the only executable, fewer than 20 files | `plugin/` tree | pass |
 | `internal/plugin/plugin_test.go` | `TestPluginVersionMatchesReleaseManifest` | `plugin.json` version equals `.release-please-manifest.json` `"."` and `release-please-config.json` lists the file in `extra-files` | both files | pass |
 | `internal/plugin/launcher_test.go` | `TestLauncherColdStartFetchesVerifiesAndExecs` | First start downloads the raw binary (and the release `checksums.txt` only when the committed pin lacks the version), verifies, execs | fake release server | one or two GETs per AC-4; binary present; stub exec output on stdout |
@@ -702,7 +703,7 @@ Given `mcpServers.outlook` in the manifest
 When its command, args and env are read
 Then the command is "${CLAUDE_PLUGIN_ROOT}/scripts/outlook-local-mcp.sh" and args is an array
   And every env value is a "${user_config.KEY}" whose KEY is a declared userConfig option with a default
-  And `auth_method` declares options device_code, browser and auth_code
+  And `auth_method` names device_code, browser and auth_code in its description and declares no options
 ```
 
 ### AC-4: A cold start fetches the pinned release, verifies it, and execs

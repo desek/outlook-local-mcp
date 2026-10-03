@@ -55,17 +55,25 @@ func TestPluginServerEnvReferencesDeclaredOptions(t *testing.T) {
 	}
 }
 
-// TestPluginAuthMethodOptionsMatchServer pins the auth_method options to the
-// three methods that the server accepts.
-func TestPluginAuthMethodOptionsMatchServer(t *testing.T) {
+// TestPluginAuthMethodNamesAcceptedValues pins the auth_method option to the
+// server's accepted values by its description and default. The directory
+// validator does not yet accept an "options" list on a userConfig field, so the
+// accepted values live in the description text and no "options" key may be
+// present.
+func TestPluginAuthMethodNamesAcceptedValues(t *testing.T) {
 	m := readJSON(t, manifestPath)
 	opt := m["userConfig"].(map[string]any)["auth_method"].(map[string]any)
-	var got []string
-	for _, o := range opt["options"].([]any) {
-		got = append(got, o.(string))
+	if _, has := opt["options"]; has {
+		t.Fatal("auth_method declares options; the directory validator rejects that key")
 	}
-	if strings.Join(got, ",") != "device_code,browser,auth_code" {
-		t.Errorf("auth_method options = %v, want [device_code browser auth_code]", got)
+	if opt["default"] != "device_code" {
+		t.Errorf("auth_method default = %v, want device_code", opt["default"])
+	}
+	desc, _ := opt["description"].(string)
+	for _, v := range []string{"device_code", "browser", "auth_code"} {
+		if !strings.Contains(desc, v) {
+			t.Errorf("auth_method description does not name accepted value %q", v)
+		}
 	}
 }
 
