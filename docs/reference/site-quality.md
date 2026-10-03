@@ -283,15 +283,15 @@ its threshold, records the reason here rather than reaching for `continue-on-err
 Both of these were established by running the tooling during CR-0072 and watching what it
 actually did, which is the standard the rest of this document is written to.
 
-### pnpm 11 does not read overrides from `package.json`
+### pnpm does not read overrides from `package.json`
 
 The three site advisories were closed with `pnpm.overrides`, forcing patched transitive
-versions upstream never shipped. The trap is where the override block lives. pnpm 11.18.0,
+versions upstream never shipped. The trap is where the override block lives. pnpm 12.9.0 (and 11.18.0 before it),
 the version pinned in `packageManager`, does **not** read a `pnpm` field from
 `package.json`: it emits `[WARN] ... "pnpm.overrides" ... ignored` and carries on. An
 override placed there leaves the lockfile fully vulnerable while every surface reading
 suggests it was applied, which is the worst kind of null change, one that looks like a
-result. The overrides live in `site/pnpm-workspace.yaml`, alongside the pnpm 11 settings
+result. The overrides live in `site/pnpm-workspace.yaml`, alongside the pnpm settings
 this repo already keeps there (`onlyBuiltDependencies`). Confirm an override took by
 grepping the resolved version out of `site/pnpm-lock.yaml`, not by trusting that
 `package.json` looks right.

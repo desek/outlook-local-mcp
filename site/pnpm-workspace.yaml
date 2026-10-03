@@ -1,10 +1,11 @@
-# pnpm 11 reads settings from here, not from a "pnpm" field in package.json.
+# pnpm reads settings from here, not from a "pnpm" field in package.json (pnpm 12 as
+# of 2026-10-03; the same held for pnpm 11).
 # esbuild needs its install script to fetch the platform binary vite's bundler
 # uses; nothing else is permitted to run scripts.
 onlyBuiltDependencies:
   - esbuild
 
-# Security overrides (CR-0072). pnpm 11 reads overrides from this file, not from
+# Security overrides (CR-0072). pnpm reads overrides from this file, not from
 # a "pnpm.overrides" field in package.json (see comment above), so the CR's
 # named location is superseded by the tool's actual config home. These force the
 # patched transitive versions that close Dependabot alerts #18/#19/#20; all
@@ -22,6 +23,16 @@ onlyBuiltDependencies:
 #         Closes GHSA-w5hq-g745-h8pq; pinned to ^11.1.1, the lowest patched
 #         range, because 12.x (< 12.0.1) and 13.x (< 13.0.1) have their own
 #         vulnerable entries in the same advisory.
+#   qs:   remove once @lhci/cli's express resolves qs >= 6.16.0 on its own. Check
+#         with `pnpm --dir site why qs`. Closes the two 2026 qs advisories
+#         (< 6.15.4 and < 6.16.0); dev-only, reached only through @lhci/cli.
+#   basic-ftp: remove once @lhci/cli's proxy-agent chain resolves basic-ftp
+#         >= 6.2.1. Check with `pnpm --dir site why basic-ftp`. Dev-only.
+#   extract-zip (not overridden): every published version (latest 2.0.1) is in the
+#         advisory's range, so no override can close it; dev-only via lighthouse's
+#         puppeteer-core. Revisit when extract-zip ships 2.0.2 or later.
 overrides:
   tmp: ^0.2.7
   uuid: ^11.1.1
+  qs: ^6.16.0
+  basic-ftp: ^6.2.1
