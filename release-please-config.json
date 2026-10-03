@@ -10,7 +10,7 @@
         {
           "type": "json",
           "path": "plugin/.claude-plugin/plugin.json",
-          "jsonPath": "$.version"
+          "jsonpath": "$.version"
         }
       ]
     }

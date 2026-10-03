@@ -124,7 +124,7 @@ func TestPluginVersionMatchesReleaseManifest(t *testing.T) {
 	extras, _ := pkg["extra-files"].([]any)
 	for _, e := range extras {
 		ef, _ := e.(map[string]any)
-		if ef["path"] == manifestPath && ef["jsonPath"] == "$.version" && ef["type"] == "json" {
+		if ef["path"] == manifestPath && ef["jsonpath"] == "$.version" && ef["type"] == "json" {
 			return
 		}
 	}
