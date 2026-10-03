@@ -127,7 +127,13 @@ plugin/
 
 ### The launcher, and why it is a script
 
-The directory's checks leave exactly one shape for a Go server that is not blocked:
+The directory's checks leave exactly one shape for a Go server that is not blocked, and
+the catalog confirms it: of the 262 externally sourced plugins in
+`anthropics/claude-plugins-official` (read on 2026-10-03), two launch a compiled local
+server through a script under `${CLAUDE_PLUGIN_ROOT}`, and one of them, `ory/lumen`, is a
+Go static binary fetched from its GitHub release by a bash launcher that reads the
+version from a release-please manifest. No listed plugin ships a compiled server any
+other way, and no listed plugin has a native Windows launcher.
 
 * A compiled binary committed into the plugin folder is a non-text file over 256 KiB
   (held for a reviewer) and three platforms would add roughly 45 MiB to a repository
@@ -142,21 +148,37 @@ The directory's checks leave exactly one shape for a Go server that is not block
 
 The launcher therefore:
 
-1. Reads the plugin version from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`
+1. If `OUTLOOK_MCP_PLUGIN_BIN` is set to an executable path, `exec`s it at once. This is
+   the developer and test override; it performs no download and no verification, and the
+   README states so.
+2. Reads the plugin version from `${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json`
    (the same string release-please bumps) and derives the release tag `v<version>`.
-2. Resolves `uname -s`/`uname -m` to one of the goreleaser `binaries` names
+3. Resolves `uname -s`/`uname -m` to one of the published raw-binary names
    (`darwin-arm64`, `linux-amd64`); refuses any other platform with a fix instruction
-   naming the MCPB and binary download alternatives.
-3. Keeps the binary at `${CLAUDE_PLUGIN_DATA}/<version>/outlook-local-mcp`. If absent,
-   downloads `https://github.com/desek/outlook-local-mcp/releases/download/v<version>/outlook-local-mcp-<platform>.tar.gz`
-   and `checksums.txt`, verifies the SHA-256 with `shasum -a 256`/`sha256sum`, and
-   extracts; on mismatch deletes the download and exits non-zero with a fix instruction.
-4. `exec`s the binary with the environment the server config passed, so the MCP stdio
-   contract is unchanged.
+   naming the MCPB and the release page as alternatives.
+4. Keeps the binary at `${CLAUDE_PLUGIN_DATA}/<version>/outlook-local-mcp`. If absent,
+   downloads the **raw binary**
+   `https://github.com/desek/outlook-local-mcp/releases/download/v<version>/outlook-local-mcp-<platform>`
+   with `curl -fsSL` (falling back to `wget -qO-`), so no archive handling is needed.
+5. Verifies the SHA-256 against the digest for that asset. The digest comes from
+   `${CLAUDE_PLUGIN_ROOT}/checksums.txt` when that committed file has a line for the
+   version; otherwise from the release's own `checksums.txt`, in which case the launcher
+   prints one stderr line stating that the repository pin is not yet available for this
+   version. On mismatch it deletes the download and exits non-zero with a fix
+   instruction naming both digests.
+6. `chmod +x`, then `exec`s the binary with the environment the server config passed,
+   so the MCP stdio contract is unchanged.
+
+The committed digest file is what makes a tampered release asset insufficient on its
+own: an attacker would also need a commit on `main`, which branch protection and the
+pull-request rule guard. Release-side `checksums.txt` is the fallback only because the
+digests cannot exist before the release builds them (see Release coupling).
 
 `${CLAUDE_PLUGIN_DATA}` survives plugin updates and is removed on uninstall, which is the
 documented place for installed dependencies. Windows is not served by the plugin in this
-CR; the launcher is POSIX shell and Windows users keep the MCPB and the release zip.
+CR; the launcher is POSIX shell and Windows users keep the MCPB and the release zip. The
+launcher never falls back to "latest release" when the pinned version has no asset:
+lumen's launcher does, and it silently breaks the version pin.
 
 ### Manifest
 
@@ -229,11 +251,31 @@ reads the plugin folder's README.
 
 ### Release coupling
 
-`release-please-config.json` gains an `extra-files` entry of type `json` for
-`plugin/.claude-plugin/plugin.json` at `$.version`, so the version the launcher reads is
-the version the tag carries, with no manual step. A test asserts the two agree on the
-committed tree. The release workflow is otherwise unchanged; the plugin needs no build
-because it fetches what the release already publishes.
+Three couplings keep the plugin, the release, and the repository in step:
+
+1. **Version.** `release-please-config.json` gains an `extra-files` entry of type `json`
+   for `plugin/.claude-plugin/plugin.json` at `$.version`, so the version the launcher
+   reads is the version the tag carries, with no manual step. A test asserts the two
+   agree on the committed tree.
+2. **Raw binaries.** The `release` job's "Create archives and checksums" step in
+   `release.yml` additionally copies each desktop build into `dist/release/` as a bare
+   file named `outlook-local-mcp-<os>-<arch>` (`.exe` suffix on Windows), beside the
+   existing archives, so the one `sha256sum * > checksums.txt` line covers them and the
+   existing `gh release upload dist/release/*` publishes them. The archives, the MCPB
+   steps, and the asset names users already download are unchanged.
+3. **Digest pin.** After the upload step, the `release` job writes the lines of
+   `checksums.txt` that name raw binaries into `plugin/checksums.txt` under a
+   `# v<version>` header and opens a pull request `chore(plugin): pin release digests
+   v<version>` with `gh pr create` followed by `gh pr merge --auto --squash`. Direct
+   commits to `main` are prohibited, so the pin arrives through the same gate as every
+   other change. Until that PR merges, a launcher at the new version verifies against the
+   release's `checksums.txt` and says so on stderr; after it merges, every start of that
+   version verifies against the committed digest. The version-sync test asserts that
+   `plugin/checksums.txt` names every published platform for every version it lists, and
+   that the current version is either present or newer than the file's last entry.
+
+The release workflow gains two steps and no new job; the MCPB packaging steps between
+them are not edited.
 
 ### Proposed State Diagram
 
@@ -280,50 +322,69 @@ flowchart LR
    configuration file, or any symbolic link.
 6. The launcher **MUST** be a POSIX shell script at `plugin/scripts/outlook-local-mcp.sh`
    with the executable bit set, **MUST** take no arguments, and **MUST** reference no
-   path other than `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}`.
-7. The launcher **MUST** read the version from `plugin.json`, derive the release tag as
-   `v` plus that version, and fetch the goreleaser `binaries` archive for the running
-   platform from the GitHub release of that tag.
-8. The launcher **MUST** verify the downloaded archive against `checksums.txt` from the
-   same release before extracting it, and on mismatch **MUST** delete the download and
-   exit non-zero with a fix instruction that names the expected and actual digest.
-9. The launcher **MUST** store the extracted binary under `${CLAUDE_PLUGIN_DATA}/<version>/`
-   and **MUST** reuse it without network access on every later start of the same version.
-10. The launcher **MUST** `exec` the binary so the server process replaces the shell and
+   path other than `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and the value of
+   `OUTLOOK_MCP_PLUGIN_BIN`.
+7. When `OUTLOOK_MCP_PLUGIN_BIN` names an executable file, the launcher **MUST** `exec`
+   it without any network request or verification; when it names a non-executable path
+   the launcher **MUST** exit non-zero with a fix instruction.
+8. The launcher **MUST** read the version from `plugin.json`, derive the release tag as
+   `v` plus that version, and fetch the raw binary asset `outlook-local-mcp-<os>-<arch>`
+   for the running platform from the GitHub release of that tag; it **MUST NOT** fall
+   back to any other release when that asset is absent.
+9. The launcher **MUST** verify the downloaded binary's SHA-256 against
+   `${CLAUDE_PLUGIN_ROOT}/checksums.txt` when that file carries a line for the version
+   and platform, and otherwise against the release's `checksums.txt` while writing one
+   line to stderr that states the repository pin is absent for this version; on mismatch
+   it **MUST** delete the download and exit non-zero with a fix instruction that names
+   the expected and actual digest.
+10. The launcher **MUST** store the binary under `${CLAUDE_PLUGIN_DATA}/<version>/` and
+    **MUST** reuse it without network access on every later start of the same version.
+11. The launcher **MUST** `exec` the binary so the server process replaces the shell and
     receives the environment unchanged.
-11. On a platform the release does not publish, the launcher **MUST** exit non-zero
+12. On a platform the release does not publish, the launcher **MUST** exit non-zero
     before any download with a fix instruction naming the MCPB extension and the release
     page as alternatives.
-12. The plugin **MUST** contain one skill at `plugin/skills/outlook/SKILL.md` whose
+13. The plugin **MUST** contain one skill at `plugin/skills/outlook/SKILL.md` whose
     frontmatter has `name: outlook` and a single-string `description`, and whose body
     names the six domains, the four environment gates, `operation="help"`, the read-only
     mode, and the draft-only nature of `teams.compose_reply`.
-13. `plugin/README.md` **MUST** contain at least 40 words outside code blocks, state what
-    the plugin runs, fetches, and sends, name the two surfaces it loads on, and contain a
-    `## Privacy Policy` section linking to `PRIVACY.md`.
-14. `plugin/LICENSE` **MUST** be byte-identical to the root `LICENSE`.
-15. `PRIVACY.md` **MUST** contain sections covering data collection, usage and storage,
+14. `plugin/README.md` **MUST** contain at least 40 words outside code blocks, state what
+    the plugin runs, fetches, and sends, name the override variable and that it skips
+    verification, name the two surfaces it loads on, and contain a `## Privacy Policy`
+    section linking to `PRIVACY.md`.
+15. `plugin/LICENSE` **MUST** be byte-identical to the root `LICENSE`.
+16. `PRIVACY.md` **MUST** contain sections covering data collection, usage and storage,
     third-party sharing, data retention, and contact information, and its data-access
     section **MUST** name every resource class the current surface reads or writes:
     calendar events and attachments, mail messages, folders, drafts and attachments,
     free/busy and schedules, contacts and people, Teams chats, channel messages, online
     meetings and transcripts.
-16. The root `README.md` **MUST** contain a `## Privacy Policy` section linking to
+17. The root `README.md` **MUST** contain a `## Privacy Policy` section linking to
     `PRIVACY.md`.
-17. `release-please-config.json` **MUST** list `plugin/.claude-plugin/plugin.json` as a
+18. `release-please-config.json` **MUST** list `plugin/.claude-plugin/plugin.json` as a
     JSON `extra-files` entry on `$.version`.
-18. `plugin.json` `version` **MUST** equal `.release-please-manifest.json`'s `"."` value
+19. `plugin.json` `version` **MUST** equal `.release-please-manifest.json`'s `"."` value
     on every commit, and a test **MUST** assert it.
-19. `extension/manifest.json`, `extension/README.md`, the `mcpb-*` Makefile targets, and
-    the `release` job of `release.yml` **MUST NOT** change.
-20. `claude plugin validate ./plugin` **MUST** print `Validation passed` with no warnings
+20. The `release` job of `release.yml` **MUST** publish, beside the existing archives, a
+    raw binary asset `outlook-local-mcp-<os>-<arch>` for every desktop build matrix
+    entry, listed in the same `checksums.txt`.
+21. The `release` job **MUST**, after the upload step, open a pull request that appends
+    the raw-binary digest lines for the released version to `plugin/checksums.txt`
+    under a `# v<version>` header, titled `chore(plugin): pin release digests
+    v<version>`, with auto-merge requested; it **MUST NOT** push to `main` directly.
+22. `plugin/checksums.txt` **MUST** name every published platform for every version it
+    lists, and a test **MUST** assert it.
+23. `extension/manifest.json`, `extension/README.md`, the `mcpb-*` Makefile targets, and
+    the MCPB steps of the `release` job (prepare, inject version, validate, pack, upload
+    of `outlook-local-mcp.mcpb`) **MUST NOT** change.
+24. `claude plugin validate ./plugin` **MUST** print `Validation passed` with no warnings
     on Claude Code 2.1.288.
-21. `docs/quickstart.md` **MUST** gain an install path for the plugin (Claude Code
+25. `docs/quickstart.md` **MUST** gain an install path for the plugin (Claude Code
     `/plugin` from the directory or `claude --plugin-dir ./plugin` from a checkout) beside
     the existing Claude Desktop and generic MCP client paths.
-22. `docs/reference/release.md` **MUST** gain a section describing the plugin as a
-    release surface: what the launcher fetches, how its version is bumped, and the
-    submission and update procedure through the developer portal.
+26. `docs/reference/release.md` **MUST** gain a section describing the plugin as a
+    release surface: the raw-binary assets, the digest pin pull request, how the version
+    is bumped, and the submission and update procedure through the developer portal.
 
 ### Non-Functional Requirements
 
@@ -338,8 +399,10 @@ flowchart LR
 5. No governance identifier **MUST** appear in `plugin/`, in `PRIVACY.md`, or in any
    test name this change adds.
 6. The launcher **MUST** be covered by a test that runs it against a local HTTP server
-   standing in for GitHub releases, so its download, checksum, cache, and refusal paths
-   are exercised without network access.
+   standing in for GitHub releases, so its download, checksum, cache, override, and
+   refusal paths are exercised without network access. The release host **MUST** be
+   overridable only through an environment variable the test sets, never through a
+   file in the plugin.
 
 ## Affected Components
 
@@ -349,6 +412,8 @@ flowchart LR
 * `plugin/README.md`, `plugin/LICENSE`, `plugin/icon.png` (new)
 * `PRIVACY.md`, `README.md`
 * `release-please-config.json`
+* `.github/workflows/release.yml` (two added steps in the `release` job; MCPB steps untouched)
+* `plugin/checksums.txt` (new; appended by the release job's pull request)
 * `internal/plugin/plugin_test.go` (new; manifest and version-sync assertions),
   `internal/plugin/launcher_test.go` (new; launcher behaviour against a local release
   server), `internal/plugin/doc.go` (new)
@@ -380,8 +445,10 @@ flowchart LR
   OAuth. That is a hosting and multi-tenant design (see
   `.agents/explore/2026-09-01-passthrough-auth-multi-tenant-serving.md`) and its own CR.
 * **Windows support in the plugin launcher.** The launcher is POSIX shell. Windows users
-  keep the MCPB and the release zip. A `.cmd` launcher and the portal's treatment of it
-  are a follow-on once the POSIX path is listed.
+  keep the MCPB and the release zip. No plugin in the catalog has a native Windows
+  launcher for a compiled server; the two patterns in the field, a polyglot `.cmd` that
+  echoes its first line to stdout and a `node` launcher, each add a hazard or a runtime
+  dependency, and both are deferred until the POSIX path is listed.
 * **Submitting the listing and answering the portal's data-handling and compliance
   steps.** Those are the publisher's actions in a logged-in portal; this CR delivers the
   repository state they need and documents the steps.
@@ -407,6 +474,19 @@ flowchart LR
 * **`go run github.com/desek/outlook-local-mcp/cmd/outlook-local-mcp@v1.0.0-rc.1`.**
   Pinned, but a package install from the network (held) that needs a Go toolchain on
   the user's machine. Rejected.
+* **Verify only against the release's `checksums.txt`.** Proves the asset matches its
+  own manifest, nothing more; whoever can replace one asset can replace both. Kept as
+  the fallback for the window before the digest PR merges, rejected as the sole check.
+* **Fall back to the latest release when the pinned asset is absent** (what `ory/lumen`
+  does). Convenient after a failed release, but it silently breaks the version pin and
+  is undisclosed network behaviour to the scanner. Rejected.
+* **A `node` launcher for Windows parity.** `node <file>` is the directory's documented
+  example and runs one file on three platforms, but no catalog plugin uses it for a
+  compiled server and it adds a Node dependency for users who chose a native install.
+  Deferred.
+* **A polyglot `.cmd` launcher.** One file that cmd.exe runs as batch and `sh` runs as a
+  script; cmd.exe echoes the shebang to stdout, which an MCP client must tolerate.
+  Rejected.
 * **Rewrite the server in a language the scanner reads.** Out of proportion; the hold on a
   downloaded Go binary is the documented path for compiled servers. Rejected.
 
@@ -425,6 +505,9 @@ release zip.
 No Go production code changes. A new test package `internal/plugin` reads `plugin/`
 and drives the launcher. `release-please-config.json` gains one entry; a mistake there
 would leave `plugin.json` at the old version and the version-sync test fails the build.
+The `release` job gains a raw-binary copy loop and a digest pull-request step; the PR
+step needs the workflow's existing `contents: write` plus `pull-requests: write`, and
+auto-merge needs the repository setting enabled, otherwise the PR waits for a human.
 The launcher adds `curl` (or `wget`), `tar`, and `shasum`/`sha256sum` as runtime
 prerequisites on the user's machine; all four ship with macOS and every mainstream Linux.
 
@@ -475,10 +558,13 @@ Affected components: everything under `plugin/`.
 1. Write `plugin.json` per the Manifest section; copy `userConfig` text from
    `extension/manifest.json` and add the four gate booleans with their inventory
    descriptions from `internal/config/inventory.go`.
-2. Write `scripts/outlook-local-mcp.sh`: `set -eu`; read version with a `sed` over
-   `plugin.json` (no `jq` dependency); platform map; cache path; download with `curl -fsSL`
-   falling back to `wget -qO-`; checksum verify; `tar -xzf`; `chmod +x`; `exec`. Every
-   failure path prints the actionable-error shape to stderr.
+2. Write `scripts/outlook-local-mcp.sh`: `set -eu`; honour `OUTLOOK_MCP_PLUGIN_BIN`;
+   read version with a `sed` over `plugin.json` (no `jq` dependency); platform map;
+   cache path; download the raw binary with `curl -fsSL` falling back to `wget -qO-`;
+   digest lookup in `${CLAUDE_PLUGIN_ROOT}/checksums.txt` then the release's; verify
+   with `shasum -a 256` or `sha256sum`; `chmod +x`; `exec`. The release host base URL is
+   read from `OUTLOOK_MCP_PLUGIN_RELEASE_BASE` only when set, for tests. Every failure
+   path prints the actionable-error shape to stderr.
 3. Write the skill, README (with the privacy section and the disclosure of what the
    launcher fetches), copy `LICENSE` and `extension/icon.png`.
 4. Run `claude plugin validate ./plugin` and `claude --plugin-dir ./plugin` against a
@@ -501,6 +587,13 @@ Affected components: `internal/plugin/*`, `release-please-config.json`.
    when set; assert cold start downloads and execs, warm start makes no request, bad
    checksum refuses and leaves no binary, unsupported platform refuses before any request.
 3. Add the `extra-files` entry and assert in the test that the config names the file.
+4. Add the raw-binary copy to the "Create archives and checksums" step and the digest
+   pull-request step after "Upload release assets" in `release.yml`; add
+   `TestReleaseWorkflowPublishesRawBinariesAndPinsDigests` that reads the workflow file
+   and asserts both steps exist and the MCPB steps are unchanged against a golden.
+5. Seed `plugin/checksums.txt` with the raw-binary digests of `v1.0.0-rc.1` once that
+   release republishes them, or with an empty file and a header comment if the first
+   pinned version is the next release; the test accepts either.
 
 ### Phase 4: Docs and validation
 
@@ -531,6 +624,10 @@ Affected components: `docs/quickstart.md`, `docs/reference/release.md`,
 | `internal/plugin/launcher_test.go` | `TestLauncherRefusesChecksumMismatch` | Tampered archive | fake server | non-zero exit, stderr names both digests, no binary left |
 | `internal/plugin/launcher_test.go` | `TestLauncherRefusesUnsupportedPlatform` | `uname` stub returns an unpublished platform | PATH-shimmed `uname` | non-zero exit before any request, stderr names MCPB and release page |
 | `internal/plugin/launcher_test.go` | `TestLauncherWritesNothingToStdoutBeforeExec` | Stdout is reserved for MCP | all paths | stdout empty until exec |
+| `internal/plugin/launcher_test.go` | `TestLauncherHonoursBinaryOverride` | `OUTLOOK_MCP_PLUGIN_BIN` execs at once, no request, no verification; non-executable path refuses | override set | zero GETs; stub output; refusal case non-zero |
+| `internal/plugin/launcher_test.go` | `TestLauncherPrefersCommittedDigest` | With a matching line in `plugin/checksums.txt`, the release `checksums.txt` is never fetched; without it, it is fetched and a stderr notice is printed | both digest files | one GET vs two GETs; notice present only in fallback |
+| `internal/plugin/plugin_test.go` | `TestPluginChecksumsCoverPublishedPlatforms` | Every version block in `plugin/checksums.txt` names every desktop matrix platform | checksums file, workflow matrix | pass |
+| `internal/plugin/release_workflow_test.go` | `TestReleaseWorkflowPublishesRawBinariesAndPinsDigests` | Raw copy loop and digest PR step present; MCPB steps byte-identical to golden | `.github/workflows/release.yml` | pass |
 | `internal/docs/privacy_test.go` | `TestPrivacyPolicyCoversRequiredAreas` | Five required headings and every gated resource class named | `PRIVACY.md` | pass |
 | `internal/docs/privacy_test.go` | `TestReadmesLinkPrivacyPolicy` | Root and plugin READMEs have `## Privacy Policy` linking `PRIVACY.md` | both READMEs | pass |
 
@@ -597,8 +694,8 @@ Then the command is "${CLAUDE_PLUGIN_ROOT}/scripts/outlook-local-mcp.sh" and arg
 ```gherkin
 Given a fake release server for version 0.0.0-test and an empty CLAUDE_PLUGIN_DATA
 When the launcher starts
-Then it requests the platform archive and checksums.txt once each
-  And the SHA-256 matches before extraction
+Then it requests the raw platform binary once, and checksums.txt once only when plugin/checksums.txt lacks the version
+  And the SHA-256 matches before the binary is made executable
   And the binary runs as the launcher's process with stdout untouched before exec
 ```
 
@@ -654,11 +751,31 @@ Then plugin.json version equals .release-please-manifest.json "."
 
 ```gherkin
 Given the implementing commit range
-When `git diff --stat <base>..HEAD -- extension/ Makefile .github/workflows/release.yml` runs
-Then extension/manifest.json, extension/README.md, the mcpb-* targets and the release job show no change
+When `git diff --stat <base>..HEAD -- extension/ Makefile` runs and the MCPB steps of release.yml are compared to their golden
+Then extension/manifest.json, extension/README.md and the mcpb-* targets show no change
+  And the prepare, inject-version, validate, pack and upload-mcpb steps of the release job are byte-identical
 ```
 
-### AC-11: The documentation names the new install path
+### AC-11: The override skips the network and verification
+
+```gherkin
+Given OUTLOOK_MCP_PLUGIN_BIN names an executable file
+When the launcher starts
+Then that file runs with no HTTP request and no digest check
+  And the README states that the override bypasses verification
+```
+
+### AC-12: The release publishes raw binaries and pins their digests through a pull request
+
+```gherkin
+Given a release of version X built by release.yml
+When the release job completes
+Then the GitHub release carries outlook-local-mcp-<os>-<arch> for every desktop matrix entry, listed in checksums.txt
+  And a pull request titled "chore(plugin): pin release digests vX" exists against main appending those digests to plugin/checksums.txt
+  And no commit was pushed to main by the job
+```
+
+### AC-13: The documentation names the new install path
 
 ```gherkin
 Given docs/quickstart.md, docs/reference/release.md and AGENTS.md
@@ -705,7 +822,8 @@ make ci
 shellcheck plugin/scripts/outlook-local-mcp.sh
 claude plugin validate ./plugin
 claude --plugin-dir ./plugin   # then /mcp and a system status call
-git diff --stat main..HEAD -- extension/ Makefile .github/workflows/release.yml   # must be empty
+git diff --stat main..HEAD -- extension/ Makefile   # must be empty
+go test ./internal/plugin -run TestReleaseWorkflowPublishesRawBinariesAndPinsDigests   # MCPB steps unchanged
 ```
 
 ## Risks and Mitigation
@@ -749,12 +867,22 @@ PR if the bump did not land, before the tag is created.
 **Mitigation:** The refusal text names the MCPB and the release zip; the README states
 the supported platforms in its first paragraph; a Windows launcher is the named follow-on.
 
+### Risk 6: The digest pull request is not merged before users install the new version
+
+**Likelihood:** medium
+**Impact:** low
+**Mitigation:** The launcher falls back to the release's own `checksums.txt` and says so
+on stderr, so the install works and the weaker check is visible rather than silent.
+Auto-merge is requested; if the repository disallows it, the maintainer merges the PR as
+part of the release checklist in `docs/reference/release.md`.
+
 ## Dependencies
 
 * `v1.0.0-rc.1` release assets exist on GitHub (they do).
 * A claude.ai account on a paid plan with GitHub connected, to run the portal's Validate
   in Phase 4.
 * `shellcheck` available locally or in CI for the lint box; add to `.mise.toml` if absent.
+* Repository setting "Allow auto-merge" enabled, or the digest PR is merged by hand.
 
 ## Estimated Effort
 
@@ -762,17 +890,19 @@ the supported platforms in its first paragraph; a Windows launcher is the named 
 | :- | :- |
 | 1 Privacy and README | 1.5 |
 | 2 Plugin folder | 4 |
-| 3 Tests and release coupling | 4 |
+| 3 Tests and release coupling | 6 |
 | 4 Docs, local validate, portal validate | 2.5 |
-| **Total** | **12** |
+| **Total** | **14** |
 
 ## Decision Outcome
 
-Chosen approach: "a `plugin/` subfolder with a checksum-verifying POSIX launcher that
-fetches the already-published release binary, one skill, and a completed privacy policy,
-leaving the MCPB extension untouched", because it is the only shape the directory does
-not block for a compiled local server, it reuses the release artefacts without a second
-build pipeline, and it adds a distribution channel instead of replacing one.
+Chosen approach: "a `plugin/` subfolder with a POSIX launcher that fetches the raw
+release binary pinned to the plugin version, verifies it against a digest committed in
+the repository, honours a local-build override, one skill, and a completed privacy
+policy, leaving the MCPB extension untouched", because it is the only shape the directory
+does not block for a compiled local server, it matches the one Go plugin already in the
+catalog while tightening its verification, it reuses the release artefacts without a
+second build pipeline, and it adds a distribution channel instead of replacing one.
 
 ## Related Items
 
@@ -790,3 +920,15 @@ Sources read on 2026-10-03: `claude.com/docs/connectors/building/submission`,
 `claude.com/docs/directory/publish`, `code.claude.com/docs/en/plugins/manifest-reference`,
 `claude.com/blog/claude-marketplace`. The portal at `claude.ai/directory/manage` requires
 a logged-in paid account and was not read.
+
+Catalog survey, same date, from a clone of `anthropics/claude-plugins-official` at
+`d182ca4`: 315 plugins, 262 externally sourced, 150 declaring an MCP server, 197 servers
+in total. Launch methods: 118 remote HTTP/SSE, 27 `npx`, 15 `uvx`/`uv`, 3 `node`, 1
+`docker`, 2 plugin-local launcher scripts (`ory/lumen`, a Go binary fetched from its
+GitHub release; `semgrep`, whose script path no longer resolves), 2 bare binaries
+assumed on PATH (`cockroachdb`, `fiftyone`). Field precedents outside the catalog that
+informed the launcher: `agent-sh/computer-use-linux` (pinned `.sha256` per asset, local
+override variable), `jonathanspiva/swift-netnewswire-mcp` (digest pinned in the
+repository), `wcatz/ghost` (POSIX dispatcher, Windows excluded),
+`buildinternet/releases-cli` (validator scanned the whole repository when the plugin
+was the root; moved to a subfolder).
