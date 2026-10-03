@@ -2,7 +2,7 @@
 id: "CR-0084"
 name: directory-plugin-bundle
 description: Add a Claude plugin bundle at plugin/ so the server can be listed in Anthropic's directory, complete the privacy policy to the directory's required coverage, and keep the MCPB desktop extension as the unchanged Claude Desktop install path.
-status: "proposed"
+status: "approved"
 date: 2026-10-03
 requestor: desek
 stakeholders:
@@ -73,7 +73,7 @@ Distribution today:
 
 | Channel | Artefact | Where it is produced | Who can install |
 | :- | :- | :- | :- |
-| GitHub release | `outlook-local-mcp-{darwin-arm64,linux-amd64,windows-amd64}.{tar.gz,zip}`, `checksums.txt` | `release.yml` → goreleaser `binaries` build | Anyone, by hand |
+| GitHub release | `outlook-local-mcp-{darwin-arm64,linux-amd64,windows-amd64}.{tar.gz,zip}`, `checksums.txt` | `release.yml` `build-desktop` matrix → goreleaser `desktop` build | Anyone, by hand |
 | MCPB extension | `outlook-local-mcp.mcpb` | `release.yml` `release` job: `mcpb validate extension/manifest.json`, `mcpb pack extension/` | Claude Desktop users, double-click install |
 | Container | `ghcr.io/desek/outlook-local-mcp:*` (scratch, distroless, debug) | `release.yml` `container` job | Headless and container users |
 | `go install` | source build | none | Go developers |
@@ -159,19 +159,25 @@ The launcher therefore:
 4. Keeps the binary at `${CLAUDE_PLUGIN_DATA}/<version>/outlook-local-mcp`. If absent,
    downloads the **raw binary**
    `https://github.com/desek/outlook-local-mcp/releases/download/v<version>/outlook-local-mcp-<platform>`
-   with `curl -fsSL` (falling back to `wget -qO-`), so no archive handling is needed.
+   with `curl -fsSL -o <tmp>` (falling back to `wget -q -O <tmp>`) into a temporary file in
+   the same directory, so no archive handling is needed and nothing reaches stdout.
 5. Verifies the SHA-256 against the digest for that asset. The digest comes from
    `${CLAUDE_PLUGIN_ROOT}/checksums.txt` when that committed file has a line for the
    version; otherwise from the release's own `checksums.txt`, in which case the launcher
    prints one stderr line stating that the repository pin is not yet available for this
    version. On mismatch it deletes the download and exits non-zero with a fix
-   instruction naming both digests.
+   instruction naming both digests. Only a verified download is renamed to the final
+   path, so an interrupted download never leaves a file a warm start would reuse.
 6. `chmod +x`, then `exec`s the binary with the environment the server config passed,
    so the MCP stdio contract is unchanged.
 
 The committed digest file is what makes a tampered release asset insufficient on its
 own: an attacker would also need a commit on `main`, which branch protection and the
-pull-request rule guard. Release-side `checksums.txt` is the fallback only because the
+pull-request rule guard. The committed file is a sequence of version blocks: a
+`# v<version>` header line followed by `sha256sum` output lines (`<hex digest>  outlook-local-mcp-<os>-<arch>`)
+copied verbatim from the release's `checksums.txt`. Because asset names carry no version,
+the launcher and the tests look up a digest only inside the block whose header equals
+`# v<version>`. Release-side `checksums.txt` is the fallback only because the
 digests cannot exist before the release builds them (see Release coupling).
 
 `${CLAUDE_PLUGIN_DATA}` survives plugin updates and is removed on uninstall, which is the
@@ -338,7 +344,9 @@ flowchart LR
    it **MUST** delete the download and exit non-zero with a fix instruction that names
    the expected and actual digest.
 10. The launcher **MUST** store the binary under `${CLAUDE_PLUGIN_DATA}/<version>/` and
-    **MUST** reuse it without network access on every later start of the same version.
+    **MUST** reuse it without network access on every later start of the same version;
+    it **MUST** write the download to a temporary file and move it to the final path only
+    after verification succeeds.
 11. The launcher **MUST** `exec` the binary so the server process replaces the shell and
     receives the environment unchanged.
 12. On a platform the release does not publish, the launcher **MUST** exit non-zero
@@ -366,8 +374,8 @@ flowchart LR
 19. `plugin.json` `version` **MUST** equal `.release-please-manifest.json`'s `"."` value
     on every commit, and a test **MUST** assert it.
 20. The `release` job of `release.yml` **MUST** publish, beside the existing archives, a
-    raw binary asset `outlook-local-mcp-<os>-<arch>` for every desktop build matrix
-    entry, listed in the same `checksums.txt`.
+    raw binary asset `outlook-local-mcp-<os>-<arch>` (with an `.exe` suffix for Windows)
+    for every desktop build matrix entry, listed in the same `checksums.txt`.
 21. The `release` job **MUST**, after the upload step, open a pull request that appends
     the raw-binary digest lines for the released version to `plugin/checksums.txt`
     under a `# v<version>` header, titled `chore(plugin): pin release digests
@@ -396,7 +404,7 @@ flowchart LR
    verify, in the project's actionable-error shape.
 4. The plugin folder **MUST** contain fewer than 20 files, so the 512-file reviewer hold
    and the 5,000-file install limit are not approached.
-5. No governance identifier **MUST** appear in `plugin/`, in `PRIVACY.md`, or in any
+5. A governance identifier **MUST NOT** appear in `plugin/`, in `PRIVACY.md`, or in any
    test name this change adds.
 6. The launcher **MUST** be covered by a test that runs it against a local HTTP server
    standing in for GitHub releases, so its download, checksum, cache, override, and
@@ -416,7 +424,9 @@ flowchart LR
 * `plugin/checksums.txt` (new; appended by the release job's pull request)
 * `internal/plugin/plugin_test.go` (new; manifest and version-sync assertions),
   `internal/plugin/launcher_test.go` (new; launcher behaviour against a local release
-  server), `internal/plugin/doc.go` (new)
+  server), `internal/plugin/release_workflow_test.go` (new; release workflow assertions),
+  `internal/plugin/doc.go` (new)
+* `internal/docs/privacy_test.go` (new; privacy policy and README privacy section assertions)
 * `docs/quickstart.md`, `docs/reference/release.md`, `docs/concepts.md` (install surfaces
   paragraph), `docs/prompts/mcp-tool-crud-test.md` (no step changes; the harness drives
   the binary, not the plugin)
@@ -508,8 +518,8 @@ would leave `plugin.json` at the old version and the version-sync test fails the
 The `release` job gains a raw-binary copy loop and a digest pull-request step; the PR
 step needs the workflow's existing `contents: write` plus `pull-requests: write`, and
 auto-merge needs the repository setting enabled, otherwise the PR waits for a human.
-The launcher adds `curl` (or `wget`), `tar`, and `shasum`/`sha256sum` as runtime
-prerequisites on the user's machine; all four ship with macOS and every mainstream Linux.
+The launcher adds `curl` (or `wget`) and `shasum` (or `sha256sum`) as runtime
+prerequisites on the user's machine; both ship with macOS and every mainstream Linux.
 
 ### Business Impact
 
@@ -541,14 +551,14 @@ flowchart LR
 
 ### Phase 1: Privacy and README
 
-Affected components: `PRIVACY.md`, `README.md`.
+Affected components: `PRIVACY.md`, `README.md`, `internal/docs/privacy_test.go`.
 
 1. Rewrite "What Data Is Accessed" to list every resource class by domain and gate.
 2. Add "Data Retention" and "Contact" sections; add GitHub to "Third-Party Services" with
    the launcher as the reason.
 3. Add `## Privacy Policy` to the root README, two sentences and a link.
-4. Add `TestPrivacyPolicyCoversRequiredAreas` in `internal/docs/catalog_test.go`'s
-   package style but reading `PRIVACY.md` from the repository root: asserts the five
+4. Add `TestPrivacyPolicyCoversRequiredAreas` and `TestReadmesLinkPrivacyPolicy` in
+   `internal/docs/privacy_test.go`, in `internal/docs/catalog_test.go`'s package style but reading `PRIVACY.md` from the repository root: asserts the five
    headings and that each gated resource class name appears.
 
 ### Phase 2: Plugin folder
@@ -560,9 +570,10 @@ Affected components: everything under `plugin/`.
    descriptions from `internal/config/inventory.go`.
 2. Write `scripts/outlook-local-mcp.sh`: `set -eu`; honour `OUTLOOK_MCP_PLUGIN_BIN`;
    read version with a `sed` over `plugin.json` (no `jq` dependency); platform map;
-   cache path; download the raw binary with `curl -fsSL` falling back to `wget -qO-`;
+   cache path; download the raw binary to a temporary file with `curl -fsSL -o` falling
+   back to `wget -q -O`;
    digest lookup in `${CLAUDE_PLUGIN_ROOT}/checksums.txt` then the release's; verify
-   with `shasum -a 256` or `sha256sum`; `chmod +x`; `exec`. The release host base URL is
+   with `shasum -a 256` or `sha256sum`; rename into place; `chmod +x`; `exec`. The release host base URL is
    read from `OUTLOOK_MCP_PLUGIN_RELEASE_BASE` only when set, for tests. Every failure
    path prints the actionable-error shape to stderr.
 3. Write the skill, README (with the privacy section and the disclosure of what the
@@ -572,15 +583,18 @@ Affected components: everything under `plugin/`.
 
 ### Phase 3: Tests and release coupling
 
-Affected components: `internal/plugin/*`, `release-please-config.json`.
+Affected components: `internal/plugin/*`, `release-please-config.json`,
+`.github/workflows/release.yml`, `plugin/checksums.txt`.
 
 1. `internal/plugin/plugin_test.go`: parse `plugin.json`; assert every FR-2 field, every
    `${user_config.KEY}` in `env` resolves to a declared option, every option has a
-   default, `auth_method.options` matches the server's accepted values, no file in
+   default, `auth_method.options` matches the server's accepted values, `LICENSE` is
+   byte-identical to the root `LICENSE`, the skill frontmatter and body name what FR-13
+   requires, no file in
    `plugin/` exceeds 256 KiB or is executable except the launcher, no `bin/`, and
    `version` equals the release-please manifest.
 2. `internal/plugin/launcher_test.go`: start an `httptest.Server` serving a fake release
-   (a tiny shell script tarred as the binary, and a matching `checksums.txt`); run the
+   (a tiny shell script served as the raw binary, and a matching `checksums.txt`); run the
    launcher with `CLAUDE_PLUGIN_ROOT` pointing at a temp copy of `plugin/` whose
    `plugin.json` version is `0.0.0-test`, `CLAUDE_PLUGIN_DATA` at a temp dir, and the
    release base URL overridden through an environment variable the script honours only
@@ -619,13 +633,15 @@ Affected components: `docs/quickstart.md`, `docs/reference/release.md`,
 | `internal/plugin/plugin_test.go` | `TestPluginAuthMethodOptionsMatchServer` | `auth_method.options` equals the server's accepted set | manifest, `internal/config` | pass |
 | `internal/plugin/plugin_test.go` | `TestPluginFolderHasNoBlockedFiles` | No `bin/`, no file over 256 KiB, no `.mcpb`/`.dxt`, launcher is the only executable, fewer than 20 files | `plugin/` tree | pass |
 | `internal/plugin/plugin_test.go` | `TestPluginVersionMatchesReleaseManifest` | `plugin.json` version equals `.release-please-manifest.json` `"."` and `release-please-config.json` lists the file in `extra-files` | both files | pass |
-| `internal/plugin/launcher_test.go` | `TestLauncherColdStartFetchesVerifiesAndExecs` | First start downloads archive and checksums, verifies, extracts, execs | fake release server | exactly two GETs; binary present; stub exec output on stdout |
+| `internal/plugin/launcher_test.go` | `TestLauncherColdStartFetchesVerifiesAndExecs` | First start downloads the raw binary (and the release `checksums.txt` only when the committed pin lacks the version), verifies, execs | fake release server | one or two GETs per AC-4; binary present; stub exec output on stdout |
 | `internal/plugin/launcher_test.go` | `TestLauncherWarmStartMakesNoRequest` | Second start with cached binary | same temp data dir | zero GETs |
-| `internal/plugin/launcher_test.go` | `TestLauncherRefusesChecksumMismatch` | Tampered archive | fake server | non-zero exit, stderr names both digests, no binary left |
+| `internal/plugin/launcher_test.go` | `TestLauncherRefusesChecksumMismatch` | Tampered binary | fake server | non-zero exit, stderr names both digests, no binary left |
 | `internal/plugin/launcher_test.go` | `TestLauncherRefusesUnsupportedPlatform` | `uname` stub returns an unpublished platform | PATH-shimmed `uname` | non-zero exit before any request, stderr names MCPB and release page |
 | `internal/plugin/launcher_test.go` | `TestLauncherWritesNothingToStdoutBeforeExec` | Stdout is reserved for MCP | all paths | stdout empty until exec |
 | `internal/plugin/launcher_test.go` | `TestLauncherHonoursBinaryOverride` | `OUTLOOK_MCP_PLUGIN_BIN` execs at once, no request, no verification; non-executable path refuses | override set | zero GETs; stub output; refusal case non-zero |
 | `internal/plugin/launcher_test.go` | `TestLauncherPrefersCommittedDigest` | With a matching line in `plugin/checksums.txt`, the release `checksums.txt` is never fetched; without it, it is fetched and a stderr notice is printed | both digest files | one GET vs two GETs; notice present only in fallback |
+| `internal/plugin/plugin_test.go` | `TestPluginLicenseMatchesRoot` | `plugin/LICENSE` is byte-identical to the root `LICENSE` | both files | pass |
+| `internal/plugin/plugin_test.go` | `TestPluginSkillNamesDomainsAndGates` | Skill frontmatter has `name: outlook` and a string `description`; body names the six domains, the four gates, `operation="help"`, read-only mode and `teams.compose_reply` as draft-only | `plugin/skills/outlook/SKILL.md` | pass |
 | `internal/plugin/plugin_test.go` | `TestPluginChecksumsCoverPublishedPlatforms` | Every version block in `plugin/checksums.txt` names every desktop matrix platform | checksums file, workflow matrix | pass |
 | `internal/plugin/release_workflow_test.go` | `TestReleaseWorkflowPublishesRawBinariesAndPinsDigests` | Raw copy loop and digest PR step present; MCPB steps byte-identical to golden | `.github/workflows/release.yml` | pass |
 | `internal/docs/privacy_test.go` | `TestPrivacyPolicyCoversRequiredAreas` | Five required headings and every gated resource class named | `PRIVACY.md` | pass |
@@ -647,7 +663,7 @@ Affected components: `docs/quickstart.md`, `docs/reference/release.md`,
 
 * `extension/manifest_test.go` `TestManifest_NewTools` and
   `internal/server/manifest_sync_test.go` `TestManifestDescribesEveryRegisteredVerb`
-  prove the MCPB manifest is unchanged in meaning (FR-19).
+  prove the MCPB manifest is unchanged in meaning (FR-23).
 * `internal/docs` bundle tests prove `docs/quickstart.md` and `docs/concepts.md` still
   embed and stay under budget after the new sections.
 
@@ -711,7 +727,7 @@ Then no HTTP request is made
 ### AC-6: Integrity and platform failures refuse with a fix
 
 ```gherkin
-Given a tampered archive or an unpublished platform
+Given a tampered binary or an unpublished platform
 When the launcher starts
 Then it exits non-zero before any binary runs
   And stderr states what failed, the fix, and what to verify
@@ -783,6 +799,17 @@ When they are read
 Then the quickstart has a plugin install path for Claude Code and Cowork beside the Claude Desktop path
   And release.md describes the plugin as a release surface with the portal procedure
   And AGENTS.md's project structure lists plugin/
+```
+
+### AC-14: The skill, licence copy and plugin README are complete
+
+```gherkin
+Given plugin/skills/outlook/SKILL.md, plugin/LICENSE and plugin/README.md
+When they are read
+Then the skill frontmatter has name "outlook" and a single-string description
+  And the skill body names the six domains, the four gates, operation="help", read-only mode and that teams.compose_reply only drafts
+  And plugin/LICENSE is byte-identical to the root LICENSE
+  And plugin/README.md has at least 40 words outside code blocks and states what the plugin runs, fetches and sends, and the surfaces it loads on
 ```
 
 ## Quality Standards Compliance
