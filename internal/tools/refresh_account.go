@@ -123,7 +123,7 @@ func HandleRefreshAccount(registry *auth.AccountRegistry, cfg config.Config) fun
 		}
 		b.WriteString(header)
 		b.WriteString("\n")
-		b.WriteString(fmt.Sprintf("New expiry: %s", expiry))
+		fmt.Fprintf(&b, "New expiry: %s", expiry)
 		if line := AccountInfoLine(ctx); line != "" {
 			b.WriteString("\n")
 			b.WriteString(line)

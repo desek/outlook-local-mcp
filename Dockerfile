@@ -105,7 +105,7 @@ ENTRYPOINT ["/usr/local/bin/outlook-local-mcp"]
 # `container` GoReleaser build: a static binary, and the file-backed token cache
 # rather than the CGO keyring backend.
 # ---------------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.25-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 
 WORKDIR /src
 
