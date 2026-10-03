@@ -327,7 +327,7 @@ func TestSearchEvents_MaxResultsDefault(t *testing.T) {
 		if i > 0 {
 			eventsJSON.WriteString(",")
 		}
-		eventsJSON.WriteString(fmt.Sprintf(`{"id":"%d","subject":"Event %d"}`, i, i))
+		fmt.Fprintf(&eventsJSON, `{"id":"%d","subject":"Event %d"}`, i, i)
 	}
 	eventsJSON.WriteString(`]}`)
 
