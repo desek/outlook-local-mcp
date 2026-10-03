@@ -11,9 +11,9 @@
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-400-normal-DTRLJnHl.woff2" />
     <link rel="preload" as="font" type="font/woff2" crossorigin href="/assets/geist-mono-latin-600-normal-V-KvD_pi.woff2" />
     <meta name="description" content="Install Outlook Local MCP, configure Claude Desktop or Claude Code, authenticate, and make your first calendar and mail tool call, all on your local machine." />
-      <meta name="build:commit" content="3d11216adf844228c3d2318e82d0b24aa53f6be1" />
-    <meta name="build:time" content="2026-10-03T18:29:44.828Z" />
-    <meta name="build:run" content="37144386051" />
+      <meta name="build:commit" content="0f8d6d605c3e2ed37aafe8022e741701158728b9" />
+    <meta name="build:time" content="2026-10-03T18:46:11.941Z" />
+    <meta name="build:run" content="37145432006" />
     <meta name="build:environment" content="ci" />
       <link rel="canonical" href="https://outlook-local-mcp.com/quickstart.html" />
     <meta property="og:title" content="Quick Start — Outlook Local MCP" />
@@ -127,6 +127,18 @@ go build ./cmd/outlook-local-mcp/
 }
 </code></pre>
 <p>Replace <code>/absolute/path/to/outlook-local-mcp</code> with the actual path to the built binary.</p>
+<h2 id="2c-install-as-a-claude-code-or-cowork-plugin">2c. Install as a Claude Code or Cowork plugin</h2>
+<p>Install the plugin from the Claude directory with <code>/plugin</code> in Claude Code. From a checkout of this repository, run <code>claude --plugin-dir ./plugin</code>.</p>
+<p>The plugin launcher does these steps on first start of a version:</p>
+<ol>
+<li>It downloads the raw release binary that matches the plugin version.</li>
+<li>It verifies the SHA-256 digest of the binary.</li>
+<li>It keeps the binary under <code>${CLAUDE_PLUGIN_DATA}</code>.</li>
+<li>It starts the binary.</li>
+</ol>
+<p>A later start uses the kept binary and makes no network call. Set <code>OUTLOOK_MCP_PLUGIN_BIN</code> to the path of a local binary to skip the download and the verification.</p>
+<p>The plugin supports macOS arm64 and Linux amd64 only. On Windows, use the Claude Desktop extension (<code>.mcpb</code>) or the release zip.</p>
+<p>At install, the plugin asks for the same options as the Claude Desktop extension. Each answer sets one variable: client ID (<code>OUTLOOK_MCP_CLIENT_ID</code>), tenant ID (<code>OUTLOOK_MCP_TENANT_ID</code>), authentication method (<code>OUTLOOK_MCP_AUTH_METHOD</code>), and timezone (<code>OUTLOOK_MCP_DEFAULT_TIMEZONE</code>).</p>
 <h2 id="3-authenticate-and-verify">3. Authenticate and Verify</h2>
 <p>Restart Claude Desktop (or reload MCP servers in Claude Code) and verify the server is reachable:</p>
 <pre><code>{tool: &quot;system&quot;, args: {operation: &quot;about&quot;}}
