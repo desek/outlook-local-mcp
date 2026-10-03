@@ -14,7 +14,7 @@ import (
 // after the pin for the manifest version is present, and by force-pushing the
 // single tag name the portal tracks.
 func TestPluginStableTagWorkflowMovesOnDigestPin(t *testing.T) {
-	w := readRepoFile(t, ".github/workflows/plugin-stable-tag.yml")
+	w := string(readRepoFile(t, ".github/workflows/plugin-stable-tag.yml"))
 	for _, want := range []string{
 		"branches: [main]",
 		"- plugin/checksums.txt",
