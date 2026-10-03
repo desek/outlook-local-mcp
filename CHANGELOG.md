@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.0-rc.1](https://github.com/desek/outlook-local-mcp/compare/v0.6.0...v1.0.0-rc.1) (2026-10-03)
+
+
+### Features
+
+* mail triage, attachments, scheduling reads, contacts and teams domains (v1 rc1) ([92ab5fe](https://github.com/desek/outlook-local-mcp/commit/92ab5fe36a7304a210ecf281b88a61e1993f6733))
+* **site:** agent trust signals and trust anchor pages (CR-0077) ([#51](https://github.com/desek/outlook-local-mcp/issues/51)) ([2cce019](https://github.com/desek/outlook-local-mcp/commit/2cce019aaa908f96659dfe4edeaa8f336ea7b667))
+
+
+### Bug Fixes
+
+* **deps:** Go 1.26.8, OpenTelemetry 1.47.0, grpc 1.84.0, golangci-lint 2.14.0 ([6e4cccb](https://github.com/desek/outlook-local-mcp/commit/6e4cccb62d57ee2484cb4bb30d8a9cfefb309d43))
+
 ## [0.6.0](https://github.com/desek/outlook-local-mcp/compare/v0.5.1...v0.6.0) (2026-08-02)
 
 
