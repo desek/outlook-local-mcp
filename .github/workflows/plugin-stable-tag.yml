@@ -1,0 +1,41 @@
+# Moves the plugin-stable tag to the commit that completes a release for the
+# plugin bundle: the one where the digest pin for the released version lands on
+# main. Anthropic's directory tracks this tag instead of main, so it scans one
+# plugin version per release, after the raw binary assets and the committed
+# digests both exist, rather than every commit to main.
+name: Plugin stable tag
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - plugin/checksums.txt
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  move-tag:
+    name: move-tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Verify the digest pin matches the plugin version
+        run: |
+          version=$(sed -n 's/^[[:space:]]*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' plugin/.claude-plugin/plugin.json | head -1)
+          if ! grep -qx "# v${version}" plugin/checksums.txt; then
+            echo "plugin/checksums.txt has no block for v${version}; the tag stays where it is" >&2
+            echo "Fix: merge the 'chore(plugin): pin release digests v${version}' pull request, or re-run this workflow after it lands." >&2
+            exit 1
+          fi
+          echo "pin present for v${version}"
+      - name: Move plugin-stable to this commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f plugin-stable "$GITHUB_SHA"
+          git push -f origin refs/tags/plugin-stable
+          echo "plugin-stable -> $GITHUB_SHA"

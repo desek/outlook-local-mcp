@@ -130,17 +130,32 @@ Until that pull request merges, the launcher finds no committed pin for the vers
 
 release-please bumps `version` in `plugin/.claude-plugin/plugin.json` through `extra-files`, so the plugin version is always the tag version.
 
+### Tracked ref: the `plugin-stable` tag
+
+The directory tracks the tag `plugin-stable`, not `main`. The workflow
+`.github/workflows/plugin-stable-tag.yml` moves the tag to the commit on `main` that
+changes `plugin/checksums.txt`, after it confirms the file has a block for the version
+in `plugin/.claude-plugin/plugin.json`. That commit is the digest-pin pull request's
+squash, which merges only after the release job has published the raw binary assets, so
+every commit the directory scans has both the assets and the committed digests. Commits
+to `main` that do not touch the pin file (docs, dependencies, code between releases) do
+not move the tag and are not scanned as plugin versions.
+
+The GitHub push webhook configured in the portal fires on the tag push, so the
+directory picks up a release within minutes. If the pin pull request is merged by hand
+after a failed auto-merge, the push to `main` still triggers the workflow.
+
 ### Directory submission and update
 
 1. Open `claude.ai/directory/manage`.
 2. Select **Submit new**, then **Plugin bundle**.
 3. Enter the repository and the path `plugin`.
-4. Set the tracked branch to `main`.
+4. Set the tracked branch or tag to `plugin-stable`.
 5. Select **Validate** and fix each finding.
 6. Complete the data handling and compliance sections.
 7. Select **Publish**.
 
-The directory follows `main`, so a merged release updates the listing. Expect the reviewers to hold the submission for a check of the binary download.
+The directory follows `plugin-stable`, so a completed release updates the listing. Expect the reviewers to hold the submission for a check of the binary download.
 
 ---
 
