@@ -51,7 +51,7 @@ jobs:
       # Go for this step does not make the site build depend on it: the build reads
       # the committed manifest, and this step only regenerates it to confirm the
       # commit is current.
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: Surface manifest drift check
