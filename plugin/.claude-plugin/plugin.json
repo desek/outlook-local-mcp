@@ -38,13 +38,8 @@
     "auth_method": {
       "type": "string",
       "title": "Authentication Method",
-      "description": "How you sign in to Microsoft. 'device_code' (default): visit a URL and enter a code — works everywhere, no app registration needed. 'browser': opens your browser automatically — requires your own app registration with http://localhost redirect URI. 'auth_code': manual flow for headless/remote environments.",
-      "default": "device_code",
-      "options": [
-        "device_code",
-        "browser",
-        "auth_code"
-      ]
+      "description": "How you sign in to Microsoft. 'device_code' (default): visit a URL and enter a code — works everywhere, no app registration needed. 'browser': opens your browser automatically — requires your own app registration with http://localhost redirect URI. 'auth_code': manual flow for headless/remote environments. Accepted values: device_code, browser, auth_code.",
+      "default": "device_code"
     },
     "timezone": {
       "type": "string",
