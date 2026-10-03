@@ -63,7 +63,6 @@ func teamsGraphCallingVerbs() []teamsReadCase {
 		{"list_chats", NewHandleListChats, map[string]any{}},
 		{"list_chat_messages", NewHandleListChatMessages, map[string]any{"chat_id": "19:chat-1"}},
 		{"get_chat_message", NewHandleGetChatMessage, map[string]any{"chat_id": "19:chat-1", "message_id": "msg-1"}},
-		{"list_chat_message_replies", NewHandleListChatMessageReplies, map[string]any{"chat_id": "19:chat-1", "message_id": "msg-1"}},
 		{"list_channel_messages", NewHandleListChannelMessages, map[string]any{"team_id": "team-1", "channel_id": "19:channel-1"}},
 		{"get_channel_message", NewHandleGetChannelMessage, map[string]any{"team_id": "team-1", "channel_id": "19:channel-1", "message_id": "post-1"}},
 		{"list_channel_message_replies", NewHandleListChannelMessageReplies, map[string]any{"team_id": "team-1", "channel_id": "19:channel-1", "message_id": "post-1"}},
@@ -86,7 +85,6 @@ func teamsIdentifierRefusals() []teamsReadCase {
 		{"search", NewHandleTeamsSearch, map[string]any{}},
 		{"list_chat_messages", NewHandleListChatMessages, map[string]any{}},
 		{"get_chat_message", NewHandleGetChatMessage, map[string]any{"chat_id": "19:chat-1"}},
-		{"list_chat_message_replies", NewHandleListChatMessageReplies, map[string]any{"chat_id": "19:chat-1"}},
 		{"list_channel_messages", NewHandleListChannelMessages, map[string]any{"team_id": "team-1"}},
 		{"get_channel_message", NewHandleGetChannelMessage, map[string]any{"team_id": "team-1", "channel_id": "19:channel-1"}},
 		{"list_channel_message_replies", NewHandleListChannelMessageReplies, map[string]any{"team_id": "team-1", "channel_id": "19:channel-1"}},
@@ -162,13 +160,13 @@ func runTeamsHandlerWith(
 // TestEveryTeamsGraphVerbIsCovered asserts that the table driving the cross-verb
 // checks still covers every Graph-calling verb the domain registers.
 //
-// The tables above are hand-written, so without this check a fourteenth verb
+// The tables above are hand-written, so without this check a thirteenth verb
 // would be added to the registry and silently escape all three cross-verb
-// properties. The registry count is the authority; the twelve is derived from
-// the thirteen registered verbs minus help, which reaches nothing.
+// properties. The registry count is the authority; the eleven is derived from
+// the twelve registered verbs minus help, which reaches nothing.
 func TestEveryTeamsGraphVerbIsCovered(t *testing.T) {
-	if got := len(teamsGraphCallingVerbs()); got != 12 {
-		t.Errorf("the cross-verb table covers %d verbs, want 12; a Graph-calling verb was added to the domain without a row here", got)
+	if got := len(teamsGraphCallingVerbs()); got != 11 {
+		t.Errorf("the cross-verb table covers %d verbs, want 11; a Graph-calling verb was added to the domain without a row here", got)
 	}
 }
 

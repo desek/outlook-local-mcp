@@ -153,3 +153,40 @@ func TestListChatMessages_GraphFailureCarriesFix(t *testing.T) {
 		t.Errorf("failure carries no correction: %q", resultText(t, result))
 	}
 }
+
+// TestListChatMessages_RequestsOrderTopAndEnumPreference validates the recorded
+// request: creation order instead of the reaction-sensitive default, a bounded
+// page, and the Prefer header that makes Graph name system events.
+func TestListChatMessages_RequestsOrderTopAndEnumPreference(t *testing.T) {
+	_, q, prefer := runTeamsQueryHandler(t, teamsChatMessagesResponseJSON, NewHandleListChatMessages, map[string]any{"chat_id": "19:chat-group", "max_results": float64(5)})
+	if got := q.Get("$orderby"); got != "createdDateTime desc" {
+		t.Errorf("$orderby = %q", got)
+	}
+	if got := q.Get("$top"); got != "5" {
+		t.Errorf("$top = %q, want 5", got)
+	}
+	if !strings.Contains(prefer, "include-unknown-enum-members") {
+		t.Errorf("Prefer = %q, want include-unknown-enum-members", prefer)
+	}
+}
+
+// TestListChatMessages_LabelsSystemEvents validates that a system event, which
+// has no sender and a placeholder body, is labelled by its event.
+func TestListChatMessages_LabelsSystemEvents(t *testing.T) {
+	body := `{"value":[{"id":"e1","chatId":"19:c","messageType":"systemEventMessage","from":null,
+		"body":{"contentType":"html","content":"<systemEventMessage/>"},
+		"eventDetail":{"@odata.type":"#microsoft.graph.membersAddedEventMessageDetail"}}]}`
+	result, _, _ := runTeamsQueryHandler(t, body, NewHandleListChatMessages, map[string]any{"chat_id": "19:c", "output": "summary"})
+	records := decodeTeamsRecords(t, result)
+	if records[0]["from"] != "(system event)" || records[0]["bodyPreview"] != "System event: membersAdded" || records[0]["eventType"] != "membersAdded" {
+		t.Errorf("system event record = %v", records[0])
+	}
+}
+
+// TestListChatMessages_MarksTruncatedPage validates the truncation note.
+func TestListChatMessages_MarksTruncatedPage(t *testing.T) {
+	result, _, _ := runTeamsQueryHandler(t, withNextLink(teamsChatMessagesResponseJSON), NewHandleListChatMessages, map[string]any{"chat_id": "19:chat-group", "output": "text"})
+	if got := resultText(t, result); strings.Contains(got, "total.") || !strings.Contains(got, "truncated: true") {
+		t.Errorf("text = %q", got)
+	}
+}

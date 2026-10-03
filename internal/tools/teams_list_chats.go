@@ -22,6 +22,7 @@ import (
 	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
+	"github.com/microsoftgraph/msgraph-sdk-go/users"
 )
 
 // Corrections appended to this verb's refusals, authored at the verb because the
@@ -34,7 +35,8 @@ const (
 )
 
 // NewHandleListChats creates the handler for the teams list_chats verb. It reads
-// GET /me/chats and returns the chats in the order Graph returned them.
+// GET /me/chats ordered by the creation time of each chat's last message,
+// newest first, which is the only ordering the collection supports.
 //
 // Parameters:
 //   - retryCfg: retry configuration for transient Graph API errors.
@@ -43,9 +45,15 @@ const (
 // Returns a tool handler function compatible with the MCP server's AddTool
 // method.
 //
-// The handler issues exactly one Graph request and reads only the page Graph
-// returns for it; it does not follow the collection's next link, so the cost of
-// the verb is bounded by one round trip.
+// The handler issues exactly one Graph request of at most max_results chats
+// (1 to 50) and does not follow the collection's next link, so the cost of the
+// verb is bounded by one round trip; when Graph signals more pages, the result
+// says so instead of presenting the page as every chat.
+//
+// The last-message preview and the members are relationships, not properties,
+// so Graph returns them only when expanded. The preview is always expanded
+// because the summary tier is built around it; members are expanded only for
+// the raw tier, because expanding them caps the page at 25 chats.
 func NewHandleListChats(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := logging.Logger(ctx)
@@ -72,7 +80,7 @@ func NewHandleListChats(retryCfg graph.RetryConfig, timeout time.Duration) func(
 		var resp models.ChatCollectionResponseable
 		graphErr := graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
-			resp, callErr = client.Me().Chats().Get(timeoutCtx, nil)
+			resp, callErr = client.Me().Chats().Get(timeoutCtx, listChatsRequestConfig(outputMode, teamsPageSize(request)))
 			return callErr
 		})
 		if graphErr != nil {
@@ -98,9 +106,11 @@ func NewHandleListChats(retryCfg graph.RetryConfig, timeout time.Duration) func(
 
 		logger.Debug("graph API response", "endpoint", "GET /me/chats", "count", len(chats))
 
+		more := resp != nil && resp.GetOdataNextLink() != nil
+
 		if outputMode == "text" {
-			logger.Info("tool completed", "duration", time.Since(start), "count", len(chats))
-			return mcp.NewToolResultText(FormatChatsText(chats)), nil
+			logger.Info("tool completed", "duration", time.Since(start), "count", len(chats), "truncated", more)
+			return mcp.NewToolResultText(teamsPagedText(FormatChatsText(chats), "chats", len(chats), more)), nil
 		}
 
 		jsonBytes, err := json.Marshal(chats)
@@ -111,14 +121,30 @@ func NewHandleListChats(retryCfg graph.RetryConfig, timeout time.Duration) func(
 			return mcp.NewToolResultError(fmt.Sprintf("failed to serialize chats: %s", err.Error())), nil
 		}
 
-		logger.Info("tool completed", "duration", time.Since(start), "count", len(chats))
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		logger.Info("tool completed", "duration", time.Since(start), "count", len(chats), "truncated", more)
+		return teamsPagedJSON(string(jsonBytes), "chats", len(chats), more), nil
+	}
+}
+
+// listChatsRequestConfig builds the query for one page of chats: the expands
+// the tier needs, the page size, and the newest-last-message-first ordering.
+func listChatsRequestConfig(outputMode string, top int32) *users.ItemChatsRequestBuilderGetRequestConfiguration {
+	expand := []string{"lastMessagePreview"}
+	if outputMode == "raw" {
+		expand = append(expand, "members")
+	}
+	return &users.ItemChatsRequestBuilderGetRequestConfiguration{
+		QueryParameters: &users.ItemChatsRequestBuilderGetQueryParameters{
+			Expand:  expand,
+			Orderby: []string{"lastMessagePreview/createdDateTime desc"},
+			Top:     &top,
+		},
 	}
 }
 
 // serializeChatCollection projects a chat collection through the tier's
-// serializer, preserving Graph's own order, which puts the most recently active
-// conversations first.
+// serializer, preserving the order Graph returned them in, which the request
+// sets to newest last message first.
 //
 // Parameters:
 //   - resp: the collection response, which may be nil when Graph returned no body.

@@ -159,7 +159,7 @@ func TestContactsDomainRecordedGatedAndFull(t *testing.T) {
 }
 
 // TestTeamsDomainRecordedGatedAndFull asserts that the record carries the teams
-// domain with all thirteen of its verbs and none of them in the default set,
+// domain with all twelve of its verbs and none of them in the default set,
 // each attributed to the teams gate, and that the gate variable itself is
 // enumerated in the record's configuration inventory.
 //
@@ -186,14 +186,14 @@ func TestTeamsDomainRecordedGatedAndFull(t *testing.T) {
 		t.Fatal("the record carries no teams domain; domainOrder omits it")
 	}
 
-	if teams.FullCount != 13 {
-		t.Errorf("teams FullCount = %d, want 13", teams.FullCount)
+	if teams.FullCount != 12 {
+		t.Errorf("teams FullCount = %d, want 12", teams.FullCount)
 	}
 	if teams.DefaultCount != 0 {
 		t.Errorf("teams DefaultCount = %d, want 0; the whole domain is gated", teams.DefaultCount)
 	}
-	if len(teams.Verbs) != 13 {
-		t.Errorf("teams records %d verbs, want 13", len(teams.Verbs))
+	if len(teams.Verbs) != 12 {
+		t.Errorf("teams records %d verbs, want 12", len(teams.Verbs))
 	}
 
 	for _, v := range teams.Verbs {

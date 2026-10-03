@@ -84,7 +84,7 @@ The `teams` domain is off by default, the second of the two opt-in aggregate too
 | Variable | Value | Effect |
 |---|---|---|
 | `OUTLOOK_MCP_TEAMS_ENABLED` | `false` (default) | The `teams` tool is not registered; no Teams OAuth scope is requested |
-| `OUTLOOK_MCP_TEAMS_ENABLED` | `true` | Registers the opt-in aggregate tool `teams` with its read verbs (`teams.search`, `teams.list_chats`, `teams.list_chat_messages`, `teams.get_chat_message`, `teams.list_chat_message_replies`, `teams.list_channel_messages`, `teams.get_channel_message`, `teams.list_channel_message_replies`, `teams.compose_reply`, `teams.get_online_meeting`, `teams.list_transcripts`, `teams.get_transcript`) and the mandatory `teams.help`; requests `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` |
+| `OUTLOOK_MCP_TEAMS_ENABLED` | `true` | Registers the opt-in aggregate tool `teams` with its read verbs (`teams.search`, `teams.list_chats`, `teams.list_chat_messages`, `teams.get_chat_message`, `teams.list_channel_messages`, `teams.get_channel_message`, `teams.list_channel_message_replies`, `teams.compose_reply`, `teams.get_online_meeting`, `teams.list_transcripts`, `teams.get_transcript`) and the mandatory `teams.help`; requests `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Read`, and `OnlineMeetingTranscript.Read.All` |
 
 All four scopes are read scopes. `teams.compose_reply` is named for what it does: it reads the message being answered, quotes it, and hands the prepared text back to the caller. Posting that text is a manual action the user performs in Microsoft Teams; the server cannot post it, because it never holds a send scope.
 
@@ -130,7 +130,7 @@ The server requests scopes incrementally. Expanding mail access after initial co
 
 | Feature | OAuth scope |
 |---|---|
-| Calendar (always active) | `Calendars.ReadWrite` |
+| Calendar (always active) | `Calendars.ReadWrite`; `Calendars.Read.Shared`, because `find_meeting_times` reads the availability of other mailboxes; `User.Read`, to look up the email address of the account |
 | `MAIL_ENABLED=false` (default) | *(none)* |
 | `MAIL_ENABLED=true` | `Mail.Read` |
 | `MAIL_MANAGE_ENABLED=true` (implies `MAIL_ENABLED`) | `Mail.ReadWrite` |

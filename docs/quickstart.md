@@ -231,7 +231,7 @@ Enabling it adds the `Chat.Read`, `ChannelMessage.Read.All`, `OnlineMeetings.Rea
 
 Parameters: `query` (required), `account`, `output`. Each hit names the chat, or the team and channel, it came from. Enumerating teams and channels is not offered; a channel is reached this way. See [Teams channel read is missing an identifier](troubleshooting#teams-channel-identifiers).
 
-**Read a thread** with `list_chats`, `list_chat_messages`, and `list_channel_messages`, then escalate one message with `get_chat_message` or `get_channel_message`. Replies hang under a message and are listed separately, by `list_chat_message_replies` and `list_channel_message_replies`. A message body is returned as a preview by default; pass `output: "raw"` for the whole thing.
+**Read a thread** with `list_chats`, `list_chat_messages`, and `list_channel_messages`, then escalate one message with `get_chat_message` or `get_channel_message`. Replies to a channel post are listed separately, by `list_channel_message_replies`. Each listing reads one page; pass `max_results` to bound it. A message body is returned as a preview by default; pass `output: "raw"` for the whole thing.
 
 **Recap a meeting** by resolving the join URL a calendar event carries:
 > "Summarise yesterday's project sync from its Teams transcript"

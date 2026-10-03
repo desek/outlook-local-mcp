@@ -111,7 +111,7 @@ func buildContactsSearchVerb(c contactsVerbsConfig, rc graph.RetryConfig, wrap f
 	return tools.Verb{
 		Name:        "search",
 		Summary:     "free-text search over saved contacts and relevance-ranked people",
-		Description: "Resolves a name to an email address. Searches personal contacts and relevance-ranked people in one call, and labels every match with the source it came from, so a saved contact is distinguishable from an inferred correspondent. Requires query; optional account and output ('text' by default, 'summary', or 'raw'). Read-only, non-destructive, idempotent, and open-world: it calls Microsoft Graph and writes nothing.",
+		Description: "Resolves a name to an email address. Searches personal contacts and relevance-ranked people in one call, and labels every match with the source it came from, so a saved contact is distinguishable from an inferred correspondent. Requires query; optional account, limit, and output ('text' by default, 'summary', or 'raw'). Each collection is read as one page of at most limit matches (default 25). The verb does not follow further pages. When Graph reports more matches, a second content block says \"more results available\". Read-only, non-destructive, idempotent, and open-world: it calls Microsoft Graph and writes nothing.",
 		Examples: []tools.Example{
 			{Args: map[string]any{"query": "Alex"}, Comment: "resolve a first name to an address"},
 			{Args: map[string]any{"query": "Smith", "output": "summary"}, Comment: "return display names and primary addresses only"},
@@ -129,6 +129,7 @@ func buildContactsSearchVerb(c contactsVerbsConfig, rc graph.RetryConfig, wrap f
 				mcp.Required(),
 				mcp.Description("Free-text search value, typically a name or part of an email address. An empty or whitespace-only value is rejected before any request is issued."),
 			),
+			mcp.WithNumber("limit", mcp.Min(1), mcp.Max(100), mcp.DefaultNumber(25), mcp.Description("Maximum matches read from each collection (saved contacts and ranked people), sent as $top. Default 25, maximum 100; values above 100 are clamped.")),
 			mcp.WithString("account", mcp.Description(contactsAccountDescription)),
 			mcp.WithString("output",
 				mcp.Description(contactsOutputDescription),
@@ -174,7 +175,7 @@ func buildListPeopleVerb(c contactsVerbsConfig, rc graph.RetryConfig, wrap func(
 	return tools.Verb{
 		Name:        "list_people",
 		Summary:     "list relevance-ranked people, most relevant correspondent first",
-		Description: "Lists the people Microsoft Graph ranks as most relevant to the signed-in user, in the order Graph returns them; the order is the answer and is never re-sorted. These are inferred correspondents rather than saved contacts, so a person here may have no contact record. No required parameters; optional account and output ('text' by default, 'summary', or 'raw'). Read-only, non-destructive, idempotent, and open-world: it calls Microsoft Graph and writes nothing.",
+		Description: "Lists the people Microsoft Graph ranks as most relevant to the signed-in user, in the order Graph returns them; the order is the answer and is never re-sorted. These are inferred correspondents rather than saved contacts, so a person here may have no contact record. No required parameters; optional account, limit, skip, and output ('text' by default, 'summary', or 'raw'). Returns at most limit people (default 10, maximum 100), starting after skip. When Graph reports a further page, a second content block says \"more results available\" and gives the skip value for the next page. Read-only, non-destructive, idempotent, and open-world: it calls Microsoft Graph and writes nothing.",
 		Examples: []tools.Example{
 			{Args: map[string]any{}, Comment: "list the most relevant people"},
 			{Args: map[string]any{"output": "summary"}, Comment: "return display names and primary addresses only"},
@@ -188,6 +189,8 @@ func buildListPeopleVerb(c contactsVerbsConfig, rc graph.RetryConfig, wrap func(
 			mcp.WithOpenWorldHintAnnotation(true),
 		},
 		Schema: []mcp.ToolOption{
+			mcp.WithNumber("limit", mcp.Min(1), mcp.Max(100), mcp.DefaultNumber(10), mcp.Description("Maximum people to return, sent as $top. Default 10, maximum 100; values above 100 are clamped.")),
+			mcp.WithNumber("skip", mcp.Min(0), mcp.DefaultNumber(0), mcp.Description("Number of ranked people to skip before the returned page, sent as $skip. Use the previous skip plus limit to read the next page.")),
 			mcp.WithString("account", mcp.Description(contactsAccountDescription)),
 			mcp.WithString("output",
 				mcp.Description(contactsOutputDescription),

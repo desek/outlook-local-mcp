@@ -70,9 +70,9 @@ func teamsSchemaProperties(opts []mcp.ToolOption) map[string]any {
 	return mcp.NewTool("_introspect", opts...).InputSchema.Properties
 }
 
-// TestTeamsVerbsRegisterThirteen asserts the domain registers exactly the
-// thirteen verbs the inventory states, in the order it states them. The set is
-// the scope boundary: a fourteenth verb appearing here is a scope expansion,
+// TestTeamsVerbsRegisterTwelve asserts the domain registers exactly the
+// twelve verbs the inventory states, in the order it states them. The set is
+// the scope boundary: a thirteenth verb appearing here is a scope expansion,
 // not a detail.
 //
 // The order is asserted as well as the membership, because registration order
@@ -81,7 +81,7 @@ func teamsSchemaProperties(opts []mcp.ToolOption) map[string]any {
 // the entry point, then chats, channels, the reply, and the meeting-to-transcript
 // path; a comparison against a sorted list would accept any permutation of that
 // and leave the grouping ungraded.
-func TestTeamsVerbsRegisterThirteen(t *testing.T) {
+func TestTeamsVerbsRegisterTwelve(t *testing.T) {
 	verbs := buildTestTeamsVerbs(t)
 
 	got := make([]string, 0, len(verbs))
@@ -95,7 +95,6 @@ func TestTeamsVerbsRegisterThirteen(t *testing.T) {
 		"list_chats",
 		"list_chat_messages",
 		"get_chat_message",
-		"list_chat_message_replies",
 		"list_channel_messages",
 		"get_channel_message",
 		"list_channel_message_replies",
@@ -193,7 +192,7 @@ func TestComposeReply_DeclaresNoOutputParameter(t *testing.T) {
 
 // TestTeamsReadVerbsDeclareOutput asserts that every verb which does project a
 // Graph resource declares the output parameter, so the tier rule is graded in
-// both directions: compose_reply and help have none, and the eleven reads all
+// both directions: compose_reply and help have none, and the ten reads all
 // do. The cases are derived from the built slice, so a verb added later is
 // covered without anyone extending a list here.
 func TestTeamsReadVerbsDeclareOutput(t *testing.T) {
@@ -209,8 +208,8 @@ func TestTeamsReadVerbsDeclareOutput(t *testing.T) {
 			t.Errorf("verb %q declares no output parameter; a resource read implements all three tiers", v.Name)
 		}
 	}
-	if checked != 11 {
-		t.Errorf("the check selected %d resource reads, want 11; the derivation is broken, not the registry", checked)
+	if checked != 10 {
+		t.Errorf("the check selected %d resource reads, want 10; the derivation is broken, not the registry", checked)
 	}
 }
 
@@ -289,6 +288,27 @@ func TestTeamsVerbsCarryDomainQualifiedIdentity(t *testing.T) {
 		}
 		if !seen["teams."+v.Name] {
 			t.Errorf("no audit record carries the identity %q; the middleware chain was wrapped under a different string", "teams."+v.Name)
+		}
+	}
+}
+
+// TestTeamsPagingParametersDeclared asserts that the verbs reading one Graph
+// page declare the paging parameters their handlers read, so a caller can see
+// from the schema how to bound or advance a page.
+func TestTeamsPagingParametersDeclared(t *testing.T) {
+	want := map[string][]string{
+		"search":                       {"max_results", "from"},
+		"list_chats":                   {"max_results"},
+		"list_chat_messages":           {"max_results"},
+		"list_channel_messages":        {"max_results"},
+		"list_channel_message_replies": {"max_results"},
+	}
+	for _, v := range buildTestTeamsVerbs(t) {
+		props := teamsSchemaProperties(v.Schema)
+		for _, p := range want[v.Name] {
+			if _, ok := props[p]; !ok {
+				t.Errorf("teams.%s does not declare %q", v.Name, p)
+			}
 		}
 	}
 }

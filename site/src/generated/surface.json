@@ -411,12 +411,6 @@
           "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
         },
         {
-          "name": "list_chat_message_replies",
-          "summary": "list the replies hanging under one chat message",
-          "readOnly": true,
-          "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
-        },
-        {
           "name": "list_channel_messages",
           "summary": "list the top-level posts in one channel",
           "readOnly": true,
@@ -459,12 +453,12 @@
           "gate": "OUTLOOK_MCP_TEAMS_ENABLED"
         }
       ],
-      "fullCount": 13,
+      "fullCount": 12,
       "defaultCount": 0
     }
   ],
   "totals": {
-    "fullCount": 70,
+    "fullCount": 69,
     "defaultCount": 38
   },
   "config": [

@@ -102,7 +102,6 @@ var verbInventoryGolden = []string{
 	"teams.help ro=true de=false id=true ow=false",
 	"teams.list_channel_message_replies ro=true de=false id=true ow=true",
 	"teams.list_channel_messages ro=true de=false id=true ow=true",
-	"teams.list_chat_message_replies ro=true de=false id=true ow=true",
 	"teams.list_chat_messages ro=true de=false id=true ow=true",
 	"teams.list_chats ro=true de=false id=true ow=true",
 	"teams.list_transcripts ro=true de=false id=true ow=true",

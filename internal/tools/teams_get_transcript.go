@@ -20,6 +20,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -28,7 +29,9 @@ import (
 	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
+	abstractions "github.com/microsoft/kiota-abstractions-go"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
+	"github.com/microsoftgraph/msgraph-sdk-go/models/odataerrors"
 	"github.com/microsoftgraph/msgraph-sdk-go/users"
 )
 
@@ -36,11 +39,35 @@ import (
 // separately, and each names the verb that produces it, because a caller holding
 // one of the two cannot derive the other.
 const (
-	getTranscriptAccountFix      = "no account is selected: run the account domain's list operation and retry naming one with the account parameter"
-	getTranscriptMeetingIDFix    = "supply meeting_id as the id returned by the teams get_online_meeting operation, which resolves the join URL a calendar get_event result carries"
-	getTranscriptTranscriptIDFix = "supply transcript_id as the id field of a teams list_transcripts entry for this meeting"
-	getTranscriptTimeoutFix      = "retry, and if the deadline is hit again confirm both identifiers with the teams list_transcripts operation"
-	getTranscriptGraphFix        = "check that meeting_id and transcript_id name a transcript of a meeting this account can read and that consent was granted after OUTLOOK_MCP_TEAMS_ENABLED was set, so OnlineMeetingTranscript.Read.All was requested, then retry; see docs/troubleshooting.md#authentication-failures"
+	getTranscriptAccountFix        = "no account is selected: run the account domain's list operation and retry naming one with the account parameter"
+	getTranscriptMeetingIDFix      = "supply meeting_id as the id returned by the teams get_online_meeting operation, which resolves the join URL a calendar get_event result carries"
+	getTranscriptTranscriptIDFix   = "supply transcript_id as the id field of a teams list_transcripts entry for this meeting"
+	getTranscriptTimeoutFix        = "retry, and if the deadline is hit again confirm both identifiers with the teams list_transcripts operation"
+	getTranscriptAccessDisabledFix = transcriptAccessDisabledFix
+	getTranscriptGraphFix          = "check that meeting_id and transcript_id name a transcript of a meeting this account can read and that consent was granted after OUTLOOK_MCP_TEAMS_ENABLED was set, so OnlineMeetingTranscript.Read.All was requested, then retry; see docs/troubleshooting.md#authentication-failures"
+)
+
+// transcriptAccessDisabledFix is the correction for a tenant that has turned
+// off Graph API access to meeting transcripts. The cause is a tenant policy, not
+// this account's consent or the request, so the text says a retry cannot work
+// and names the administrator action instead. It is shared with the transcript
+// listing, which receives the same refusal for the same reason.
+const transcriptAccessDisabledFix = "the tenant administrator has turned off Graph API access to meeting transcripts, and no retry, consent, or request change can work around it; ask a Teams administrator to re-enable transcript API access in the Teams admin center or with Set-CsTeamsMeetingConfiguration, then verify by running the teams list_transcripts operation for a meeting that has a transcript"
+
+// Inner-error codes Graph returns on a 403 from the transcript endpoints. The
+// handlers branch on these codes, not the message text, because the message is
+// not a stable contract.
+const (
+	innerCodeSpeakerAttributionNotAllowed     = "SpeakerAttributionNotAllowed"
+	innerCodeGraphAccessToTranscriptsDisabled = "GraphAccessToTranscriptsDisabled"
+)
+
+// The transcript content formats. WEBVTT carries speaker names and is the
+// documented default; the plain transcript format is the unattributed fallback a
+// tenant that disables speaker attribution still serves.
+const (
+	transcriptFormatVTT          = "text/vtt"
+	transcriptFormatUnattributed = "application/vnd.microsoft.graph.transcript+text"
 )
 
 // The two endpoints this verb reads, stated once each so a failure names the
@@ -114,11 +141,23 @@ func NewHandleGetTranscript(retryCfg graph.RetryConfig, timeout time.Duration) f
 		logger.Debug("graph API request", "endpoint", getTranscriptContentEndpoint)
 
 		var content []byte
-		graphErr = graph.RetryGraphCall(ctx, retryCfg, func() error {
-			var callErr error
-			content, callErr = transcriptContent(timeoutCtx, builder)
-			return callErr
-		})
+		format := transcriptFormatVTT
+		readContent := func() error {
+			return graph.RetryGraphCall(ctx, retryCfg, func() error {
+				var callErr error
+				content, callErr = transcriptContent(timeoutCtx, builder, format)
+				return callErr
+			})
+		}
+		graphErr = readContent()
+		// A tenant that disables speaker attribution refuses the attributed
+		// format; the documented recovery is one retry in the unattributed one.
+		if graphErr != nil && transcriptInnerErrorCode(graphErr) == innerCodeSpeakerAttributionNotAllowed {
+			logger.Warn("speaker attribution not allowed, retrying unattributed",
+				"endpoint", getTranscriptContentEndpoint, "format", transcriptFormatUnattributed)
+			format = transcriptFormatUnattributed
+			graphErr = readContent()
+		}
 		if graphErr != nil {
 			return transcriptGraphFailure(ctx, logger, getTranscriptContentEndpoint, timeout, start, graphErr), nil
 		}
@@ -128,6 +167,10 @@ func NewHandleGetTranscript(retryCfg graph.RetryConfig, timeout time.Duration) f
 			"content_bytes", len(content))
 
 		result := SerializeTranscript(transcript, content, outputMode == "raw")
+		if len(result) > 0 {
+			// The format tells a reader whether speaker names can be present.
+			result["contentFormat"] = format
+		}
 
 		if outputMode == "text" {
 			logger.Info("tool completed", "duration", time.Since(start))
@@ -154,10 +197,33 @@ func NewHandleGetTranscript(retryCfg graph.RetryConfig, timeout time.Duration) f
 // Parameters:
 //   - ctx: the request context, already carrying the call's deadline.
 //   - builder: the request builder addressing the transcript.
+//   - format: the media type sent as Accept, which selects the transcript
+//     format; without it the SDK sends a generic default that does not name one.
 //
 // Returns the content bytes, which are empty when the transcript holds none.
-func transcriptContent(ctx context.Context, builder *users.ItemOnlineMeetingsItemTranscriptsCallTranscriptItemRequestBuilder) ([]byte, error) {
-	return builder.Content().Get(ctx, nil)
+func transcriptContent(ctx context.Context, builder *users.ItemOnlineMeetingsItemTranscriptsCallTranscriptItemRequestBuilder, format string) ([]byte, error) {
+	headers := abstractions.NewRequestHeaders()
+	headers.Add("Accept", format)
+	return builder.Content().Get(ctx, &users.ItemOnlineMeetingsItemTranscriptsItemContentRequestBuilderGetRequestConfiguration{Headers: headers})
+}
+
+// transcriptInnerErrorCode returns the innerError.code of a Graph OData error,
+// or "" when there is none. The SDK models innerError without a code field, so
+// the code arrives in the inner error's additional data.
+func transcriptInnerErrorCode(err error) string {
+	var odataErr *odataerrors.ODataError
+	if !errors.As(err, &odataErr) || odataErr.GetErrorEscaped() == nil || odataErr.GetErrorEscaped().GetInnerError() == nil {
+		return ""
+	}
+	switch code := odataErr.GetErrorEscaped().GetInnerError().GetAdditionalData()["code"].(type) {
+	case *string:
+		if code != nil {
+			return *code
+		}
+	case string:
+		return code
+	}
+	return ""
 }
 
 // transcriptGraphFailure renders a failed Graph call as a tool error carrying
@@ -187,11 +253,15 @@ func transcriptGraphFailure(ctx context.Context, logger *slog.Logger, endpoint s
 		return mcp.NewToolResultError(fmt.Sprintf("%s: %s",
 			graph.TimeoutErrorMessage(int(timeout.Seconds())), getTranscriptTimeoutFix))
 	}
+	fix := getTranscriptGraphFix
+	if transcriptInnerErrorCode(graphErr) == innerCodeGraphAccessToTranscriptsDisabled {
+		fix = getTranscriptAccessDisabledFix
+	}
 	logger.Error("graph API call failed",
 		"endpoint", endpoint,
 		"error", graph.FormatGraphError(graphErr),
-		"fix", getTranscriptGraphFix,
+		"fix", fix,
 		"duration", time.Since(start))
 	return mcp.NewToolResultError(fmt.Sprintf("%s: %s",
-		graph.RedactGraphError(graphErr), getTranscriptGraphFix))
+		graph.RedactGraphError(graphErr), fix))
 }

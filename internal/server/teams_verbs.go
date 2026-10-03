@@ -11,7 +11,7 @@
 // the file declares no write chain and no ReadOnlyGuard layer: there is nothing
 // for the guard to block.
 //
-// @agents-index: builds the thirteen read verbs of the opt-in teams domain tool.
+// @agents-index: builds the twelve read verbs of the opt-in teams domain tool.
 package server
 
 import (
@@ -82,7 +82,7 @@ func teamsReadAnnotations() []mcp.ToolOption {
 }
 
 // teamsOutputParam returns the output tier parameter declared by each of the
-// eleven resource reads. compose_reply and help do not declare it.
+// ten resource reads. compose_reply and help do not declare it.
 func teamsOutputParam() mcp.ToolOption {
 	return mcp.WithString("output",
 		mcp.Description(teamsOutputDescription),
@@ -94,7 +94,7 @@ func teamsOutputParam() mcp.ToolOption {
 // domain aggregate tool and returns a pointer to an initially empty
 // VerbRegistry.
 //
-// The slice is exactly thirteen verbs: help, the eleven resource reads, and
+// The slice is exactly twelve verbs: help, the ten resource reads, and
 // compose_reply, which reads the message it quotes and posts nothing. Each
 // verb's Handler is pre-wrapped with authMW, accountResolverMW, observability,
 // and audit middleware under the fully-qualified identity "teams.<verb>" with
@@ -131,7 +131,6 @@ func buildTeamsVerbs(c teamsVerbsConfig) ([]tools.Verb, *tools.VerbRegistry) {
 		buildListChatsVerb(c, rc, wrap),
 		buildListChatMessagesVerb(c, rc, wrap),
 		buildGetChatMessageVerb(c, rc, wrap),
-		buildListChatMessageRepliesVerb(c, rc, wrap),
 		buildListChannelMessagesVerb(c, rc, wrap),
 		buildGetChannelMessageVerb(c, rc, wrap),
 		buildListChannelMessageRepliesVerb(c, rc, wrap),
@@ -150,7 +149,7 @@ func buildTeamsSearchVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap func(st
 	return tools.Verb{
 		Name:        "search",
 		Summary:     "free-text search over Teams chat and channel messages",
-		Description: "Searches Microsoft Teams messages and returns ranked hits, each labelled with the chat or the team and channel it came from, so the identifiers every other verb in this domain requires come from here. Enumerating teams and channels is not offered; this is how a channel is resolved. Requires query; optional account and output ('text' by default, 'summary', or 'raw'). " + teamsReadClosing,
+		Description: "Searches Microsoft Teams messages and returns ranked hits, each labelled with the chat or the team and channel it came from, so the identifiers every other verb in this domain requires come from here. Enumerating teams and channels is not offered; this is how a channel is resolved. Each hit carries the search service's snippet as its preview; the search service returns no message body, so read the full body with get_chat_message or get_channel_message using the hit's identifiers. The JSON tiers return {hits, moreResultsAvailable}; when more results are available, page with from and max_results. Requires query; optional account, max_results (1 to 500, default 25), from (default 0) and output ('text' by default, 'summary', or 'raw'). " + teamsReadClosing,
 		Examples: []tools.Example{
 			{Args: map[string]any{"query": "release checklist"}, Comment: "find the messages discussing a topic"},
 			{Args: map[string]any{"query": "from:alex budget", "output": "summary"}, Comment: "narrow the hits and return identifiers only"},
@@ -163,6 +162,12 @@ func buildTeamsSearchVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap func(st
 				mcp.Required(),
 				mcp.Description("Free-text search value. An empty or whitespace-only value is rejected before any request is issued."),
 			),
+			mcp.WithNumber("max_results", mcp.Min(1), mcp.Max(500), mcp.DefaultNumber(25),
+				mcp.Description("Maximum hits to return, a whole number from 1 to 500. Default 25."),
+			),
+			mcp.WithNumber("from", mcp.Min(0), mcp.DefaultNumber(0),
+				mcp.Description("Zero-based count of hits to skip, for paging. Pass the previous from plus the previous max_results to read the next page. Default 0."),
+			),
 			mcp.WithString("account", mcp.Description(teamsAccountDescription)),
 			teamsOutputParam(),
 		},
@@ -174,7 +179,7 @@ func buildListChatsVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap func(stri
 	return tools.Verb{
 		Name:        "list_chats",
 		Summary:     "list the chats the signed-in user is a member of",
-		Description: "Lists the signed-in user's Teams conversations with enough of each to choose between them, including the preview of its last message, which is often all that distinguishes one untitled one-to-one chat from another. Reading a single chat by identifier is not offered; this listing is how a chat identifier is resolved without a search. No required parameters; optional account and output ('text' by default, 'summary', or 'raw'). " + teamsReadClosing,
+		Description: "Lists the signed-in user's Teams conversations with enough of each to choose between them, including the preview of its last message, which is often all that distinguishes one untitled one-to-one chat from another. Reading a single chat by identifier is not offered; this listing is how a chat identifier is resolved without a search. No required parameters; optional account and output ('text' by default, 'summary', or 'raw'). Reads one page only. When Graph holds more, the text tier says 'shown on this page' with a 'truncated: true' note, and the JSON tiers add that note as a second content block. Ordered by the newest last message first. " + teamsReadClosing,
 		Examples: []tools.Example{
 			{Args: map[string]any{}, Comment: "list the user's chats"},
 			{Args: map[string]any{"output": "summary"}, Comment: "return chat identifiers and topics only"},
@@ -183,6 +188,7 @@ func buildListChatsVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap func(stri
 		Handler:     wrap("teams.list_chats", "read", tools.NewHandleListChats(rc, c.timeout)),
 		Annotations: teamsReadAnnotations(),
 		Schema: []mcp.ToolOption{
+			mcp.WithNumber("max_results", mcp.Min(1), mcp.Max(50), mcp.DefaultNumber(50), mcp.Description("Maximum chats to return in the single page read (1-50, default 50; Graph returns at most 25 when output=raw because members are expanded).")),
 			mcp.WithString("account", mcp.Description(teamsAccountDescription)),
 			teamsOutputParam(),
 		},
@@ -194,7 +200,7 @@ func buildListChatMessagesVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap fu
 	return tools.Verb{
 		Name:        "list_chat_messages",
 		Summary:     "list the messages in one chat, each with a body preview",
-		Description: "Lists the messages in one Teams conversation, each with a body preview, so the caller can decide which single message is worth a full read rather than escalating every message in the thread. Use list_chats or search to obtain a chat identifier. Requires chat_id; optional account and output ('text' by default, 'summary', or 'raw'). " + teamsReadClosing,
+		Description: "Lists the messages in one Teams conversation, each with a body preview, so the caller can decide which single message is worth a full read rather than escalating every message in the thread. Use list_chats or search to obtain a chat identifier. Requires chat_id; optional account and output ('text' by default, 'summary', or 'raw'). Reads one page only. When Graph holds more, the text tier says 'shown on this page' with a 'truncated: true' note, and the JSON tiers add that note as a second content block. Newest created first. System events (members added, topic changed) are labelled 'System event: <type>' with eventType set. " + teamsReadClosing,
 		Examples: []tools.Example{
 			{Args: map[string]any{"chat_id": "19:abc...@thread.v2"}, Comment: "read a conversation returned by list_chats"},
 		},
@@ -203,6 +209,7 @@ func buildListChatMessagesVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap fu
 		Annotations: teamsReadAnnotations(),
 		Schema: []mcp.ToolOption{
 			mcp.WithString("chat_id", mcp.Required(), mcp.Description(teamsChatIDDescription)),
+			mcp.WithNumber("max_results", mcp.Min(1), mcp.Max(50), mcp.DefaultNumber(50), mcp.Description("Maximum messages to return in the single page read (1-50, default 50).")),
 			mcp.WithString("account", mcp.Description(teamsAccountDescription)),
 			teamsOutputParam(),
 		},
@@ -231,33 +238,12 @@ func buildGetChatMessageVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap func
 	}
 }
 
-// buildListChatMessageRepliesVerb constructs the list_chat_message_replies Verb.
-func buildListChatMessageRepliesVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
-	return tools.Verb{
-		Name:        "list_chat_message_replies",
-		Summary:     "list the replies hanging under one chat message",
-		Description: "Lists the replies under one chat message. A thread listing returns top-level messages only, so the answers to a question are reachable only here; each reply names the parent it answers. Requires chat_id and message_id; optional account and output ('text' by default, 'summary', or 'raw'). " + teamsReadClosing,
-		Examples: []tools.Example{
-			{Args: map[string]any{"chat_id": "19:abc...@thread.v2", "message_id": "1700000000000"}, Comment: "read the answers under a question"},
-		},
-		SeeDocs:     []string{"concepts#output-tiers", "concepts#teams-gating", "troubleshooting#teams-disabled"},
-		Handler:     wrap("teams.list_chat_message_replies", "read", tools.NewHandleListChatMessageReplies(rc, c.timeout)),
-		Annotations: teamsReadAnnotations(),
-		Schema: []mcp.ToolOption{
-			mcp.WithString("chat_id", mcp.Required(), mcp.Description(teamsChatIDDescription)),
-			mcp.WithString("message_id", mcp.Required(), mcp.Description("The identifier of the parent message whose replies are read.")),
-			mcp.WithString("account", mcp.Description(teamsAccountDescription)),
-			teamsOutputParam(),
-		},
-	}
-}
-
 // buildListChannelMessagesVerb constructs the list_channel_messages Verb.
 func buildListChannelMessagesVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap func(string, string, mcpserver.ToolHandlerFunc) tools.Handler) tools.Verb {
 	return tools.Verb{
 		Name:        "list_channel_messages",
 		Summary:     "list the top-level posts in one channel",
-		Description: "Lists the thread openers in one Teams channel; the answers under each are reached through list_channel_message_replies, so a caller scanning a channel is not handed every reply in the team at once. A channel is addressed by both identifiers together, obtained from a search hit. Requires team_id and channel_id; optional account and output ('text' by default, 'summary', or 'raw'). " + teamsReadClosing,
+		Description: "Lists the thread openers in one Teams channel; the answers under each are reached through list_channel_message_replies, so a caller scanning a channel is not handed every reply in the team at once. A channel is addressed by both identifiers together, obtained from a search hit. Requires team_id and channel_id; optional account and output ('text' by default, 'summary', or 'raw'). Reads one page only. When Graph holds more, the text tier says 'shown on this page' with a 'truncated: true' note, and the JSON tiers add that note as a second content block. Ordered by the last activity of each thread. Older threads are reached through teams search. " + teamsReadClosing,
 		Examples: []tools.Example{
 			{Args: map[string]any{"team_id": "b1c2...", "channel_id": "19:def...@thread.tacv2"}, Comment: "scan a channel's threads"},
 		},
@@ -267,6 +253,7 @@ func buildListChannelMessagesVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap
 		Schema: []mcp.ToolOption{
 			mcp.WithString("team_id", mcp.Required(), mcp.Description(teamsTeamIDDescription)),
 			mcp.WithString("channel_id", mcp.Required(), mcp.Description(teamsChannelIDDescription)),
+			mcp.WithNumber("max_results", mcp.Min(1), mcp.Max(50), mcp.DefaultNumber(50), mcp.Description("Maximum posts to return in the single page read (1-50, default 50).")),
 			mcp.WithString("account", mcp.Description(teamsAccountDescription)),
 			teamsOutputParam(),
 		},
@@ -302,7 +289,7 @@ func buildListChannelMessageRepliesVerb(c teamsVerbsConfig, rc graph.RetryConfig
 	return tools.Verb{
 		Name:        "list_channel_message_replies",
 		Summary:     "list the replies hanging under one channel post",
-		Description: "Lists the replies under one channel post. A channel listing returns thread openers only, so the discussion under a post is reachable only here; each reply names the parent it answers. Requires team_id, channel_id, and message_id; optional account and output ('text' by default, 'summary', or 'raw'). " + teamsReadClosing,
+		Description: "Lists the replies under one channel post. A channel listing returns thread openers only, so the discussion under a post is reachable only here; each reply names the parent it answers. Requires team_id, channel_id, and message_id; optional account and output ('text' by default, 'summary', or 'raw'). Reads one page only. When Graph holds more, the text tier says 'shown on this page' with a 'truncated: true' note, and the JSON tiers add that note as a second content block. " + teamsReadClosing,
 		Examples: []tools.Example{
 			{Args: map[string]any{"team_id": "b1c2...", "channel_id": "19:def...@thread.tacv2", "message_id": "1700000000000"}, Comment: "read the discussion under a post"},
 		},
@@ -313,6 +300,7 @@ func buildListChannelMessageRepliesVerb(c teamsVerbsConfig, rc graph.RetryConfig
 			mcp.WithString("team_id", mcp.Required(), mcp.Description(teamsTeamIDDescription)),
 			mcp.WithString("channel_id", mcp.Required(), mcp.Description(teamsChannelIDDescription)),
 			mcp.WithString("message_id", mcp.Required(), mcp.Description("The identifier of the parent post whose replies are read.")),
+			mcp.WithNumber("max_results", mcp.Min(1), mcp.Max(50), mcp.DefaultNumber(50), mcp.Description("Maximum replies to return in the single page read (1-50, default 50).")),
 			mcp.WithString("account", mcp.Description(teamsAccountDescription)),
 			teamsOutputParam(),
 		},
@@ -398,7 +386,7 @@ func buildGetTranscriptVerb(c teamsVerbsConfig, rc graph.RetryConfig, wrap func(
 	return tools.Verb{
 		Name:        "get_transcript",
 		Summary:     "get one transcript; the full WEBVTT text requires output=raw",
-		Description: "Reads one meeting transcript: its metadata and a short preview of its WEBVTT text. The full text, which can be very large, is returned only under output=raw, so decide from the preview whether the full fetch is warranted. Requires meeting_id and transcript_id; optional account and output ('text' by default, 'summary', or 'raw'). " + teamsReadClosing,
+		Description: "Reads one meeting transcript: its metadata and a short preview of its WEBVTT text. The full text, which can be very large, is returned only under output=raw, so decide from the preview whether the full fetch is warranted. The result carries contentFormat: text/vtt is WEBVTT with speaker names; application/vnd.microsoft.graph.transcript+text means the tenant does not allow speaker attribution, so the text has no speaker names. Requires meeting_id and transcript_id; optional account and output ('text' by default, 'summary', or 'raw'). " + teamsReadClosing,
 		Examples: []tools.Example{
 			{Args: map[string]any{"meeting_id": "MSpkYzE3Njc0Yy04MWQ5...", "transcript_id": "VjIjIzE0..."}, Comment: "preview a transcript listed by list_transcripts"},
 			{Args: map[string]any{"meeting_id": "MSpkYzE3Njc0Yy04MWQ5...", "transcript_id": "VjIjIzE0...", "output": "raw"}, Comment: "escalate to the full WEBVTT text"},

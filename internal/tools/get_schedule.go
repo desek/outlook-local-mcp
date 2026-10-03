@@ -23,6 +23,7 @@ import (
 	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
+	abstractions "github.com/microsoft/kiota-abstractions-go"
 	"github.com/microsoftgraph/msgraph-sdk-go/users"
 )
 
@@ -31,6 +32,25 @@ import (
 // naming too many mailboxes is told the limit rather than shown a Graph error
 // that does not name it.
 const maxScheduleMailboxes = 20
+
+// maxScheduleWindow is the service's documented ceiling on the queried period,
+// which must be shorter than 62 days. It is enforced here for the same reason as
+// the mailbox ceiling: the caller is told the limit instead of an unnamed error.
+const maxScheduleWindow = 62 * 24 * time.Hour
+
+// getScheduleWindowFix is the correction for a window that is inverted, empty,
+// or too long, naming both bounds so the caller knows what to change.
+const getScheduleWindowFix = "set end_datetime later than start_datetime and keep the window shorter than 62 days, splitting a longer period across several calls, then verify each call returns schedules"
+
+// scheduleDatetimeLayouts mirrors the formats the validate package accepts, so
+// a bound that passed validation can be parsed for the window checks.
+var scheduleDatetimeLayouts = []string{
+	"2006-01-02T15:04:05.000Z07:00",
+	"2006-01-02T15:04:05.000Z",
+	time.RFC3339,
+	"2006-01-02T15:04:05Z",
+	"2006-01-02T15:04:05",
+}
 
 // Corrections appended to the refusals this verb delegates to a shared helper.
 // The timeout helper names the deadline, the redactor returns Graph's own
@@ -83,7 +103,8 @@ type GetScheduleResponse struct {
 //
 // The handler refuses every invalid input before issuing any Graph request: a
 // missing or malformed mailbox list, more mailboxes than the service accepts, a
-// window that resolves to nothing, a malformed bound, and an out-of-bound
+// window that resolves to nothing, a malformed bound, an inverted window, a
+// window of 62 days or longer, and an out-of-bound
 // availability view interval.
 func NewHandleGetSchedule(retryCfg graph.RetryConfig, timeout time.Duration, defaultTimezone string) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -140,6 +161,12 @@ func NewHandleGetSchedule(retryCfg graph.RetryConfig, timeout time.Duration, def
 			"end_datetime", endDatetime,
 			"availability_view_interval", interval)
 
+		// Without this header Graph returns every item's start and end in UTC,
+		// while the timezone parameter promises times in the window's zone.
+		headers := abstractions.NewRequestHeaders()
+		headers.Add("Prefer", fmt.Sprintf("outlook.timezone=\"%s\"", windowTimezone))
+		cfg := &users.ItemCalendarGetScheduleRequestBuilderPostRequestConfiguration{Headers: headers}
+
 		timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
 		defer cancel()
 
@@ -148,7 +175,7 @@ func NewHandleGetSchedule(retryCfg graph.RetryConfig, timeout time.Duration, def
 		var resp users.ItemCalendarGetSchedulePostResponseable
 		graphErr := graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
-			resp, callErr = client.Me().Calendar().GetSchedule().PostAsGetSchedulePostResponse(timeoutCtx, body, nil)
+			resp, callErr = client.Me().Calendar().GetSchedule().PostAsGetSchedulePostResponse(timeoutCtx, body, cfg)
 			return callErr
 		})
 		if graphErr != nil {
@@ -294,7 +321,39 @@ func resolveScheduleWindow(request mcp.CallToolRequest, defaultTimezone string) 
 	if err := validate.ValidateDatetime(endDatetime, "end_datetime"); err != nil {
 		return "", "", err
 	}
+	if err := checkScheduleWindowSpan(startDatetime, endDatetime); err != nil {
+		return "", "", err
+	}
 	return startDatetime, endDatetime, nil
+}
+
+// checkScheduleWindowSpan refuses a window whose end is not after its start, or
+// whose length reaches the service's 62-day ceiling, before any request is sent.
+// Both bounds have already passed validation, so a parse failure is reported
+// rather than silently accepted.
+func checkScheduleWindowSpan(startDatetime, endDatetime string) error {
+	startTime, okStart := parseScheduleDatetime(startDatetime)
+	endTime, okEnd := parseScheduleDatetime(endDatetime)
+	if !okStart || !okEnd {
+		return fmt.Errorf("start_datetime %q or end_datetime %q could not be parsed: %s", startDatetime, endDatetime, getScheduleWindowFix)
+	}
+	if !endTime.After(startTime) {
+		return fmt.Errorf("end_datetime %q is not later than start_datetime %q: %s", endDatetime, startDatetime, getScheduleWindowFix)
+	}
+	if endTime.Sub(startTime) >= maxScheduleWindow {
+		return fmt.Errorf("the window from start_datetime %q to end_datetime %q is not shorter than the 62-day ceiling the service accepts: %s", startDatetime, endDatetime, getScheduleWindowFix)
+	}
+	return nil
+}
+
+// parseScheduleDatetime parses value with the first accepted layout that fits.
+func parseScheduleDatetime(value string) (time.Time, bool) {
+	for _, layout := range scheduleDatetimeLayouts {
+		if t, err := time.Parse(layout, value); err == nil {
+			return t, true
+		}
+	}
+	return time.Time{}, false
 }
 
 // scheduleMailboxLabel returns the mailbox address a serialized schedule record

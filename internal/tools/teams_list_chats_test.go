@@ -13,6 +13,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // teamsChatsResponseJSON is a canned chats response carrying a named group chat
@@ -123,5 +125,46 @@ func TestListChats_GraphFailureCarriesFix(t *testing.T) {
 	}
 	if !strings.Contains(resultText(t, result), "Chat.Read") {
 		t.Errorf("failure carries no correction: %q", resultText(t, result))
+	}
+}
+
+// TestListChats_RequestsExpandOrderAndTop validates the recorded query: the
+// preview is a relationship Graph omits unless expanded, the ordering is the
+// only one the collection supports, and the page is bounded.
+func TestListChats_RequestsExpandOrderAndTop(t *testing.T) {
+	_, q, _ := runTeamsQueryHandler(t, teamsChatsResponseJSON, NewHandleListChats, map[string]any{"max_results": float64(10)})
+	if got := q.Get("$expand"); got != "lastMessagePreview" {
+		t.Errorf("$expand = %q, want lastMessagePreview without members", got)
+	}
+	if got := q.Get("$orderby"); got != "lastMessagePreview/createdDateTime desc" {
+		t.Errorf("$orderby = %q", got)
+	}
+	if got := q.Get("$top"); got != "10" {
+		t.Errorf("$top = %q, want 10", got)
+	}
+}
+
+// TestListChats_RawExpandsMembers validates that only the raw tier, which
+// returns members, pays for expanding them.
+func TestListChats_RawExpandsMembers(t *testing.T) {
+	_, q, _ := runTeamsQueryHandler(t, teamsChatsResponseJSON, NewHandleListChats, map[string]any{"output": "raw"})
+	if got := q.Get("$expand"); got != "lastMessagePreview,members" {
+		t.Errorf("$expand = %q, want lastMessagePreview,members", got)
+	}
+	if got := q.Get("$top"); got != "50" {
+		t.Errorf("$top = %q, want the default 50", got)
+	}
+}
+
+// TestListChats_MarksTruncatedPage validates that a next link turns into a
+// truncation note in both the JSON and text tiers.
+func TestListChats_MarksTruncatedPage(t *testing.T) {
+	result, _, _ := runTeamsQueryHandler(t, withNextLink(teamsChatsResponseJSON), NewHandleListChats, map[string]any{"output": "summary"})
+	if len(result.Content) != 2 || !strings.Contains(result.Content[1].(mcp.TextContent).Text, "truncated: true") {
+		t.Errorf("summary result lacks the truncation note: %v", result.Content)
+	}
+	text, _, _ := runTeamsQueryHandler(t, withNextLink(teamsChatsResponseJSON), NewHandleListChats, map[string]any{"output": "text"})
+	if got := resultText(t, text); strings.Contains(got, "total.") || !strings.Contains(got, "truncated: true") {
+		t.Errorf("text tier claims a total on a truncated page: %q", got)
 	}
 }

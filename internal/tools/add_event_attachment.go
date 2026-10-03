@@ -117,6 +117,13 @@ func NewHandleAddEventAttachment(retryCfg graph.RetryConfig, timeout time.Durati
 		// text, because the decoded length is what the service stores and what
 		// the handler holds in memory.
 		size := len(decoded)
+		// The service ceiling applies whatever the configured bound is,
+		// including an unlimited one, so no out-of-range upload session is
+		// ever requested.
+		if msg := attachmentOverServiceCeiling(size); msg != "" {
+			logger.Warn("attachment exceeds service ceiling", "size", size, "max", int64(graphAttachmentCeilingBytes), "fix", msg)
+			return mcp.NewToolResultError(msg), nil
+		}
 		if maxSize > 0 && int64(size) > maxSize {
 			fix := fmt.Sprintf("raise OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES above %d bytes and restart the server to upload a file this large", size)
 			logger.Warn("attachment exceeds maximum size", "size", size, "max", maxSize, "fix", fix)

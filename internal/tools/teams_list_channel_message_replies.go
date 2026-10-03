@@ -23,6 +23,7 @@ import (
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
+	msteams "github.com/microsoftgraph/msgraph-sdk-go/teams"
 )
 
 // Corrections appended to this verb's refusals, each naming where the identifier
@@ -53,8 +54,10 @@ const listChannelRepliesEndpoint = "GET /teams/{team-id}/channels/{channel-id}/m
 // method.
 //
 // Every identifier is validated before any request is issued, so a malformed one
-// costs no Graph call, and exactly one request is issued on the success path
-// without following the collection's next link.
+// costs no Graph call, and exactly one request of at most max_results replies
+// (1 to 50) is issued on the success path without following the collection's
+// next link; when Graph signals more pages, the result says so. Only $top is
+// sent because the replies collection supports no other query option.
 func NewHandleListChannelMessageReplies(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := logging.Logger(ctx)
@@ -100,7 +103,7 @@ func NewHandleListChannelMessageReplies(retryCfg graph.RetryConfig, timeout time
 		graphErr := graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
 			resp, callErr = client.Teams().ByTeamId(teamID).Channels().ByChannelId(channelID).
-				Messages().ByChatMessageId(messageID).Replies().Get(timeoutCtx, nil)
+				Messages().ByChatMessageId(messageID).Replies().Get(timeoutCtx, listChannelRepliesRequestConfig(teamsPageSize(request)))
 			return callErr
 		})
 		if graphErr != nil {
@@ -128,9 +131,11 @@ func NewHandleListChannelMessageReplies(retryCfg graph.RetryConfig, timeout time
 			"endpoint", listChannelRepliesEndpoint,
 			"count", len(replies))
 
+		more := resp != nil && resp.GetOdataNextLink() != nil
+
 		if outputMode == "text" {
-			logger.Info("tool completed", "duration", time.Since(start), "count", len(replies))
-			return mcp.NewToolResultText(FormatTeamsMessagesText(replies)), nil
+			logger.Info("tool completed", "duration", time.Since(start), "count", len(replies), "truncated", more)
+			return mcp.NewToolResultText(teamsPagedText(FormatTeamsMessagesText(replies), "replies", len(replies), more)), nil
 		}
 
 		jsonBytes, err := json.Marshal(replies)
@@ -141,7 +146,15 @@ func NewHandleListChannelMessageReplies(retryCfg graph.RetryConfig, timeout time
 			return mcp.NewToolResultError(fmt.Sprintf("failed to serialize replies: %s", err.Error())), nil
 		}
 
-		logger.Info("tool completed", "duration", time.Since(start), "count", len(replies))
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		logger.Info("tool completed", "duration", time.Since(start), "count", len(replies), "truncated", more)
+		return teamsPagedJSON(string(jsonBytes), "replies", len(replies), more), nil
+	}
+}
+
+// listChannelRepliesRequestConfig builds the query for one page of replies;
+// $top is the only option the replies collection accepts.
+func listChannelRepliesRequestConfig(top int32) *msteams.ItemChannelsItemMessagesItemRepliesRequestBuilderGetRequestConfiguration {
+	return &msteams.ItemChannelsItemMessagesItemRepliesRequestBuilderGetRequestConfiguration{
+		QueryParameters: &msteams.ItemChannelsItemMessagesItemRepliesRequestBuilderGetQueryParameters{Top: &top},
 	}
 }

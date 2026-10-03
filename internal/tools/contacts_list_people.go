@@ -22,6 +22,7 @@ import (
 	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
+	"github.com/microsoftgraph/msgraph-sdk-go/users"
 )
 
 // Corrections appended to this verb's refusals, authored at the verb because
@@ -32,6 +33,18 @@ const (
 	listPeopleTimeoutFix = "retry, and if the deadline is hit again narrow the question with the contacts search operation instead of listing everyone"
 	listPeopleGraphFix   = "check that consent was granted after OUTLOOK_MCP_CONTACTS_ENABLED was set, so People.Read was requested, then retry; see docs/troubleshooting.md#authentication-failures"
 )
+
+// Page bounds for the listing. The default matches the page Graph returns when
+// no $top is sent, so an unparameterised call is unchanged; the ceiling stops a
+// caller asking for an unbounded page in one round trip.
+const (
+	listPeopleDefaultLimit = 10
+	listPeopleMaxLimit     = 100
+)
+
+// listPeopleMoreMarker is appended when Graph reports a further page, so a
+// caller never reads the top of the ranking as everyone the account knows.
+const listPeopleMoreMarker = "more results available: Graph returned a further page; retry with skip set to the current skip plus limit (or raise limit, maximum 100), then verify the next people appear"
 
 // NewHandleListPeople creates the handler for the contacts list_people verb. It
 // reads GET /me/people and returns the people in the relevance order Graph
@@ -44,9 +57,11 @@ const (
 // Returns a tool handler function compatible with the MCP server's AddTool
 // method.
 //
-// The handler issues exactly one Graph request and reads only the page Graph
-// returns for it; it does not follow the collection's next link, so the cost of
-// the verb is bounded by one round trip.
+// The handler issues exactly one Graph request carrying $top=limit and, when
+// skip is positive, $skip=skip, and reads only that page; it does not follow the
+// collection's next link, so the cost of the verb is bounded by one round trip.
+// When the response carries @odata.nextLink a "more results available" marker
+// is appended, naming the skip value that reads the next page.
 func NewHandleListPeople(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := logging.Logger(ctx)
@@ -63,7 +78,16 @@ func NewHandleListPeople(retryCfg graph.RetryConfig, timeout time.Duration) func
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		logger.Debug("tool called")
+		limit, skip := listPeoplePaging(request)
+		query := &users.ItemPeopleRequestBuilderGetQueryParameters{}
+		top := int32(limit)
+		query.Top = &top
+		if skip > 0 {
+			skip32 := int32(skip)
+			query.Skip = &skip32
+		}
+
+		logger.Debug("tool called", "limit", limit, "skip", skip)
 
 		timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -73,7 +97,7 @@ func NewHandleListPeople(retryCfg graph.RetryConfig, timeout time.Duration) func
 		var resp models.PersonCollectionResponseable
 		graphErr := graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
-			resp, callErr = client.Me().People().Get(timeoutCtx, nil)
+			resp, callErr = client.Me().People().Get(timeoutCtx, &users.ItemPeopleRequestBuilderGetRequestConfiguration{QueryParameters: query})
 			return callErr
 		})
 		if graphErr != nil {
@@ -94,6 +118,7 @@ func NewHandleListPeople(retryCfg graph.RetryConfig, timeout time.Duration) func
 		}
 
 		people := serializePeopleCollection(resp, outputMode)
+		more := resp != nil && resp.GetOdataNextLink() != nil
 
 		logger.Debug("graph API response",
 			"endpoint", "GET /me/people",
@@ -103,7 +128,7 @@ func NewHandleListPeople(retryCfg graph.RetryConfig, timeout time.Duration) func
 			logger.Info("tool completed",
 				"duration", time.Since(start),
 				"count", len(people))
-			return mcp.NewToolResultText(FormatPeopleText(people)), nil
+			return listPeopleResult(FormatPeopleText(people), more), nil
 		}
 
 		jsonBytes, err := json.Marshal(people)
@@ -117,8 +142,37 @@ func NewHandleListPeople(retryCfg graph.RetryConfig, timeout time.Duration) func
 		logger.Info("tool completed",
 			"duration", time.Since(start),
 			"count", len(people))
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		return listPeopleResult(string(jsonBytes), more), nil
 	}
+}
+
+// listPeoplePaging reads limit and skip, clamping limit to the page bounds
+// (missing or non-positive falls back to the default) and skip to zero or
+// more, so an out-of-range request still returns a bounded page.
+func listPeoplePaging(request mcp.CallToolRequest) (int, int) {
+	limit := int(request.GetFloat("limit", listPeopleDefaultLimit))
+	if limit < 1 {
+		limit = listPeopleDefaultLimit
+	}
+	if limit > listPeopleMaxLimit {
+		limit = listPeopleMaxLimit
+	}
+	skip := int(request.GetFloat("skip", 0))
+	if skip < 0 {
+		skip = 0
+	}
+	return limit, skip
+}
+
+// listPeopleResult builds the tool result. The truncation marker travels as a
+// second content block, so the first block keeps its documented shape (a JSON
+// array in the summary and raw tiers) while the caller still sees it.
+func listPeopleResult(body string, more bool) *mcp.CallToolResult {
+	result := mcp.NewToolResultText(body)
+	if more {
+		result.Content = append(result.Content, mcp.NewTextContent(listPeopleMoreMarker))
+	}
+	return result
 }
 
 // serializePeopleCollection projects a people collection through the tier's

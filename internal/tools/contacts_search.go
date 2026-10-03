@@ -38,6 +38,19 @@ const (
 	contactsSearchGraphFix   = "check that consent was granted after OUTLOOK_MCP_CONTACTS_ENABLED was set, so Contacts.Read and People.Read were requested, then retry; see docs/troubleshooting.md#authentication-failures"
 )
 
+// Page bounds for each half of the search. Each collection is read as one page
+// of at most limit matches, because the verb is bounded to two requests and
+// does not follow @odata.nextLink; the default keeps a common name answerable
+// in one call, and the ceiling stops a caller asking for an unbounded page.
+const (
+	contactsSearchDefaultLimit = 25
+	contactsSearchMaxLimit     = 100
+)
+
+// contactsSearchMoreMarker is appended when either collection reports a further
+// page, so a caller never reads one page as the complete answer.
+const contactsSearchMoreMarker = "more results available: Graph returned a further page that this verb does not read; narrow the query, or raise limit (maximum 100), then verify the expected match appears"
+
 // NewHandleContactsSearch creates the handler for the contacts search verb. It
 // issues GET /me/contacts and GET /me/people, both carrying the identical
 // normalised $search value, and returns the union of the two result sets with
@@ -53,7 +66,9 @@ const (
 // The query is normalised once, before the timeout context and before either
 // request, so a query the normaliser refuses costs no Graph call and cannot
 // diverge between the two collections. Exactly two requests are issued on the
-// success path, and no per-match fetch follows them.
+// success path, and no per-match fetch follows them. Each request carries
+// $top=limit and only its first page is read; when either response carries
+// @odata.nextLink a "more results available" marker is appended.
 func NewHandleContactsSearch(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := logging.Logger(ctx)
@@ -85,7 +100,10 @@ func NewHandleContactsSearch(retryCfg graph.RetryConfig, timeout time.Duration) 
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		logger.Debug("tool called", "query", query)
+		limit := contactsSearchLimit(request)
+		top := int32(limit)
+
+		logger.Debug("tool called", "query", query, "limit", limit)
 
 		timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -96,7 +114,7 @@ func NewHandleContactsSearch(retryCfg graph.RetryConfig, timeout time.Duration) 
 		graphErr := graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
 			contactsResp, callErr = client.Me().Contacts().Get(timeoutCtx, &users.ItemContactsRequestBuilderGetRequestConfiguration{
-				QueryParameters: &users.ItemContactsRequestBuilderGetQueryParameters{Search: &normalised},
+				QueryParameters: &users.ItemContactsRequestBuilderGetQueryParameters{Search: &normalised, Top: &top},
 			})
 			return callErr
 		})
@@ -110,7 +128,7 @@ func NewHandleContactsSearch(retryCfg graph.RetryConfig, timeout time.Duration) 
 		graphErr = graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
 			peopleResp, callErr = client.Me().People().Get(timeoutCtx, &users.ItemPeopleRequestBuilderGetRequestConfiguration{
-				QueryParameters: &users.ItemPeopleRequestBuilderGetQueryParameters{Search: &normalised},
+				QueryParameters: &users.ItemPeopleRequestBuilderGetQueryParameters{Search: &normalised, Top: &top},
 			})
 			return callErr
 		})
@@ -119,6 +137,7 @@ func NewHandleContactsSearch(retryCfg graph.RetryConfig, timeout time.Duration) 
 		}
 
 		matches := mergeContactMatches(contactsResp, peopleResp, outputMode)
+		more := contactsSearchHasMore(contactsResp, peopleResp)
 
 		logger.Debug("graph API response",
 			"endpoint", "GET /me/contacts and GET /me/people",
@@ -128,7 +147,7 @@ func NewHandleContactsSearch(retryCfg graph.RetryConfig, timeout time.Duration) 
 			logger.Info("tool completed",
 				"duration", time.Since(start),
 				"count", len(matches))
-			return mcp.NewToolResultText(FormatContactMatchesText(matches)), nil
+			return contactsSearchResult(FormatContactMatchesText(matches), more), nil
 		}
 
 		jsonBytes, err := json.Marshal(matches)
@@ -142,8 +161,42 @@ func NewHandleContactsSearch(retryCfg graph.RetryConfig, timeout time.Duration) 
 		logger.Info("tool completed",
 			"duration", time.Since(start),
 			"count", len(matches))
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		return contactsSearchResult(string(jsonBytes), more), nil
 	}
+}
+
+// contactsSearchLimit reads the limit argument and clamps it to the page
+// bounds, falling back to the default for a missing or non-positive value, so
+// an out-of-range request still returns a bounded page rather than an error.
+func contactsSearchLimit(request mcp.CallToolRequest) int {
+	limit := int(request.GetFloat("limit", contactsSearchDefaultLimit))
+	if limit < 1 {
+		return contactsSearchDefaultLimit
+	}
+	if limit > contactsSearchMaxLimit {
+		return contactsSearchMaxLimit
+	}
+	return limit
+}
+
+// contactsSearchHasMore reports whether either collection carried an
+// @odata.nextLink, meaning matches exist beyond the page that was read.
+func contactsSearchHasMore(contactsResp models.ContactCollectionResponseable, peopleResp models.PersonCollectionResponseable) bool {
+	if contactsResp != nil && contactsResp.GetOdataNextLink() != nil {
+		return true
+	}
+	return peopleResp != nil && peopleResp.GetOdataNextLink() != nil
+}
+
+// contactsSearchResult builds the tool result. The truncation marker travels
+// as a second content block, so the first block keeps its documented shape (a
+// JSON array in the summary and raw tiers) while the caller still sees it.
+func contactsSearchResult(body string, more bool) *mcp.CallToolResult {
+	result := mcp.NewToolResultText(body)
+	if more {
+		result.Content = append(result.Content, mcp.NewTextContent(contactsSearchMoreMarker))
+	}
+	return result
 }
 
 // mergeContactMatches projects both collections through the tier's serializers

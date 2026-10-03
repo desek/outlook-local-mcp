@@ -44,7 +44,12 @@ const (
 // The maxSize parameter bounds the attachment's reported size: an attachment
 // above it is refused with an error naming the limit and the environment
 // variable that raises it, so a single tool call cannot allocate unbounded
-// memory. The handler issues exactly one Graph request on the success path.
+// memory. When a ceiling is set, the size is read first by a metadata-only
+// request ($select without contentBytes), because a plain item GET returns the
+// base64 content inline and the SDK decodes it before any check could run. An
+// oversized attachment therefore costs one small request and is never
+// downloaded. With a ceiling set the success path issues two Graph requests;
+// with no ceiling it issues one.
 //
 // Parameters:
 //   - retryCfg: retry configuration for transient Graph API errors.
@@ -94,6 +99,12 @@ func NewHandleGetEventAttachment(retryCfg graph.RetryConfig, timeout time.Durati
 		timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
 		defer cancel()
 
+		if maxSize > 0 {
+			if res := checkEventAttachmentSize(ctx, timeoutCtx, retryCfg, client.Me().Events().ByEventId(eventID).Attachments().ByAttachmentId(attachmentID), maxSize, timeout, start); res != nil {
+				return res, nil
+			}
+		}
+
 		var att models.Attachmentable
 		graphErr := graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
@@ -115,18 +126,6 @@ func NewHandleGetEventAttachment(retryCfg graph.RetryConfig, timeout time.Durati
 				"duration", time.Since(start))
 			return mcp.NewToolResultError(fmt.Sprintf("%s: %s",
 				graph.RedactGraphError(graphErr), getEventAttachmentGraphFix)), nil
-		}
-
-		// The ceiling is checked against the size Graph reports, before any
-		// serialization, so an oversized attachment is refused rather than
-		// copied into the result.
-		if maxSize > 0 {
-			if sz := att.GetSize(); sz != nil && int64(*sz) > maxSize {
-				fix := fmt.Sprintf("raise OUTLOOK_MCP_MAX_ATTACHMENT_SIZE_BYTES above %d bytes and restart the server to download this attachment", int64(*sz))
-				logger.Warn("attachment exceeds maximum size", "size", int64(*sz), "max", maxSize, "fix", fix)
-				return mcp.NewToolResultError(fmt.Sprintf(
-					"attachment size %d bytes exceeds maximum allowed %d bytes; %s", int64(*sz), maxSize, fix)), nil
-			}
 		}
 
 		result := graph.SerializeAttachment(att)

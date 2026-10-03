@@ -29,6 +29,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -300,8 +301,10 @@ func completedAttachmentID(resp *http.Response, payload []byte) string {
 }
 
 // attachmentIDFromLocation extracts the attachment identifier from the resource
-// URL the Location header names. The header addresses the created attachment,
-// so the identifier is its final path segment; it is percent-decoded because a
+// URL the Location header names. The documented completion addresses the
+// created attachment as an OData key segment, Attachments('<id>'), so the
+// identifier is the quoted value inside it; a plain /attachments/<id> path is
+// still read as its final segment. The result is percent-decoded because a
 // Graph attachment identifier contains characters that are escaped there.
 func attachmentIDFromLocation(location string) string {
 	parsed, err := url.Parse(location)
@@ -310,11 +313,19 @@ func attachmentIDFromLocation(location string) string {
 	}
 	segments := strings.Split(strings.Trim(parsed.Path, "/"), "/")
 	last := segments[len(segments)-1]
+	if m := odataAttachmentKeyPattern.FindStringSubmatch(last); m != nil {
+		last = m[1]
+	}
 	if unescaped, err := url.PathUnescape(last); err == nil {
 		return unescaped
 	}
 	return last
 }
+
+// odataAttachmentKeyPattern matches the OData key segment the service uses to
+// address a created attachment, capturing the identifier between the quotes.
+// The match is case-insensitive because the segment casing differs by endpoint.
+var odataAttachmentKeyPattern = regexp.MustCompile(`(?i)^attachments\('(.+)'\)$`)
 
 // redactUploadURL removes the pre-authenticated upload URL from a message. The
 // URL and its query string are replaced separately, because a transport error

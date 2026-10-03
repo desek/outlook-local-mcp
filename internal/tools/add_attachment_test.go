@@ -425,3 +425,44 @@ func TestAddAttachment_RoutingBoundary(t *testing.T) {
 		})
 	}
 }
+
+// TestAddAttachment_RefusesAboveServiceCeiling verifies a payload above the
+// documented 150 MB upload limit is refused before any Graph request even when
+// the configured bound is unlimited, since the service would reject the upload
+// session anyway.
+func TestAddAttachment_RefusesAboveServiceCeiling(t *testing.T) {
+	if testing.Short() {
+		t.Skip("allocates a payload above the service ceiling")
+	}
+	rec := &attachmentRecorder{isDraft: true, subject: "Notes", returnsID: "att-1"}
+	ctx, handler := newAddAttachmentFixture(t, rec, 0)
+
+	result := callAddAttachment(t, ctx, handler, map[string]any{
+		"message_id":    "draft-1",
+		"name":          "huge.bin",
+		"content_bytes": base64.StdEncoding.EncodeToString(make([]byte, graphAttachmentCeilingBytes+1)),
+	})
+	if !result.IsError {
+		t.Fatal("expected a refusal above the service ceiling")
+	}
+	text := resultText(t, result)
+	for _, want := range []string{"150 MB", "35 MB"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("error missing %q, got: %s", want, text)
+		}
+	}
+	if rec.gets != 0 || rec.posts != 0 {
+		t.Errorf("expected no Graph request, got %d GET and %d POST", rec.gets, rec.posts)
+	}
+}
+
+// TestAttachmentOverServiceCeiling_Boundary verifies the ceiling is inclusive:
+// a payload of exactly 150 MB is allowed and one byte more is refused.
+func TestAttachmentOverServiceCeiling_Boundary(t *testing.T) {
+	if msg := attachmentOverServiceCeiling(graphAttachmentCeilingBytes); msg != "" {
+		t.Errorf("payload at the ceiling refused: %s", msg)
+	}
+	if msg := attachmentOverServiceCeiling(graphAttachmentCeilingBytes + 1); msg == "" {
+		t.Error("payload above the ceiling allowed")
+	}
+}

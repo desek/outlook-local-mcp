@@ -29,7 +29,8 @@ func eventAttachmentItemBody(size int) string {
 }
 
 // TestGetEventAttachment_ReturnsContent asserts the item read returns the
-// attachment metadata together with its base64 content, in one Graph request.
+// attachment metadata together with its base64 content: a metadata-only size
+// read first, then the content read.
 func TestGetEventAttachment_ReturnsContent(t *testing.T) {
 	var methods, urls []string
 	client, srv := newTestGraphClient(t, recordingHandler(eventAttachmentItemBody(5), &methods, &urls))
@@ -61,8 +62,34 @@ func TestGetEventAttachment_ReturnsContent(t *testing.T) {
 	if name, _ := payload["name"].(string); name != "agenda.pdf" {
 		t.Errorf("name = %q, want agenda.pdf", name)
 	}
-	if len(methods) != 1 || methods[0] != http.MethodGet {
-		t.Errorf("expected exactly one GET, got %v", methods)
+	if len(methods) != 2 || methods[0] != http.MethodGet || methods[1] != http.MethodGet {
+		t.Fatalf("expected a size GET then a content GET, got %v", methods)
+	}
+	if !strings.Contains(urls[0], "%24select=") || !strings.Contains(urls[0], "size") {
+		t.Errorf("first request = %q, want a $select that includes size", urls[0])
+	}
+	if strings.Contains(urls[1], "%24select=") {
+		t.Errorf("content request = %q, want no $select", urls[1])
+	}
+}
+
+// TestGetEventAttachment_NoCeilingSkipsSizeRead asserts an unlimited ceiling
+// issues only the content read, since there is nothing to check first.
+func TestGetEventAttachment_NoCeilingSkipsSizeRead(t *testing.T) {
+	var methods, urls []string
+	client, srv := newTestGraphClient(t, recordingHandler(eventAttachmentItemBody(5), &methods, &urls))
+	defer srv.Close()
+	ctx := auth.WithGraphClient(context.Background(), client)
+
+	handler := NewHandleGetEventAttachment(graph.RetryConfig{}, 0, 0)
+	request := mcp.CallToolRequest{}
+	request.Params.Arguments = map[string]any{"event_id": "evt-1", "attachment_id": "att-agenda"}
+	result, err := handler(ctx, request)
+	if err != nil || result.IsError {
+		t.Fatalf("unexpected failure: %v %v", err, result)
+	}
+	if len(urls) != 1 || strings.Contains(urls[0], "%24select=") {
+		t.Errorf("expected one content GET without $select, got %v", urls)
 	}
 }
 
@@ -96,6 +123,14 @@ func TestGetEventAttachment_RefusesOverSizeCeiling(t *testing.T) {
 	}
 	if strings.Contains(text, "aGVsbG8=") {
 		t.Errorf("refusal leaked attachment content: %q", text)
+	}
+	// The refusal must come from the metadata-only read: the content read
+	// would download the payload the ceiling exists to avoid.
+	if len(urls) != 1 || !strings.Contains(urls[0], "%24select=") {
+		t.Errorf("expected only the metadata-only GET, got %v", urls)
+	}
+	if strings.Contains(urls[0], "contentBytes") {
+		t.Errorf("size read selects contentBytes: %q", urls[0])
 	}
 }
 

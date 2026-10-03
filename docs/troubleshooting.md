@@ -282,6 +282,20 @@ Paste the JSON output into the issue report. It provides the version, commit SHA
 
 ---
 
+## Teams transcript access is disabled or unattributed {#teams-transcript-policy}
+
+**Symptom:** `list_transcripts` or `get_transcript` fails with the code `GraphAccessToTranscriptsDisabled`, or `get_transcript` returns `contentFormat` `application/vnd.microsoft.graph.transcript+text` with no speaker names.
+
+**Cause:** Both are tenant policies. `GraphAccessToTranscriptsDisabled` means the tenant blocks transcript access through Microsoft Graph. When the tenant does not allow speaker attribution, Graph refuses the WEBVTT format with `SpeakerAttributionNotAllowed`, and the server reads the transcript again as text without speaker names.
+
+**Remediation:**
+
+1. For `GraphAccessToTranscriptsDisabled`, ask a Teams administrator to allow Graph access to transcripts in the Teams admin center or with `Set-CsTeamsMeetingConfiguration`. No retry, consent, or request change can work until the policy changes.
+2. Verify with `{tool: "teams", args: {operation: "list_transcripts", meeting_id: "<id>"}}`, which returns metadata when access is allowed.
+3. For the unattributed format, no action in this server changes the result. Speaker names return only when the tenant allows speaker attribution.
+
+---
+
 ## Teams channel read is missing an identifier {#teams-channel-identifiers}
 
 **Symptom:** `{tool: "teams", args: {operation: "list_channel_messages", ...}}`, `get_channel_message`, `list_channel_message_replies`, or a channel-shaped `compose_reply` is refused before any request is issued, with an error naming `team_id` or `channel_id`.
@@ -384,6 +398,21 @@ This is why a mailbox with an error is stated rather than omitted: an omitted ma
 3. If the call names an `account`, confirm that account has permission on the mailbox. Free/busy visibility is granted per mailbox, so an address readable under one account is not necessarily readable under another.
 4. For a mailbox the signed-in user genuinely cannot view, ask its owner or the tenant administrator to grant free/busy visibility; no parameter on this call can substitute for that permission.
 5. Verify by re-running the same call: a mailbox whose permission has been granted returns blocks and working hours in place of the error line, while the other mailboxes' output is unchanged.
+
+---
+
+## find_meeting_times fails on a personal Microsoft account {#find-meeting-times-personal-account}
+
+**Symptom:** `{tool: "calendar", args: {operation: "find_meeting_times", ...}}` returns a Graph error on a signed-in account that is a personal Microsoft account (an `@outlook.com`, `@hotmail.com`, or `@live.com` identity, or any account registered with `TENANT_ID=consumers`), while `get_free_busy` and `list_events` on the same account succeed. The error text states that the account must be a work or school account.
+
+**Cause:** Microsoft Graph does not support `POST /me/findMeetingTimes` for personal Microsoft accounts; the endpoint's permissions table lists the delegated personal-account case as "Not supported". The server still offers the verb on every account because the account type is not known until Graph answers, so the refusal arrives from Graph rather than from the server's own validation.
+
+**Remediation:**
+
+1. Confirm the account type with `{tool: "account", args: {operation: "list_accounts"}}`. A personal account cannot be made to work with this verb; no parameter substitutes for a work or school identity.
+2. If a work or school account is also registered, repeat the call with `account` set to that identity.
+3. If only a personal account is available, use `get_schedule` to read the attendees' free/busy blocks and choose a slot from them, or use `get_free_busy` for the signed-in user's own busy periods.
+4. Verify by re-running the same `find_meeting_times` call under the work or school account: it returns ranked suggestions in place of the error.
 
 ---
 

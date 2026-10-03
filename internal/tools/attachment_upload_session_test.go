@@ -45,6 +45,11 @@ type uploadServer struct {
 	// the response that completes the transfer.
 	locationID string
 
+	// location, when set, is the full Location header value, overriding the
+	// default documented message form built from locationID. Event tests set
+	// the documented event form, and one case sets the plain path form.
+	location string
+
 	// omitLocation suppresses the Location header on the completing response,
 	// leaving the transfer with no identifier.
 	omitLocation bool
@@ -94,8 +99,13 @@ func (u *uploadServer) serveChunk(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	if !u.omitLocation {
-		w.Header().Set("Location",
-			"https://outlook.office.com/api/v2.0/me/messages/draft-1/attachments/"+u.locationID)
+		location := u.location
+		if location == "" {
+			// The documented completion names the attachment as an OData key
+			// segment, the identifier quoted inside the parentheses.
+			location = "https://outlook.office.com/api/v2.0/Users('u-1')/Messages('draft-1')/Attachments('" + u.locationID + "')"
+		}
+		w.Header().Set("Location", location)
 	}
 	w.WriteHeader(http.StatusCreated)
 }
@@ -193,6 +203,31 @@ func TestUploadSession_AttachmentIDFromLocationHeader(t *testing.T) {
 		// report the identifier a caller can pass back, not the escaped form.
 		if text := resultText(t, result); !strings.Contains(text, "Attachment ID: AAMkAGI==") {
 			t.Errorf("confirmation does not report the identifier from the Location header: %s", text)
+		}
+	})
+
+	t.Run("an identifier containing both = and %3D is decoded", func(t *testing.T) {
+		up := &uploadServer{locationID: "AAMkADI5MAAIT3drCAAABEgAQ=%3D"}
+		rec := &attachmentRecorder{isDraft: true, subject: "Quarterly", upload: up}
+		ctx, handler := newAddAttachmentFixture(t, rec, 0)
+
+		result := callAddAttachment(t, ctx, handler, largeAttachmentArgs(inlineAttachmentThresholdBytes))
+		if text := resultText(t, result); result.IsError || !strings.Contains(text, "Attachment ID: AAMkADI5MAAIT3drCAAABEgAQ==") {
+			t.Errorf("confirmation does not report the decoded key: %s", text)
+		}
+		if text := resultText(t, result); strings.Contains(text, "Attachments(") {
+			t.Errorf("confirmation reports the OData key segment, not the identifier: %s", text)
+		}
+	})
+
+	t.Run("the plain path form is still read", func(t *testing.T) {
+		up := &uploadServer{location: "https://graph.microsoft.com/v1.0/me/messages/draft-1/attachments/att-plain"}
+		rec := &attachmentRecorder{isDraft: true, subject: "Quarterly", upload: up}
+		ctx, handler := newAddAttachmentFixture(t, rec, 0)
+
+		result := callAddAttachment(t, ctx, handler, largeAttachmentArgs(inlineAttachmentThresholdBytes))
+		if text := resultText(t, result); result.IsError || !strings.Contains(text, "Attachment ID: att-plain") {
+			t.Errorf("confirmation does not report the plain path identifier: %s", text)
 		}
 	})
 

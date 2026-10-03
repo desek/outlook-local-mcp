@@ -1424,6 +1424,11 @@ func FormatTranscriptDetailText(transcript map[string]any) string {
 	if created, _ := transcript["createdDateTime"].(string); created != "" {
 		fmt.Fprintf(&b, "Created: %s\n", created)
 	}
+	// The format says whether speaker names can be present, so the default tier
+	// states it rather than leaving the reader to infer it from the text.
+	if format, _ := transcript["contentFormat"].(string); format != "" {
+		fmt.Fprintf(&b, "Format: %s\n", format)
+	}
 
 	text, _ := transcript["content"].(string)
 	if text == "" {

@@ -15,6 +15,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 // teamsChannelRepliesJSON is a canned reply collection under one channel post,
@@ -153,5 +155,23 @@ func TestListChannelMessageReplies_GraphFailureCarriesFix(t *testing.T) {
 	}
 	if !strings.Contains(resultText(t, result), "ChannelMessage.Read.All") {
 		t.Errorf("failure carries no correction naming the scope: %q", resultText(t, result))
+	}
+}
+
+// TestListChannelReplies_SendsTop validates the recorded $top, the only query
+// option the replies collection accepts.
+func TestListChannelReplies_SendsTop(t *testing.T) {
+	_, q, _ := runTeamsQueryHandler(t, teamsChannelRepliesJSON, NewHandleListChannelMessageReplies, map[string]any{"team_id": "t1", "channel_id": "c1", "message_id": "m1", "max_results": float64(3)})
+	if got := q.Get("$top"); got != "3" || len(q) != 1 {
+		t.Errorf("query = %v, want only $top=3", q)
+	}
+}
+
+// TestListChannelReplies_MarksTruncatedPage validates the truncation note in
+// the JSON tiers.
+func TestListChannelReplies_MarksTruncatedPage(t *testing.T) {
+	result, _, _ := runTeamsQueryHandler(t, withNextLink(teamsChannelRepliesJSON), NewHandleListChannelMessageReplies, map[string]any{"team_id": "t1", "channel_id": "c1", "message_id": "m1", "output": "summary"})
+	if len(result.Content) != 2 || !strings.Contains(result.Content[1].(mcp.TextContent).Text, "truncated: true") {
+		t.Errorf("result lacks the truncation note: %v", result.Content)
 	}
 }

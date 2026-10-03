@@ -173,3 +173,23 @@ func TestContactsVerbsWrappedUnderDomainIdentity(t *testing.T) {
 		}
 	}
 }
+
+// TestContactsPagingParametersDeclared asserts that search and list_people
+// declare the paging parameters their handlers send as $top and $skip.
+func TestContactsPagingParametersDeclared(t *testing.T) {
+	want := map[string][]string{
+		"search":      {"limit"},
+		"list_people": {"limit", "skip"},
+	}
+	for _, v := range buildTestContactsVerbs(t) {
+		if len(want[v.Name]) == 0 {
+			continue
+		}
+		props := mcp.NewTool("_introspect", v.Schema...).InputSchema.Properties
+		for _, p := range want[v.Name] {
+			if _, ok := props[p]; !ok {
+				t.Errorf("contacts.%s does not declare %q", v.Name, p)
+			}
+		}
+	}
+}

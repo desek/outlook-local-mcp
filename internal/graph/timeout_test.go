@@ -54,7 +54,13 @@ func TestWithTimeout_DeadlineExpires(t *testing.T) {
 	childCtx, cancel := WithTimeout(ctx, 1*time.Millisecond)
 	defer cancel()
 
-	time.Sleep(10 * time.Millisecond)
+	// Wait on Done rather than sleep a fixed interval: under scheduler load a
+	// 1 ms deadline is not reliably observed within a 10 ms sleep.
+	select {
+	case <-childCtx.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("context did not expire within 2s")
+	}
 
 	if childCtx.Err() != context.DeadlineExceeded {
 		t.Errorf("Err() = %v, want context.DeadlineExceeded", childCtx.Err())

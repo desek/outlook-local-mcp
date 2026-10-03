@@ -1099,7 +1099,7 @@ func TestRegisterTools_ContactsEnabled_RegistersFifthTool(t *testing.T) {
 
 // TestRegisterTools_TeamsEnabled_RegistersSixthTool asserts that enabling the
 // teams flag registers a sixth top-level tool named teams, publishing its
-// thirteen verbs in the operation enum. The contacts flag is set alongside it,
+// twelve verbs in the operation enum. The contacts flag is set alongside it,
 // because the sixth position is only reachable with the fifth domain present.
 func TestRegisterTools_TeamsEnabled_RegistersSixthTool(t *testing.T) {
 	s := mcpserver.NewMCPServer("test-server", "0.0.1",
@@ -1133,7 +1133,7 @@ func TestRegisterTools_TeamsEnabled_RegistersSixthTool(t *testing.T) {
 	ops := registeredOperations(t, s, "teams")
 	for _, name := range []string{
 		"help", "search", "list_chats", "list_chat_messages", "get_chat_message",
-		"list_chat_message_replies", "list_channel_messages", "get_channel_message",
+		"list_channel_messages", "get_channel_message",
 		"list_channel_message_replies", "compose_reply", "get_online_meeting",
 		"list_transcripts", "get_transcript",
 	} {
@@ -1141,8 +1141,8 @@ func TestRegisterTools_TeamsEnabled_RegistersSixthTool(t *testing.T) {
 			t.Errorf("verb %q is absent from the teams operation enum", name)
 		}
 	}
-	if got := len(ops); got != 13 {
-		t.Errorf("teams publishes %d operations, want 13; the domain is scoped to reads and the draft-only reply", got)
+	if got := len(ops); got != 12 {
+		t.Errorf("teams publishes %d operations, want 12; the domain is scoped to reads and the draft-only reply", got)
 	}
 }
 

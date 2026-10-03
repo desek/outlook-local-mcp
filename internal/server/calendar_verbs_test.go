@@ -377,3 +377,38 @@ func TestAttachmentVerbsCarryDotIdentity(t *testing.T) {
 		}
 	}
 }
+
+// TestFindMeetingTimesStatesPersonalAccountLimit asserts that the registered
+// find_meeting_times verb tells the caller, before any call is made, that Graph
+// supports it only on work or school accounts, and points at the
+// troubleshooting entry for the personal-account failure.
+//
+// The server offers the verb on every account, so the Description and the
+// SeeDocs anchor are the only surfaces where a model driving a personal
+// account learns the limit before the Graph refusal arrives.
+func TestFindMeetingTimesStatesPersonalAccountLimit(t *testing.T) {
+	audit.InitAuditLog(false, "")
+	byName := buildSchedulingTestVerbs(t, false)
+
+	v, ok := byName["find_meeting_times"]
+	if !ok {
+		t.Fatal("verb find_meeting_times is not registered in the calendar domain")
+	}
+	if !strings.Contains(v.Description, "work or school accounts") {
+		t.Errorf("Description does not name the required account type: %s", v.Description)
+	}
+	if !strings.Contains(v.Description, "personal Microsoft accounts") {
+		t.Errorf("Description does not name the unsupported account type: %s", v.Description)
+	}
+
+	const anchor = "troubleshooting#find-meeting-times-personal-account"
+	found := false
+	for _, ref := range v.SeeDocs {
+		if ref == anchor {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("SeeDocs %v does not reference %q", v.SeeDocs, anchor)
+	}
+}

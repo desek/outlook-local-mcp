@@ -1,6 +1,6 @@
-| 52   | Teams help (thirteen verbs)       | PASS/FAIL/SKIP | e.g., "all thirteen verbs listed; no send verb offered"   |
+| 52   | Teams help (twelve verbs)         | PASS/FAIL/SKIP | e.g., "all twelve verbs listed; no send verb offered"     |
 | 53   | Search Teams messages             | PASS/FAIL/SKIP | e.g., "hits carry chat or channel ids; blank query refused" |
-| 54   | Read a chat thread                | PASS/FAIL/SKIP | e.g., "messages, one message, replies all returned"      |
+| 54   | Read a chat thread                | PASS/FAIL/SKIP | e.g., "messages and one message returned"                |
 | 55   | Read a channel thread             | PASS/FAIL/SKIP | e.g., "messages, one message, replies; or no channel hit" |
 | 56   | Prepare a reply (nothing sent)    | PASS/FAIL/SKIP | e.g., "quoted text returned; thread unchanged on re-read" |
 | 57   | Resolve an online meeting         | PASS/FAIL/SKIP | e.g., "join URL resolved; both identifiers refused"      |
@@ -800,27 +800,29 @@ Call `{tool: "contacts", args: {operation: "get_person", person_id: "<person_id 
 Call `{tool: "teams", args: {operation: "help"}}`.
 
 - **Skip:** If `config.features.teams_enabled` from Step 0c is `false`, or if no `teams` tool is registered, mark Steps 52-58 SKIP with the reason "teams disabled" and continue. The domain is opt-in and is absent unless `OUTLOOK_MCP_TEAMS_ENABLED` is set.
-- **Verify:** The response names all thirteen verbs: `help`, `search`, `list_chats`, `list_chat_messages`, `get_chat_message`, `list_chat_message_replies`, `list_channel_messages`, `get_channel_message`, `list_channel_message_replies`, `compose_reply`, `get_online_meeting`, `list_transcripts`, `get_transcript`.
+- **Verify:** The response names all twelve verbs: `help`, `search`, `list_chats`, `list_chat_messages`, `get_chat_message`, `list_channel_messages`, `get_channel_message`, `list_channel_message_replies`, `compose_reply`, `get_online_meeting`, `list_transcripts`, `get_transcript`.
 - **Verify:** Every verb is documented as read-only and non-destructive; no send, post, create, update, delete, presence, recording, or attendance verb is listed, and no verb enumerates joined teams or channels.
-- **Fail:** If any of the thirteen verbs is missing, or if any verb that writes to Teams is offered.
+- **Fail:** If any of the twelve verbs is missing, or if any verb that writes to Teams is offered.
 
 ### Step 53 -- Search Teams messages (skip if teams disabled)
 
 Call `{tool: "teams", args: {operation: "search", query: "the"}}`.
 
 - **Verify:** The default response is plain text and each hit is labelled with the chat, or the team and channel, it came from, so the identifiers the other verbs require are obtainable here.
-- **Verify (summary tier):** Call again with `output: "summary"`. The response is structured and still carries the identifiers of each hit.
+- **Verify (summary tier):** Call again with `output: "summary"`. The response is the object `{hits, moreResultsAvailable}`, and each entry in `hits` still carries the identifiers of the hit and the service snippet as `bodyPreview`, with no `body` field.
+- **Verify (paging):** Call again with `output: "summary"`, `max_results: 2`, and `from: 0`, then with `from: 2`. Each response holds at most two hits, and the second page does not repeat the hits of the first. Call again with `max_results: 0`; the call must fail naming `max_results`, before any request is issued.
 - **Verify (empty query rejected):** Call again with `query: "   "`. The call must fail naming the `query` parameter and stating what to supply, and no result set is returned.
 - **Record:** From the hits, a `chat_id` and message id for a chat message, and a team id, channel id, and message id for a channel message, for Steps 54 to 56.
 - **Fail:** If a hit carries no chat or channel label, or if the whitespace-only query is accepted.
 
 ### Step 54 -- Read a chat thread (skip if teams disabled)
 
-Call `{tool: "teams", args: {operation: "list_chats"}}`, then `{tool: "teams", args: {operation: "list_chat_messages", chat_id: "<chat_id from Step 53 or from list_chats>"}}`, then `{tool: "teams", args: {operation: "get_chat_message", chat_id: "<same chat_id>", message_id: "<message id from the listing>"}}`, then `{tool: "teams", args: {operation: "list_chat_message_replies", chat_id: "<same chat_id>", message_id: "<same message id>"}}`.
+Call `{tool: "teams", args: {operation: "list_chats"}}`, then `{tool: "teams", args: {operation: "list_chat_messages", chat_id: "<chat_id from Step 53 or from list_chats>"}}`, then `{tool: "teams", args: {operation: "get_chat_message", chat_id: "<same chat_id>", message_id: "<message id from the listing>"}}`.
 
 - **Skip:** If the account is a member of no chat, mark this step SKIP with the reason "no Teams chat in this account".
 - **Verify:** `list_chats` returns a numbered list ending with a total count, each entry carrying enough to tell one chat from another.
 - **Verify:** `list_chat_messages` returns a body preview per message rather than every full body.
+- **Verify (page bound):** Call `list_chat_messages` again with `max_results: 2`. At most two messages are returned, newest first; if the chat holds more, the response says "shown on this page" with a truncation note.
 - **Verify (body escalation):** `get_chat_message` returns a preview by default and states that the full body requires `output=raw`; calling it again with `output: "raw"` returns the full body.
 - **Verify (invalid identifier):** Call `get_chat_message` again with `chat_id: ""`. The call must fail naming the `chat_id` parameter, before any Microsoft Graph request is issued.
 - **Fail:** If the default tier returns full bodies, if the raw tier does not, or if the empty identifier is accepted.

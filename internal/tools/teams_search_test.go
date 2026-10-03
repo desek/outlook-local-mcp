@@ -108,6 +108,7 @@ const teamsSearchResponseJSON = `{
 			"hitsContainers": [
 				{
 					"total": 2,
+					"moreResultsAvailable": true,
 					"hits": [
 						{
 							"hitId": "hit-1",
@@ -118,8 +119,7 @@ const teamsSearchResponseJSON = `{
 								"id": "msg-chat-1",
 								"chatId": "19:chat-1",
 								"createdDateTime": "2026-01-02T03:04:05Z",
-								"from": {"user": {"displayName": "Alex Stone"}},
-								"body": {"contentType": "text", "content": "the release checklist is ready"}
+								"from": {"user": {"displayName": "Alex Stone"}}
 							}
 						},
 						{
@@ -132,8 +132,7 @@ const teamsSearchResponseJSON = `{
 								"subject": "Release",
 								"channelIdentity": {"teamId": "team-1", "channelId": "chan-1"},
 								"createdDateTime": "2026-01-03T03:04:05Z",
-								"from": {"user": {"displayName": "Bo Lee"}},
-								"body": {"contentType": "html", "content": "release notes drafted"}
+								"from": {"emailAddress": {"name": "Bo Lee", "address": "bo@contoso.com"}}
 							}
 						}
 					]
@@ -156,6 +155,20 @@ func decodeTeamsRecords(t *testing.T, result *mcp.CallToolResult) []map[string]a
 		t.Fatalf("result is not a JSON list: %v", err)
 	}
 	return records
+}
+
+// decodeTeamsSearchHits decodes the search verb's JSON envelope into its hits
+// and the more-results flag.
+func decodeTeamsSearchHits(t *testing.T, result *mcp.CallToolResult) ([]map[string]any, bool) {
+	t.Helper()
+	var envelope struct {
+		Hits                 []map[string]any `json:"hits"`
+		MoreResultsAvailable bool             `json:"moreResultsAvailable"`
+	}
+	if err := json.Unmarshal([]byte(resultText(t, result)), &envelope); err != nil {
+		t.Fatalf("result is not the search envelope: %v", err)
+	}
+	return envelope.Hits, envelope.MoreResultsAvailable
 }
 
 // TestTeamsSearch_PostsChatMessageEntityType validates the outgoing request:
@@ -182,6 +195,8 @@ func TestTeamsSearch_PostsChatMessageEntityType(t *testing.T) {
 	var body struct {
 		Requests []struct {
 			EntityTypes []string `json:"entityTypes"`
+			Size        int      `json:"size"`
+			From        int      `json:"from"`
 			Query       struct {
 				QueryString string `json:"queryString"`
 			} `json:"query"`
@@ -198,6 +213,89 @@ func TestTeamsSearch_PostsChatMessageEntityType(t *testing.T) {
 	}
 	if body.Requests[0].Query.QueryString != "release checklist" {
 		t.Errorf("queryString = %q, want the caller's query", body.Requests[0].Query.QueryString)
+	}
+	if body.Requests[0].Size != 25 || body.Requests[0].From != 0 {
+		t.Errorf("size/from = %d/%d, want the default page 25/0", body.Requests[0].Size, body.Requests[0].From)
+	}
+}
+
+// TestTeamsSearch_PostsCallerPaging validates that the page size and offset
+// the caller names reach the posted body, since without them only the first
+// page of hits is ever reachable.
+func TestTeamsSearch_PostsCallerPaging(t *testing.T) {
+	recorder := newTeamsSearchRecorder()
+	runTeamsHandler(t, recorder, NewHandleTeamsSearch, map[string]any{"query": "release", "max_results": float64(50), "from": float64(25)})
+
+	var body struct {
+		Requests []struct {
+			Size int `json:"size"`
+			From int `json:"from"`
+		} `json:"requests"`
+	}
+	if err := json.Unmarshal([]byte(recorder.bodies[0]), &body); err != nil {
+		t.Fatalf("request body is not JSON: %v", err)
+	}
+	if body.Requests[0].Size != 50 || body.Requests[0].From != 25 {
+		t.Errorf("size/from = %d/%d, want 50/25", body.Requests[0].Size, body.Requests[0].From)
+	}
+}
+
+// TestTeamsSearch_RejectsOutOfBoundsPaging validates that a page size or an
+// offset outside the service bounds is refused with its fix before any request.
+func TestTeamsSearch_RejectsOutOfBoundsPaging(t *testing.T) {
+	cases := []map[string]any{
+		{"query": "release", "max_results": float64(0)},
+		{"query": "release", "max_results": float64(501)},
+		{"query": "release", "max_results": float64(2.5)},
+		{"query": "release", "from": float64(-1)},
+	}
+	for _, args := range cases {
+		recorder := newTeamsSearchRecorder()
+		result := runTeamsHandler(t, recorder, NewHandleTeamsSearch, args)
+		if !result.IsError {
+			t.Errorf("args %v: expected refusal, got %q", args, resultText(t, result))
+		}
+		if recorder.callCount() != 0 {
+			t.Errorf("args %v: graph request count = %d, want 0", args, recorder.callCount())
+		}
+		if !strings.Contains(resultText(t, result), "verify") {
+			t.Errorf("args %v: refusal carries no fix: %q", args, resultText(t, result))
+		}
+	}
+}
+
+// TestTeamsSearch_SurfacesMoreResults validates that the service's
+// more-results flag reaches both the JSON tiers and the text tier.
+func TestTeamsSearch_SurfacesMoreResults(t *testing.T) {
+	_, more := decodeTeamsSearchHits(t, runTeamsHandler(t, newTeamsSearchRecorder(), NewHandleTeamsSearch, map[string]any{
+		"query": "release", "output": "summary",
+	}))
+	if !more {
+		t.Error("moreResultsAvailable = false, want true from the service flag")
+	}
+	text := resultText(t, runTeamsHandler(t, newTeamsSearchRecorder(), NewHandleTeamsSearch, map[string]any{
+		"query": "release", "output": "text", "from": float64(10), "max_results": float64(5),
+	}))
+	if !strings.Contains(text, "More results available: retry with from=15.") {
+		t.Errorf("text tier does not state more results:\n%s", text)
+	}
+}
+
+// TestTeamsSearch_SenderFromEmailAddress validates that a hit whose sender is
+// named only by the email address pair the search service returns still
+// carries the sender's name, and its address at the raw tier.
+func TestTeamsSearch_SenderFromEmailAddress(t *testing.T) {
+	summary, _ := decodeTeamsSearchHits(t, runTeamsHandler(t, newTeamsSearchRecorder(), NewHandleTeamsSearch, map[string]any{
+		"query": "release", "output": "summary",
+	}))
+	if summary[1]["from"] != "Bo Lee" {
+		t.Errorf("sender = %v, want the email address name", summary[1]["from"])
+	}
+	raw, _ := decodeTeamsSearchHits(t, runTeamsHandler(t, newTeamsSearchRecorder(), NewHandleTeamsSearch, map[string]any{
+		"query": "release", "output": "raw",
+	}))
+	if raw[1]["fromAddress"] != "bo@contoso.com" {
+		t.Errorf("raw sender address = %v, want bo@contoso.com", raw[1]["fromAddress"])
 	}
 }
 
@@ -227,7 +325,7 @@ func TestTeamsSearch_LabelsHitsByCollection(t *testing.T) {
 		"output": "summary",
 	})
 
-	hits := decodeTeamsRecords(t, result)
+	hits, _ := decodeTeamsSearchHits(t, result)
 	if len(hits) != 2 {
 		t.Fatalf("hit count = %d, want 2", len(hits))
 	}
@@ -238,8 +336,8 @@ func TestTeamsSearch_LabelsHitsByCollection(t *testing.T) {
 	if hits[0]["chatId"] != "19:chat-1" {
 		t.Errorf("first hit chatId = %v, want the chat identifier", hits[0]["chatId"])
 	}
-	if hits[0]["hitSummary"] != "the release checklist is ready" {
-		t.Errorf("first hit summary = %v, want the service snippet", hits[0]["hitSummary"])
+	if hits[0]["bodyPreview"] != "the release checklist is ready" {
+		t.Errorf("first hit preview = %v, want the service snippet", hits[0]["bodyPreview"])
 	}
 
 	if hits[1]["source"] != teamsHitSourceChannel {
@@ -262,7 +360,7 @@ func TestTeamsSearch_PreservesRelevanceOrder(t *testing.T) {
 		"output": "summary",
 	})
 
-	hits := decodeTeamsRecords(t, result)
+	hits, _ := decodeTeamsSearchHits(t, result)
 	if len(hits) != 2 {
 		t.Fatalf("hit count = %d, want 2", len(hits))
 	}
@@ -271,27 +369,23 @@ func TestTeamsSearch_PreservesRelevanceOrder(t *testing.T) {
 	}
 }
 
-// TestTeamsSearch_RawTierCarriesFullBody validates that the raw tier escalates
-// each hit's message to its whole body, while the default tier states only the
-// preview.
-func TestTeamsSearch_RawTierCarriesFullBody(t *testing.T) {
-	raw := decodeTeamsRecords(t, runTeamsHandler(t, newTeamsSearchRecorder(), NewHandleTeamsSearch, map[string]any{
-		"query":  "release",
-		"output": "raw",
-	}))
-	if raw[0]["body"] != "the release checklist is ready" {
-		t.Errorf("raw hit body = %v, want the full message body", raw[0]["body"])
-	}
-
-	summary := decodeTeamsRecords(t, runTeamsHandler(t, newTeamsSearchRecorder(), NewHandleTeamsSearch, map[string]any{
-		"query":  "release",
-		"output": "summary",
-	}))
-	if _, present := summary[0]["body"]; present {
-		t.Error("summary hit carries a full body, which only the raw tier promises")
-	}
-	if summary[0]["bodyPreview"] != "the release checklist is ready" {
-		t.Errorf("summary hit preview = %v, want the message preview", summary[0]["bodyPreview"])
+// TestTeamsSearch_ProjectsOnlyRetrievableFields validates that a hit carries
+// the service snippet as its preview and none of the message fields the search
+// service never returns, which would otherwise always be empty.
+func TestTeamsSearch_ProjectsOnlyRetrievableFields(t *testing.T) {
+	for _, tier := range []string{"summary", "raw"} {
+		hits, _ := decodeTeamsSearchHits(t, runTeamsHandler(t, newTeamsSearchRecorder(), NewHandleTeamsSearch, map[string]any{
+			"query":  "release",
+			"output": tier,
+		}))
+		if hits[0]["bodyPreview"] != "the release checklist is ready" {
+			t.Errorf("%s preview = %v, want the hit summary", tier, hits[0]["bodyPreview"])
+		}
+		for _, absent := range []string{"body", "attachments", "attachmentCount", "mentions", "messageType", "lastEditedDateTime", "replyToId", "locale"} {
+			if _, present := hits[0][absent]; present {
+				t.Errorf("%s hit carries %q, which search never returns", tier, absent)
+			}
+		}
 	}
 }
 
@@ -335,7 +429,7 @@ func TestTeamsSearch_EmptyResponseIsAnEmptyList(t *testing.T) {
 		"output": "summary",
 	})
 
-	if got := resultText(t, result); got != "[]" {
-		t.Errorf("empty search result = %q, want []", got)
+	if got := resultText(t, result); got != `{"hits":[],"moreResultsAvailable":false}` {
+		t.Errorf("empty search result = %q, want an empty hits list", got)
 	}
 }

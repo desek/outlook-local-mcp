@@ -444,3 +444,67 @@ func TestGetSchedule_NoClientInContext(t *testing.T) {
 		t.Fatal("expected an error result when no client is in context")
 	}
 }
+
+// TestGetSchedule_SendsTimezonePreferHeader validates that the request asks
+// Graph for response times in the window's zone, read from the recorded header.
+func TestGetSchedule_SendsTimezonePreferHeader(t *testing.T) {
+	_, recorder := runGetSchedule(t, getScheduleResponseJSON, withScheduleWindow(map[string]any{
+		"schedules": "a@example.com",
+		"timezone":  "Europe/Stockholm",
+	}))
+	if want := `outlook.timezone="Europe/Stockholm"`; recorder.lastPrefer != want {
+		t.Errorf("Prefer header = %q, want %q", recorder.lastPrefer, want)
+	}
+
+	_, recorder = runGetSchedule(t, getScheduleResponseJSON, withScheduleWindow(map[string]any{
+		"schedules": "a@example.com",
+	}))
+	if want := `outlook.timezone="UTC"`; recorder.lastPrefer != want {
+		t.Errorf("default Prefer header = %q, want %q", recorder.lastPrefer, want)
+	}
+}
+
+// TestGetSchedule_RejectsInvalidWindowSpan validates that an inverted, empty,
+// or 62-day-or-longer window is refused before any request, naming the limit.
+func TestGetSchedule_RejectsInvalidWindowSpan(t *testing.T) {
+	cases := map[string][2]string{
+		"inverted": {"2026-03-13T00:00:00Z", "2026-03-12T00:00:00Z"},
+		"empty":    {"2026-03-12T00:00:00Z", "2026-03-12T00:00:00Z"},
+		"62 days":  {"2026-03-01T00:00:00Z", "2026-05-02T00:00:00Z"},
+	}
+	for name, window := range cases {
+		t.Run(name, func(t *testing.T) {
+			result, recorder := runGetSchedule(t, getScheduleResponseJSON, map[string]any{
+				"schedules":      "a@example.com",
+				"start_datetime": window[0],
+				"end_datetime":   window[1],
+			})
+			if !result.IsError {
+				t.Fatal("expected an error")
+			}
+			text := result.Content[0].(mcp.TextContent).Text
+			if !strings.Contains(text, "62 days") || !strings.Contains(text, "end_datetime") {
+				t.Errorf("error does not name the ceiling and the bounds: %s", text)
+			}
+			if got := recorder.calls.Load(); got != 0 {
+				t.Errorf("Graph calls = %d, want 0", got)
+			}
+		})
+	}
+}
+
+// TestGetSchedule_AcceptsWindowJustUnderCeiling validates that a window one
+// second shorter than 62 days still reaches Graph.
+func TestGetSchedule_AcceptsWindowJustUnderCeiling(t *testing.T) {
+	result, recorder := runGetSchedule(t, getScheduleResponseJSON, map[string]any{
+		"schedules":      "a@example.com",
+		"start_datetime": "2026-03-01T00:00:00Z",
+		"end_datetime":   "2026-05-01T23:59:59Z",
+	})
+	if result.IsError {
+		t.Fatalf("unexpected error: %s", result.Content[0].(mcp.TextContent).Text)
+	}
+	if got := recorder.calls.Load(); got != 1 {
+		t.Errorf("Graph calls = %d, want 1", got)
+	}
+}

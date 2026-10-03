@@ -28,6 +28,7 @@
 package tools
 
 import (
+	"strings"
 	"time"
 
 	"github.com/desek/outlook-local-mcp/internal/graph"
@@ -138,7 +139,7 @@ func SerializeSummaryChatMessage(msg models.ChatMessageable) map[string]any {
 		return map[string]any{}
 	}
 
-	return map[string]any{
+	result := map[string]any{
 		"id":              graph.SafeStr(msg.GetId()),
 		"chatId":          graph.SafeStr(msg.GetChatId()),
 		"from":            teamsSenderName(msg),
@@ -148,6 +149,36 @@ func SerializeSummaryChatMessage(msg models.ChatMessageable) map[string]any {
 		"messageType":     teamsEnumStr(msg.GetMessageType()),
 		"webUrl":          graph.SafeStr(msg.GetWebUrl()),
 	}
+	if event := chatSystemEventName(msg); event != "" {
+		// A system event has no sender and its body is the placeholder
+		// <systemEventMessage/>, so it is labelled by the event it records
+		// rather than shown as a blank message among real ones.
+		result["from"] = "(system event)"
+		result["bodyPreview"] = "System event: " + event
+		result["eventType"] = event
+	}
+	return result
+}
+
+// chatSystemEventName returns the event a system message records, named from
+// its eventDetail type with the namespace and the EventMessageDetail suffix
+// removed (for example "membersAdded"), or the empty string for an ordinary
+// message. A record is a system event when Graph types it systemEventMessage,
+// or when it carries an eventDetail, which is how the event still arrives when
+// the enum member was not requested and the type reads unknownFutureValue.
+func chatSystemEventName(msg models.ChatMessageable) string {
+	detail := msg.GetEventDetail()
+	isEvent := teamsEnumStr(msg.GetMessageType()) == "systemEventMessage"
+	if !isEvent && detail == nil {
+		return ""
+	}
+	name := "unknown"
+	if detail != nil {
+		if odataType := graph.SafeStr(detail.GetOdataType()); odataType != "" {
+			name = strings.TrimSuffix(strings.TrimPrefix(odataType, "#microsoft.graph."), "EventMessageDetail")
+		}
+	}
+	return name
 }
 
 // SerializeChatMessage projects a message in a chat onto the raw tier, carrying
@@ -408,17 +439,19 @@ const (
 )
 
 // SerializeTeamsSearchHit projects one ranked search hit onto the output tier.
-// The message inside the hit is projected by whichever of the chat and channel
-// serializers matches it, so a chat hit carries the chatId its reads are keyed
-// by and a channel hit carries the teamId and channelId theirs are, and the hit
-// itself contributes the rank, the service's highlighted snippet, and the source
-// label naming which of the two applies.
+// The field set is built from the properties the search service documents as
+// retrievable for a chatMessage hit, not from the chat and channel message
+// serializers: search omits the body, attachments, mentions, message type, edit
+// timestamp, reply link, and locale, so projecting them would emit fields that
+// are always empty. The service's own snippet (the hit summary) is the preview,
+// and the full body is read through the chat or channel message verbs keyed by
+// the identifiers this record carries.
 //
 // Parameters:
 //   - hit: one ranked hit; nil, or one whose resource is not a chat message,
 //     yields nil.
-//   - full: true for the raw tier, which carries the whole message body; false
-//     for the summary tier, which carries its preview.
+//   - full: true for the raw tier, which adds the sender address, importance,
+//     modification time, and hit identifier to the summary field set.
 //
 // Returns nil for a hit this domain cannot address, so a caller appends only the
 // hits a follow-up verb can act on. Only chatMessage results are requested, so a
@@ -434,31 +467,34 @@ func SerializeTeamsSearchHit(hit models.SearchHitable, full bool) map[string]any
 		return nil
 	}
 
-	source := teamsHitSourceChat
-	if teamID, _ := teamsChannelIdentity(msg); teamID != "" {
-		source = teamsHitSourceChannel
+	record := map[string]any{
+		"id":              graph.SafeStr(msg.GetId()),
+		"from":            teamsSenderName(msg),
+		"createdDateTime": teamsTimeStr(msg.GetCreatedDateTime()),
+		"bodyPreview":     TeamsPreview(graph.SafeStr(hit.GetSummary())),
+		"webUrl":          graph.SafeStr(msg.GetWebUrl()),
+		"rank":            graph.SafeInt32(hit.GetRank()),
 	}
 
-	record := teamsSearchHitMessage(msg, source, full)
-	record["source"] = source
-	record["rank"] = graph.SafeInt32(hit.GetRank())
-	record["hitSummary"] = graph.SafeStr(hit.GetSummary())
-	return record
-}
-
-// teamsSearchHitMessage projects the message inside a hit through the serializer
-// for the collection it came from, at the requested tier.
-func teamsSearchHitMessage(msg models.ChatMessageable, source string, full bool) map[string]any {
-	if source == teamsHitSourceChannel {
-		if full {
-			return SerializeChannelMessage(msg)
-		}
-		return SerializeSummaryChannelMessage(msg)
+	teamID, channelID := teamsChannelIdentity(msg)
+	if teamID != "" {
+		record["source"] = teamsHitSourceChannel
+		record["teamId"] = teamID
+		record["channelId"] = channelID
+		record["subject"] = graph.SafeStr(msg.GetSubject())
+	} else {
+		record["source"] = teamsHitSourceChat
+		record["chatId"] = graph.SafeStr(msg.GetChatId())
 	}
+
 	if full {
-		return SerializeChatMessage(msg)
+		record["hitId"] = graph.SafeStr(hit.GetHitId())
+		record["hitSummary"] = graph.SafeStr(hit.GetSummary())
+		record["fromAddress"] = teamsSenderAddress(msg)
+		record["importance"] = teamsEnumStr(msg.GetImportance())
+		record["lastModifiedDateTime"] = teamsTimeStr(msg.GetLastModifiedDateTime())
 	}
-	return SerializeSummaryChatMessage(msg)
+	return record
 }
 
 // teamsMessageRawCommon builds the raw-tier fields every Teams message shares,
@@ -520,9 +556,11 @@ func teamsChannelIdentity(msg models.ChatMessageable) (string, string) {
 }
 
 // teamsSenderName returns the display name of whoever sent a message. A Teams
-// message can be sent by a user, an application, or a device, and only the user
-// case has a name a reader recognises, so an application-sent message renders as
-// a stated absence rather than as a blank.
+// message read from a chat or channel names a user or an application sender,
+// but a search hit names its sender only as an email address pair, which the
+// SDK keeps in the identity set's additional data because it registers no
+// typed member for it. That pair is read last so a search hit is not blank;
+// its address stands in when the name is absent.
 func teamsSenderName(msg models.ChatMessageable) string {
 	from := msg.GetFrom()
 	if from == nil {
@@ -533,6 +571,36 @@ func teamsSenderName(msg models.ChatMessageable) string {
 	}
 	if app := from.GetApplication(); app != nil {
 		return graph.SafeStr(app.GetDisplayName())
+	}
+	if name := teamsSenderEmailField(msg, "name"); name != "" {
+		return name
+	}
+	return teamsSenderEmailField(msg, "address")
+}
+
+// teamsSenderAddress returns the sender's email address as a search hit
+// carries it, or the empty string for a message that names no address.
+func teamsSenderAddress(msg models.ChatMessageable) string {
+	return teamsSenderEmailField(msg, "address")
+}
+
+// teamsSenderEmailField reads one member of the untyped from.emailAddress
+// object a search hit carries. The deserializer stores it as a map of string
+// pointers, so both pointer and plain string values are accepted.
+func teamsSenderEmailField(msg models.ChatMessageable, field string) string {
+	from := msg.GetFrom()
+	if from == nil {
+		return ""
+	}
+	email, ok := from.GetAdditionalData()["emailAddress"].(map[string]any)
+	if !ok {
+		return ""
+	}
+	switch v := email[field].(type) {
+	case *string:
+		return graph.SafeStr(v)
+	case string:
+		return v
 	}
 	return ""
 }

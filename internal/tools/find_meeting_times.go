@@ -41,7 +41,7 @@ const defaultMeetingDurationISO = "PT30M"
 // on.
 const (
 	findMeetingTimesTimeoutFix = "narrow the search window with start_datetime and end_datetime, lower max_candidates, or shorten the attendees list, then retry"
-	findMeetingTimesGraphFix   = "check that every address in attendees is a mailbox this account may read availability for, then retry"
+	findMeetingTimesGraphFix   = "check that every address in attendees is a mailbox this account may read availability for, and that the account is a work or school account (personal Microsoft accounts are not supported), then retry"
 )
 
 // Candidate-count bounds for find_meeting_times. The default mirrors the
@@ -113,6 +113,11 @@ func NewHandleFindMeetingTimes(retryCfg graph.RetryConfig, timeout time.Duration
 		duration, err := serialization.ParseISODuration(durationParam)
 		if err != nil {
 			return mcp.NewToolResultError(fmt.Sprintf("meeting_duration %q is not an ISO 8601 duration: supply a value such as PT30M or PT1H30M", durationParam)), nil
+		}
+		// A zero duration parses but serializes as the bare token "P", which is
+		// not a valid Edm.Duration, so it is refused here rather than sent.
+		if d, convErr := duration.ToDuration(); convErr != nil || d <= 0 {
+			return mcp.NewToolResultError(fmt.Sprintf("meeting_duration %q must be longer than zero: supply a positive ISO 8601 duration such as PT30M, then verify the call returns suggestions", durationParam)), nil
 		}
 
 		timezone := request.GetString("timezone", "")

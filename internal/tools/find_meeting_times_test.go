@@ -63,11 +63,15 @@ const findMeetingTimesResponseJSON = `{
 type findMeetingTimesRecorder struct {
 	calls    atomic.Int32
 	lastBody string
-	response string
+	// lastPrefer is the Prefer header of the last request, recorded so a test
+	// asserts what Graph actually received.
+	lastPrefer string
+	response   string
 }
 
 func (r *findMeetingTimesRecorder) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	r.calls.Add(1)
+	r.lastPrefer = req.Header.Get("Prefer")
 	if body, err := io.ReadAll(req.Body); err == nil {
 		r.lastBody = string(body)
 	}
@@ -411,5 +415,65 @@ func TestFindMeetingTimes_FormatterDeterministic(t *testing.T) {
 		if resultText(t, first) != resultText(t, second) {
 			t.Errorf("output mode %q is not deterministic across identical responses", mode)
 		}
+	}
+}
+
+// TestFindMeetingTimes_RejectsZeroDuration validates that a zero duration is
+// refused before any request, because it would serialize as the invalid "P".
+func TestFindMeetingTimes_RejectsZeroDuration(t *testing.T) {
+	for _, value := range []string{"PT0M", "PT0S", "P0D"} {
+		t.Run(value, func(t *testing.T) {
+			result, recorder := runFindMeetingTimes(t, findMeetingTimesResponseJSON, map[string]any{
+				"attendees":        `[{"email":"a@example.com"}]`,
+				"meeting_duration": value,
+			})
+			if !result.IsError {
+				t.Fatal("expected an error for a zero duration")
+			}
+			text := result.Content[0].(mcp.TextContent).Text
+			if !strings.Contains(text, "meeting_duration") || !strings.Contains(text, "PT30M") {
+				t.Errorf("error does not name the parameter and an example: %s", text)
+			}
+			if got := recorder.calls.Load(); got != 0 {
+				t.Errorf("Graph calls = %d, want 0", got)
+			}
+		})
+	}
+}
+
+// TestFindMeetingTimes_GraphErrorNamesPersonalAccountCase validates that a
+// Graph refusal carries the fix text naming the personal-account limitation.
+//
+// Graph does not support findMeetingTimes for personal Microsoft accounts and
+// the server cannot know the account type before the call, so the only place
+// the caller learns the cause is the error returned here. The fake endpoint
+// answers with an OData error, which is what Graph returns in that case.
+func TestFindMeetingTimes_GraphErrorNamesPersonalAccountCase(t *testing.T) {
+	refusal := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		//nolint:errcheck // test helper
+		w.Write([]byte(`{"error":{"code":"ErrorInvalidRequest","message":"The request is not supported for this account type."}}`))
+	})
+	client, srv := newTestGraphClient(t, refusal)
+	defer srv.Close()
+
+	handler := NewHandleFindMeetingTimes(graph.RetryConfig{}, 30*time.Second, "UTC")
+	req := mcp.CallToolRequest{}
+	req.Params.Arguments = map[string]any{"attendees": `[{"email":"a@example.com"}]`}
+
+	result, err := handler(auth.WithGraphClient(context.Background(), client), req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.IsError {
+		t.Fatal("expected an error result for a Graph refusal")
+	}
+	text := resultText(t, result)
+	if !strings.Contains(text, "work or school account") {
+		t.Errorf("error does not name the required account type: %s", text)
+	}
+	if !strings.Contains(text, "personal Microsoft accounts are not supported") {
+		t.Errorf("error does not name the personal-account case: %s", text)
 	}
 }

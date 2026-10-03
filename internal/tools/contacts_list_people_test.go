@@ -123,3 +123,52 @@ func TestListPeople_NoAccountCarriesFix(t *testing.T) {
 		t.Errorf("result = %q, want the account correction", resultText(t, result))
 	}
 }
+
+// peopleNextPageJSON is a people page that reports a further page, so the
+// truncation marker path can be driven.
+const peopleNextPageJSON = `{"@odata.nextLink":"https://graph.microsoft.com/v1.0/me/people?$skip=10","value":[{"id":"p1","displayName":"Alex Ranked"}]}`
+
+// TestListPeople_SendsDefaultTop validates that an unparameterised call asks
+// for the documented default page explicitly and sends no skip.
+func TestListPeople_SendsDefaultTop(t *testing.T) {
+	_, recorder := runListPeople(t, peopleCollectionJSON, map[string]any{"output": "summary"})
+	q := recorder.queries[0]
+	if !strings.Contains(q, "%24top=10") || strings.Contains(q, "skip") {
+		t.Errorf("query = %q, want $top=10 and no $skip", q)
+	}
+}
+
+// TestListPeople_SendsLimitAndSkip validates that limit and skip reach Graph as
+// $top and $skip, and that limit is clamped to the ceiling.
+func TestListPeople_SendsLimitAndSkip(t *testing.T) {
+	_, recorder := runListPeople(t, peopleCollectionJSON, map[string]any{"limit": float64(500), "skip": float64(20)})
+	q := recorder.queries[0]
+	if !strings.Contains(q, "%24top=100") || !strings.Contains(q, "%24skip=20") {
+		t.Errorf("query = %q, want $top=100 and $skip=20", q)
+	}
+}
+
+// TestListPeople_MarksFurtherPage validates that a response with a next link
+// carries the more-results marker as a second block, leaving the JSON intact.
+func TestListPeople_MarksFurtherPage(t *testing.T) {
+	result, _ := runListPeople(t, peopleNextPageJSON, map[string]any{"output": "summary"})
+	if len(result.Content) != 2 {
+		t.Fatalf("content blocks = %d, want 2", len(result.Content))
+	}
+	var people []map[string]any
+	if err := json.Unmarshal([]byte(resultText(t, result)), &people); err != nil {
+		t.Fatalf("first block is not JSON: %v", err)
+	}
+	if marker := result.Content[1].(mcp.TextContent).Text; !strings.Contains(marker, "more results available") {
+		t.Errorf("marker = %q", marker)
+	}
+}
+
+// TestListPeople_NoMarkerOnLastPage validates that a page without a next link
+// carries no marker.
+func TestListPeople_NoMarkerOnLastPage(t *testing.T) {
+	result, _ := runListPeople(t, peopleCollectionJSON, nil)
+	if len(result.Content) != 1 {
+		t.Errorf("content blocks = %d, want 1", len(result.Content))
+	}
+}

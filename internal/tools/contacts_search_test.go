@@ -344,3 +344,49 @@ func TestContactsSearch_NoAccountCarriesFix(t *testing.T) {
 		t.Errorf("result = %q, want the account correction", resultText(t, result))
 	}
 }
+
+// contactsNextPageJSON is a saved-contacts page that reports a further page.
+const contactsNextPageJSON = `{"@odata.nextLink":"https://graph.microsoft.com/v1.0/me/contacts?$skip=25","value":[{"id":"c1","displayName":"Alex Saved"}]}`
+
+// TestContactsSearch_SendsTopOnBothHalves validates that both requests carry
+// the same bounded $top, defaulting when no limit is given and clamping above
+// the ceiling.
+func TestContactsSearch_SendsTopOnBothHalves(t *testing.T) {
+	for _, tc := range []struct {
+		args map[string]any
+		want string
+	}{
+		{map[string]any{"query": "Alex"}, "%24top=25"},
+		{map[string]any{"query": "Alex", "limit": float64(7)}, "%24top=7"},
+		{map[string]any{"query": "Alex", "limit": float64(999)}, "%24top=100"},
+	} {
+		_, recorder := runContactsSearch(t, newContactsSearchRecorder(), tc.args)
+		for i, q := range recorder.queries {
+			if !strings.Contains(q, tc.want) {
+				t.Errorf("args %v request %d query = %q, want %s", tc.args, i, q, tc.want)
+			}
+		}
+	}
+}
+
+// TestContactsSearch_MarksFurtherPage validates that a next link on either
+// half appends the more-results marker as a second block.
+func TestContactsSearch_MarksFurtherPage(t *testing.T) {
+	recorder := &contactsRecorder{contactsResponse: contactsNextPageJSON, peopleResponse: peopleCollectionJSON}
+	result, _ := runContactsSearch(t, recorder, map[string]any{"query": "Alex"})
+	if len(result.Content) != 2 {
+		t.Fatalf("content blocks = %d, want 2", len(result.Content))
+	}
+	if marker := result.Content[1].(mcp.TextContent).Text; !strings.Contains(marker, "more results available") {
+		t.Errorf("marker = %q", marker)
+	}
+}
+
+// TestContactsSearch_NoMarkerOnLastPage validates that pages without a next
+// link carry no marker.
+func TestContactsSearch_NoMarkerOnLastPage(t *testing.T) {
+	result, _ := runContactsSearch(t, newContactsSearchRecorder(), map[string]any{"query": "Alex"})
+	if len(result.Content) != 1 {
+		t.Errorf("content blocks = %d, want 1", len(result.Content))
+	}
+}

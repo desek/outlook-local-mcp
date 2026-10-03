@@ -97,13 +97,19 @@ func NewHandleListTranscripts(retryCfg graph.RetryConfig, timeout time.Duration)
 				return mcp.NewToolResultError(fmt.Sprintf("%s: %s",
 					graph.TimeoutErrorMessage(int(timeout.Seconds())), listTranscriptsTimeoutFix)), nil
 			}
+			// A tenant that turned off transcript API access cannot be
+			// recovered by consent or retry, so it gets its own correction.
+			fix := listTranscriptsGraphFix
+			if transcriptInnerErrorCode(graphErr) == innerCodeGraphAccessToTranscriptsDisabled {
+				fix = transcriptAccessDisabledFix
+			}
 			logger.Error("graph API call failed",
 				"endpoint", listTranscriptsEndpoint,
 				"error", graph.FormatGraphError(graphErr),
-				"fix", listTranscriptsGraphFix,
+				"fix", fix,
 				"duration", time.Since(start))
 			return mcp.NewToolResultError(fmt.Sprintf("%s: %s",
-				graph.RedactGraphError(graphErr), listTranscriptsGraphFix)), nil
+				graph.RedactGraphError(graphErr), fix)), nil
 		}
 
 		transcripts := serializeTranscriptCollection(resp, outputMode)

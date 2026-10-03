@@ -177,3 +177,24 @@ func TestListChannelMessages_GraphFailureCarriesFix(t *testing.T) {
 		t.Errorf("failure carries no correction naming the scope: %q", resultText(t, result))
 	}
 }
+
+// TestListChannelMessages_SendsTopOnly validates the recorded query: the page
+// is bounded and no ordering is sent, since the collection documents none.
+func TestListChannelMessages_SendsTopOnly(t *testing.T) {
+	_, q, _ := runTeamsQueryHandler(t, teamsChannelMessagesJSON, NewHandleListChannelMessages, map[string]any{"team_id": "t1", "channel_id": "c1", "max_results": float64(99)})
+	if got := q.Get("$top"); got != "50" {
+		t.Errorf("$top = %q, want the clamp to 50", got)
+	}
+	if q.Has("$orderby") {
+		t.Errorf("$orderby sent: %q", q.Get("$orderby"))
+	}
+}
+
+// TestListChannelMessages_MarksTruncatedPage validates that a next link stops
+// the text tier from presenting the page as the channel total.
+func TestListChannelMessages_MarksTruncatedPage(t *testing.T) {
+	result, _, _ := runTeamsQueryHandler(t, withNextLink(teamsChannelMessagesJSON), NewHandleListChannelMessages, map[string]any{"team_id": "t1", "channel_id": "c1", "output": "text"})
+	if got := resultText(t, result); strings.Contains(got, "total.") || !strings.Contains(got, "truncated: true") {
+		t.Errorf("text = %q", got)
+	}
+}

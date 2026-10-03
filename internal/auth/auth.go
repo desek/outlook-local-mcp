@@ -21,6 +21,19 @@ import (
 // to obtain a refresh token.
 const calendarScope = "Calendars.ReadWrite"
 
+// calendarSharedScope is the least-privileged delegated scope the Graph
+// findMeetingTimes contract lists for work or school accounts. Calendars.ReadWrite
+// does not appear in that contract, so without this scope the endpoint is
+// documented to answer 403. It is a read scope and is always requested because
+// the calendar domain, and with it find_meeting_times, is always registered.
+const calendarSharedScope = "Calendars.Read.Shared"
+
+// userReadScope is the delegated scope the Graph GET /me contract lists. The
+// account email resolver depends on that call; MSAL adds only openid, profile
+// and offline_access, so without this scope the email can resolve only when the
+// client id happens to be pre-authorized for a User scope.
+const userReadScope = "User.Read"
+
 // mailScope is the OAuth scope requested for read-only Microsoft Graph mail
 // operations. It is only included when MailEnabled is true in the config and
 // MailManageEnabled is false.
@@ -75,7 +88,8 @@ const onlineMeetingsReadScope = "OnlineMeetings.Read"
 const onlineMeetingTranscriptReadScope = "OnlineMeetingTranscript.Read.All"
 
 // Scopes returns the OAuth scope slice based on the application configuration.
-// The calendar scope is always included. Mail scopes are selected according to
+// The calendar scope, calendarSharedScope ("Calendars.Read.Shared") and
+// userReadScope ("User.Read") are always included, in that order. Mail scopes are selected according to
 // configuration:
 //
 //   - When cfg.MailManageEnabled is true, mailReadWriteScope ("Mail.ReadWrite")
@@ -118,7 +132,7 @@ const onlineMeetingTranscriptReadScope = "OnlineMeetingTranscript.Read.All"
 // Returns the slice of OAuth scopes to request during authentication and
 // Graph client initialization.
 func Scopes(cfg config.Config) []string {
-	scopes := []string{calendarScope}
+	scopes := []string{calendarScope, calendarSharedScope, userReadScope}
 	switch {
 	case cfg.MailManageEnabled:
 		scopes = append(scopes, mailReadWriteScope)

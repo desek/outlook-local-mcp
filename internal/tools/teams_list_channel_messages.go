@@ -23,6 +23,7 @@ import (
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
+	msteams "github.com/microsoftgraph/msgraph-sdk-go/teams"
 )
 
 // Corrections appended to this verb's refusals. The two identifiers are named
@@ -44,7 +45,9 @@ const listChannelMessagesEndpoint = "GET /teams/{team-id}/channels/{channel-id}/
 // NewHandleListChannelMessages creates the handler for the teams
 // list_channel_messages verb. It reads
 // GET /teams/{team-id}/channels/{channel-id}/messages and returns the top-level
-// posts in the order Graph returned them.
+// posts in the order Graph returned them, which is by the last modification of
+// each whole reply chain. No $orderby is sent because the collection documents
+// none.
 //
 // Parameters:
 //   - retryCfg: retry configuration for transient Graph API errors.
@@ -54,8 +57,10 @@ const listChannelMessagesEndpoint = "GET /teams/{team-id}/channels/{channel-id}/
 // method.
 //
 // Both identifiers are validated before any request is issued, so a malformed
-// one costs no Graph call, and exactly one request is issued on the success path
-// without following the collection's next link.
+// one costs no Graph call, and exactly one request of at most max_results posts
+// (1 to 50; the service default is 20) is issued on the success path without
+// following the collection's next link. When Graph signals more pages the
+// result says so, because older threads are then reachable only through search.
 func NewHandleListChannelMessages(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := logging.Logger(ctx)
@@ -94,7 +99,7 @@ func NewHandleListChannelMessages(retryCfg graph.RetryConfig, timeout time.Durat
 		var resp models.ChatMessageCollectionResponseable
 		graphErr := graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
-			resp, callErr = client.Teams().ByTeamId(teamID).Channels().ByChannelId(channelID).Messages().Get(timeoutCtx, nil)
+			resp, callErr = client.Teams().ByTeamId(teamID).Channels().ByChannelId(channelID).Messages().Get(timeoutCtx, listChannelMessagesRequestConfig(teamsPageSize(request)))
 			return callErr
 		})
 		if graphErr != nil {
@@ -122,9 +127,11 @@ func NewHandleListChannelMessages(retryCfg graph.RetryConfig, timeout time.Durat
 			"endpoint", listChannelMessagesEndpoint,
 			"count", len(messages))
 
+		more := resp != nil && resp.GetOdataNextLink() != nil
+
 		if outputMode == "text" {
-			logger.Info("tool completed", "duration", time.Since(start), "count", len(messages))
-			return mcp.NewToolResultText(FormatTeamsMessagesText(messages)), nil
+			logger.Info("tool completed", "duration", time.Since(start), "count", len(messages), "truncated", more)
+			return mcp.NewToolResultText(teamsPagedText(FormatTeamsMessagesText(messages), "channel posts", len(messages), more)), nil
 		}
 
 		jsonBytes, err := json.Marshal(messages)
@@ -135,8 +142,16 @@ func NewHandleListChannelMessages(retryCfg graph.RetryConfig, timeout time.Durat
 			return mcp.NewToolResultError(fmt.Sprintf("failed to serialize messages: %s", err.Error())), nil
 		}
 
-		logger.Info("tool completed", "duration", time.Since(start), "count", len(messages))
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		logger.Info("tool completed", "duration", time.Since(start), "count", len(messages), "truncated", more)
+		return teamsPagedJSON(string(jsonBytes), "channel posts", len(messages), more), nil
+	}
+}
+
+// listChannelMessagesRequestConfig builds the query for one page of channel
+// posts; only the page size is set, since the collection supports no ordering.
+func listChannelMessagesRequestConfig(top int32) *msteams.ItemChannelsItemMessagesRequestBuilderGetRequestConfiguration {
+	return &msteams.ItemChannelsItemMessagesRequestBuilderGetRequestConfiguration{
+		QueryParameters: &msteams.ItemChannelsItemMessagesRequestBuilderGetQueryParameters{Top: &top},
 	}
 }
 

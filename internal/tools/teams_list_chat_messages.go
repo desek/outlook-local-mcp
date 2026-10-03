@@ -22,7 +22,9 @@ import (
 	"github.com/desek/outlook-local-mcp/internal/logging"
 	"github.com/desek/outlook-local-mcp/internal/validate"
 	"github.com/mark3labs/mcp-go/mcp"
+	abstractions "github.com/microsoft/kiota-abstractions-go"
 	"github.com/microsoftgraph/msgraph-sdk-go/models"
+	"github.com/microsoftgraph/msgraph-sdk-go/users"
 )
 
 // Corrections appended to this verb's refusals. The identifier correction names
@@ -37,8 +39,10 @@ const (
 )
 
 // NewHandleListChatMessages creates the handler for the teams
-// list_chat_messages verb. It reads GET /me/chats/{chat-id}/messages and returns
-// the messages in the order Graph returned them.
+// list_chat_messages verb. It reads GET /me/chats/{chat-id}/messages newest
+// created first. The ordering is requested explicitly because the service
+// default is lastModifiedDateTime, which moves an old message to the top when
+// someone reacts to it.
 //
 // Parameters:
 //   - retryCfg: retry configuration for transient Graph API errors.
@@ -48,8 +52,13 @@ const (
 // method.
 //
 // The handler validates chat_id before issuing any request, so a malformed
-// identifier costs no Graph call, and issues exactly one request on the success
-// path without following the collection's next link.
+// identifier costs no Graph call, and issues exactly one request of at most
+// max_results messages (1 to 50) on the success path without following the
+// collection's next link; when Graph signals more pages, the result says so.
+//
+// The request carries Prefer: include-unknown-enum-members, because without it
+// Graph reports a system event (a member added, a topic renamed) as
+// unknownFutureValue with no sender, and it would read as a blank message.
 func NewHandleListChatMessages(retryCfg graph.RetryConfig, timeout time.Duration) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		logger := logging.Logger(ctx)
@@ -82,7 +91,7 @@ func NewHandleListChatMessages(retryCfg graph.RetryConfig, timeout time.Duration
 		var resp models.ChatMessageCollectionResponseable
 		graphErr := graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
-			resp, callErr = client.Me().Chats().ByChatId(chatID).Messages().Get(timeoutCtx, nil)
+			resp, callErr = client.Me().Chats().ByChatId(chatID).Messages().Get(timeoutCtx, listChatMessagesRequestConfig(teamsPageSize(request)))
 			return callErr
 		})
 		if graphErr != nil {
@@ -110,9 +119,11 @@ func NewHandleListChatMessages(retryCfg graph.RetryConfig, timeout time.Duration
 			"endpoint", "GET /me/chats/{chat-id}/messages",
 			"count", len(messages))
 
+		more := resp != nil && resp.GetOdataNextLink() != nil
+
 		if outputMode == "text" {
-			logger.Info("tool completed", "duration", time.Since(start), "count", len(messages))
-			return mcp.NewToolResultText(FormatTeamsMessagesText(messages)), nil
+			logger.Info("tool completed", "duration", time.Since(start), "count", len(messages), "truncated", more)
+			return mcp.NewToolResultText(teamsPagedText(FormatTeamsMessagesText(messages), "messages", len(messages), more)), nil
 		}
 
 		jsonBytes, err := json.Marshal(messages)
@@ -123,8 +134,24 @@ func NewHandleListChatMessages(retryCfg graph.RetryConfig, timeout time.Duration
 			return mcp.NewToolResultError(fmt.Sprintf("failed to serialize messages: %s", err.Error())), nil
 		}
 
-		logger.Info("tool completed", "duration", time.Since(start), "count", len(messages))
-		return mcp.NewToolResultText(string(jsonBytes)), nil
+		logger.Info("tool completed", "duration", time.Since(start), "count", len(messages), "truncated", more)
+		return teamsPagedJSON(string(jsonBytes), "messages", len(messages), more), nil
+	}
+}
+
+// listChatMessagesRequestConfig builds the query for one page of a chat's
+// messages: the page size, the creation-time ordering, and the Prefer header
+// that makes Graph name system events instead of hiding them behind
+// unknownFutureValue.
+func listChatMessagesRequestConfig(top int32) *users.ItemChatsItemMessagesRequestBuilderGetRequestConfiguration {
+	headers := abstractions.NewRequestHeaders()
+	headers.Add("Prefer", "include-unknown-enum-members")
+	return &users.ItemChatsItemMessagesRequestBuilderGetRequestConfiguration{
+		Headers: headers,
+		QueryParameters: &users.ItemChatsItemMessagesRequestBuilderGetQueryParameters{
+			Orderby: []string{"createdDateTime desc"},
+			Top:     &top,
+		},
 	}
 }
 

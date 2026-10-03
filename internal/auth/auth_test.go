@@ -547,11 +547,14 @@ func TestScopes_CalendarOnly(t *testing.T) {
 	cfg := config.Config{MailEnabled: false}
 	scopes := Scopes(cfg)
 
-	if len(scopes) != 1 {
-		t.Fatalf("Scopes() returned %d scopes, want 1", len(scopes))
+	want := []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read"}
+	if len(scopes) != len(want) {
+		t.Fatalf("Scopes() = %v, want %v", scopes, want)
 	}
-	if scopes[0] != "Calendars.ReadWrite" {
-		t.Errorf("Scopes()[0] = %q, want %q", scopes[0], "Calendars.ReadWrite")
+	for i, w := range want {
+		if scopes[i] != w {
+			t.Errorf("Scopes()[%d] = %q, want %q", i, scopes[i], w)
+		}
 	}
 }
 
@@ -561,14 +564,14 @@ func TestScopes_WithMail(t *testing.T) {
 	cfg := config.Config{MailEnabled: true}
 	scopes := Scopes(cfg)
 
-	if len(scopes) != 2 {
-		t.Fatalf("Scopes() returned %d scopes, want 2", len(scopes))
+	want := []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.Read"}
+	if len(scopes) != len(want) {
+		t.Fatalf("Scopes() = %v, want %v", scopes, want)
 	}
-	if scopes[0] != "Calendars.ReadWrite" {
-		t.Errorf("Scopes()[0] = %q, want %q", scopes[0], "Calendars.ReadWrite")
-	}
-	if scopes[1] != "Mail.Read" {
-		t.Errorf("Scopes()[1] = %q, want %q", scopes[1], "Mail.Read")
+	for i, w := range want {
+		if scopes[i] != w {
+			t.Errorf("Scopes()[%d] = %q, want %q", i, scopes[i], w)
+		}
 	}
 }
 
@@ -578,14 +581,14 @@ func TestScopes_MailManage(t *testing.T) {
 	cfg := config.Config{MailEnabled: true, MailManageEnabled: true}
 	scopes := Scopes(cfg)
 
-	if len(scopes) != 2 {
-		t.Fatalf("Scopes() returned %d scopes, want 2", len(scopes))
+	want := []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.ReadWrite"}
+	if len(scopes) != len(want) {
+		t.Fatalf("Scopes() = %v, want %v", scopes, want)
 	}
-	if scopes[0] != "Calendars.ReadWrite" {
-		t.Errorf("Scopes()[0] = %q, want %q", scopes[0], "Calendars.ReadWrite")
-	}
-	if scopes[1] != "Mail.ReadWrite" {
-		t.Errorf("Scopes()[1] = %q, want %q", scopes[1], "Mail.ReadWrite")
+	for i, w := range want {
+		if scopes[i] != w {
+			t.Errorf("Scopes()[%d] = %q, want %q", i, scopes[i], w)
+		}
 	}
 	for _, s := range scopes {
 		if s == "Mail.Read" {
@@ -649,17 +652,17 @@ func TestScopes_Contacts(t *testing.T) {
 		{
 			name: "contacts alone",
 			cfg:  config.Config{ContactsEnabled: true},
-			want: []string{"Calendars.ReadWrite", "Contacts.Read", "People.Read"},
+			want: []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Contacts.Read", "People.Read"},
 		},
 		{
 			name: "contacts with mail read",
 			cfg:  config.Config{MailEnabled: true, ContactsEnabled: true},
-			want: []string{"Calendars.ReadWrite", "Mail.Read", "Contacts.Read", "People.Read"},
+			want: []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.Read", "Contacts.Read", "People.Read"},
 		},
 		{
 			name: "contacts with mail manage",
 			cfg:  config.Config{MailEnabled: true, MailManageEnabled: true, ContactsEnabled: true},
-			want: []string{"Calendars.ReadWrite", "Mail.ReadWrite", "Contacts.Read", "People.Read"},
+			want: []string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.ReadWrite", "Contacts.Read", "People.Read"},
 		},
 	}
 	for _, tc := range cases {
@@ -730,22 +733,22 @@ func TestScopes_TeamsEnabled(t *testing.T) {
 		{
 			name: "teams alone",
 			cfg:  config.Config{TeamsEnabled: true},
-			want: append([]string{"Calendars.ReadWrite"}, teams...),
+			want: append([]string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read"}, teams...),
 		},
 		{
 			name: "teams with mail read",
 			cfg:  config.Config{MailEnabled: true, TeamsEnabled: true},
-			want: append([]string{"Calendars.ReadWrite", "Mail.Read"}, teams...),
+			want: append([]string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.Read"}, teams...),
 		},
 		{
 			name: "teams with mail manage",
 			cfg:  config.Config{MailEnabled: true, MailManageEnabled: true, TeamsEnabled: true},
-			want: append([]string{"Calendars.ReadWrite", "Mail.ReadWrite"}, teams...),
+			want: append([]string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Mail.ReadWrite"}, teams...),
 		},
 		{
 			name: "teams with contacts",
 			cfg:  config.Config{ContactsEnabled: true, TeamsEnabled: true},
-			want: append([]string{"Calendars.ReadWrite", "Contacts.Read", "People.Read"}, teams...),
+			want: append([]string{"Calendars.ReadWrite", "Calendars.Read.Shared", "User.Read", "Contacts.Read", "People.Read"}, teams...),
 		},
 	}
 	for _, tc := range cases {

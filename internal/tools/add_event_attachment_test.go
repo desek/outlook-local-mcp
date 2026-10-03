@@ -168,7 +168,9 @@ func TestAddEventAttachment_DirectUploadPath(t *testing.T) {
 // direct POST and no further metadata request beyond the subject fetch.
 func TestAddEventAttachment_UploadSessionPath(t *testing.T) {
 	const size = uploadChunkSizeBytes + inlineAttachmentThresholdBytes
-	up := &uploadServer{locationID: "att-large"}
+	// The documented event completion names the attachment as a key segment
+	// under the event, so the confirmation must report the quoted identifier.
+	up := &uploadServer{location: "https://outlook.office.com/api/v2.0/Users('u-1')/Events('evt-1')/Attachments('att-large')"}
 	rec := &eventAttachmentRecorder{subject: "Board meeting", upload: up}
 	ctx, handler := newAddEventAttachmentFixture(t, rec, 0)
 
@@ -351,5 +353,31 @@ func TestAddEventAttachment_UploadURLNeverEscapes(t *testing.T) {
 	}
 	if !strings.Contains(resultText(t, result), addEventAttachmentUploadFix) {
 		t.Errorf("the failure carries no fix instruction: %s", resultText(t, result))
+	}
+}
+
+// TestAddEventAttachment_RefusesAboveServiceCeiling verifies a payload above
+// the documented 150 MB upload limit is refused before any Graph request even
+// when the configured bound is unlimited.
+func TestAddEventAttachment_RefusesAboveServiceCeiling(t *testing.T) {
+	if testing.Short() {
+		t.Skip("allocates a payload above the service ceiling")
+	}
+	rec := &eventAttachmentRecorder{subject: "Notes", returnsID: "att-1"}
+	ctx, handler := newAddEventAttachmentFixture(t, rec, 0)
+
+	result := callAddEventAttachment(t, ctx, handler, map[string]any{
+		"event_id":      "evt-1",
+		"name":          "huge.bin",
+		"content_bytes": base64.StdEncoding.EncodeToString(make([]byte, graphAttachmentCeilingBytes+1)),
+	})
+	if !result.IsError {
+		t.Fatal("expected a refusal above the service ceiling")
+	}
+	if text := resultText(t, result); !strings.Contains(text, "150 MB") {
+		t.Errorf("error does not name the documented limit: %s", text)
+	}
+	if rec.gets != 0 || rec.posts != 0 {
+		t.Errorf("expected no Graph request, got %d GET and %d POST", rec.gets, rec.posts)
 	}
 }

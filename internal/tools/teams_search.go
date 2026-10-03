@@ -21,6 +21,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -38,7 +39,19 @@ const (
 	teamsSearchAccountFix = "no account is selected: run the account domain's list operation and retry naming one with the account parameter"
 	teamsSearchQueryFix   = "query is required: supply the words to search Teams messages for, such as \"release checklist\""
 	teamsSearchTimeoutFix = "retry with a narrower query, since a short common term matches a large part of the message store"
+	teamsSearchSizeFix    = "max_results must be a whole number from 1 to 500, the page size the search service accepts; omit it for the default of 25, then verify the reply lists at most that many hits"
+	teamsSearchFromFix    = "from must be a whole number of 0 or more, the count of hits to skip; pass the previous from plus the previous max_results to read the next page, then verify the hits differ from the previous page"
 	teamsSearchGraphFix   = "check that consent was granted after OUTLOOK_MCP_TEAMS_ENABLED was set, so Chat.Read and ChannelMessage.Read.All were requested, then retry; see docs/troubleshooting.md#authentication-failures"
+)
+
+// Paging bounds for one search request. The service skips from hits and
+// returns at most size. The default page is the service default. The ceiling
+// is the smaller of the two documented maxima (the search-query page states
+// 500, the overview page 1000), so a request the stricter page allows is
+// never refused by the service.
+const (
+	teamsSearchDefaultSize = 25
+	teamsSearchMaxSize     = 500
 )
 
 // teamsSearchEndpoint names the endpoint in log records and error messages. It
@@ -82,7 +95,13 @@ func NewHandleTeamsSearch(retryCfg graph.RetryConfig, timeout time.Duration) fun
 			return mcp.NewToolResultError(teamsSearchQueryFix), nil
 		}
 
-		logger.Debug("tool called", "query", query)
+		size, from, pageFix := teamsSearchPaging(request)
+		if pageFix != "" {
+			logger.Error("paging rejected", "fix", pageFix)
+			return mcp.NewToolResultError(pageFix), nil
+		}
+
+		logger.Debug("tool called", "query", query, "size", size, "from", from)
 
 		timeoutCtx, cancel := graph.WithTimeout(ctx, timeout)
 		defer cancel()
@@ -92,7 +111,7 @@ func NewHandleTeamsSearch(retryCfg graph.RetryConfig, timeout time.Duration) fun
 		var resp search.QueryPostResponseable
 		graphErr := graph.RetryGraphCall(ctx, retryCfg, func() error {
 			var callErr error
-			resp, callErr = client.Search().Query().PostAsQueryPostResponse(timeoutCtx, buildTeamsSearchBody(query), nil)
+			resp, callErr = client.Search().Query().PostAsQueryPostResponse(timeoutCtx, buildTeamsSearchBody(query, size, from), nil)
 			return callErr
 		})
 		if graphErr != nil {
@@ -114,16 +133,16 @@ func NewHandleTeamsSearch(retryCfg graph.RetryConfig, timeout time.Duration) fun
 				graph.RedactGraphError(graphErr), teamsSearchGraphFix)), nil
 		}
 
-		hits := collectTeamsSearchHits(resp, outputMode)
+		hits, more := collectTeamsSearchHits(resp, outputMode)
 
 		logger.Debug("graph API response", "endpoint", teamsSearchEndpoint, "count", len(hits))
 
 		if outputMode == "text" {
 			logger.Info("tool completed", "duration", time.Since(start), "count", len(hits))
-			return mcp.NewToolResultText(FormatTeamsSearchHitsText(hits)), nil
+			return mcp.NewToolResultText(teamsSearchText(hits, more, from, size)), nil
 		}
 
-		jsonBytes, err := json.Marshal(hits)
+		jsonBytes, err := json.Marshal(map[string]any{"hits": hits, "moreResultsAvailable": more})
 		if err != nil {
 			logger.Error("json serialization failed",
 				"error", err.Error(),
@@ -144,15 +163,19 @@ func NewHandleTeamsSearch(retryCfg graph.RetryConfig, timeout time.Duration) fun
 //
 // Parameters:
 //   - query: the already-trimmed, non-empty query string.
+//   - size: the page size, already validated against the service bounds.
+//   - from: the zero-based count of hits to skip.
 //
 // Returns the request body carrying exactly one search request.
-func buildTeamsSearchBody(query string) search.QueryPostRequestBodyable {
+func buildTeamsSearchBody(query string, size, from int32) search.QueryPostRequestBodyable {
 	searchQuery := models.NewSearchQuery()
 	searchQuery.SetQueryString(&query)
 
 	searchRequest := models.NewSearchRequest()
 	searchRequest.SetEntityTypes([]models.EntityType{models.CHATMESSAGE_ENTITYTYPE})
 	searchRequest.SetQuery(searchQuery)
+	searchRequest.SetSize(&size)
+	searchRequest.SetFrom(&from)
 
 	body := search.NewQueryPostRequestBody()
 	body.SetRequests([]models.SearchRequestable{searchRequest})
@@ -169,13 +192,15 @@ func buildTeamsSearchBody(query string) search.QueryPostRequestBodyable {
 //   - resp: the search response, which may be nil when Graph returned no body.
 //   - outputMode: the resolved output tier.
 //
-// Returns one serialized hit per addressable result, in the order received.
-// A hit whose resource is not a Teams message is skipped rather than returned
-// as a record no follow-up verb can act on.
-func collectTeamsSearchHits(resp search.QueryPostResponseable, outputMode string) []map[string]any {
+// Returns one serialized hit per addressable result, in the order received,
+// and whether any container reported more results beyond this page. A hit
+// whose resource is not a Teams message is skipped rather than returned as a
+// record no follow-up verb can act on.
+func collectTeamsSearchHits(resp search.QueryPostResponseable, outputMode string) ([]map[string]any, bool) {
 	hits := []map[string]any{}
+	more := false
 	if resp == nil {
-		return hits
+		return hits, more
 	}
 
 	for _, response := range resp.GetValue() {
@@ -186,6 +211,9 @@ func collectTeamsSearchHits(resp search.QueryPostResponseable, outputMode string
 			if container == nil {
 				continue
 			}
+			if graph.SafeBool(container.GetMoreResultsAvailable()) {
+				more = true
+			}
 			for _, hit := range container.GetHits() {
 				if record := SerializeTeamsSearchHit(hit, outputMode == "raw"); record != nil {
 					hits = append(hits, record)
@@ -194,5 +222,34 @@ func collectTeamsSearchHits(resp search.QueryPostResponseable, outputMode string
 		}
 	}
 
-	return hits
+	return hits, more
+}
+
+// teamsSearchPaging reads and bounds the page size and offset. Arguments arrive
+// as JSON numbers, so a fractional value is refused rather than truncated into
+// a page the caller did not ask for.
+//
+// Returns the size, the offset, and an empty string, or a fix instruction when
+// either argument is out of bounds.
+func teamsSearchPaging(request mcp.CallToolRequest) (int32, int32, string) {
+	size := request.GetFloat("max_results", teamsSearchDefaultSize)
+	if size < 1 || size > teamsSearchMaxSize || size != float64(int32(size)) {
+		return 0, 0, teamsSearchSizeFix
+	}
+	from := request.GetFloat("from", 0)
+	if from < 0 || from > math.MaxInt32 || from != float64(int32(from)) {
+		return 0, 0, teamsSearchFromFix
+	}
+	return int32(size), int32(from), ""
+}
+
+// teamsSearchText renders the text tier and, when the service reported more
+// hits beyond this page, closes with the offset that reads the next one, so a
+// caller is not left believing a truncated page is the whole result.
+func teamsSearchText(hits []map[string]any, more bool, from, size int32) string {
+	text := FormatTeamsSearchHitsText(hits)
+	if more {
+		text += fmt.Sprintf("\nMore results available: retry with from=%d.", from+size)
+	}
+	return text
 }

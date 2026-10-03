@@ -133,3 +133,23 @@ func TestListTranscripts_TextModeStatesWhyAMeetingListsNone(t *testing.T) {
 		t.Errorf("result = %q, want it to state why a meeting lists no transcripts", resultText(t, result))
 	}
 }
+
+// TestListTranscripts_AccessDisabledSaysRetryCannotWork validates that a tenant
+// that turned off transcript API access gets a correction naming the tenant
+// policy and stating that a retry cannot work, instead of the consent fix.
+func TestListTranscripts_AccessDisabledSaysRetryCannotWork(t *testing.T) {
+	server := &transcriptInnerErrorServer{refuse: map[string]string{"list": "GraphAccessToTranscriptsDisabled"}}
+	result := runTranscriptServerHandler(t, server, NewHandleListTranscripts, map[string]any{"meeting_id": "meeting-1"})
+	if !result.IsError {
+		t.Fatalf("expected a failure, got %q", resultText(t, result))
+	}
+	text := resultText(t, result)
+	for _, want := range []string{"Set-CsTeamsMeetingConfiguration", "no retry"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("failure = %q, want it to contain %q", text, want)
+		}
+	}
+	if strings.Contains(text, "then retry") {
+		t.Errorf("failure = %q, want no retry advice", text)
+	}
+}
