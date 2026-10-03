@@ -3,3 +3,7 @@
 # are the verbatim sha256sum lines "<hex>  outlook-local-mcp-<os>-<arch>" of that release.
 # The launcher verifies a download against the block of its own version. When that
 # block is absent, it uses the checksums.txt of the GitHub release.
+# v1.0.0-rc.2
+da924fe338c309c6410a99b06d2d26e38c28b72dc2fc00308a337d0eeacb7dcb  outlook-local-mcp-darwin-arm64
+3c9a9c703aacb1e55c529d3eb08f1e32974cad9a48d061e2d836456400bae7af  outlook-local-mcp-linux-amd64
+608f54c172eb83049e393f5cb57005d8466b384ef7c17e0401f6e2d1391ca70b  outlook-local-mcp-windows-amd64.exe
