@@ -19,6 +19,14 @@ The launcher `scripts/outlook-local-mcp.sh` runs on the first start of each plug
 
 The launcher sends no other data. The server itself talks only to Microsoft identity and Microsoft Graph.
 
+## Example prompts
+
+Each prompt works once the server is signed in. The first needs no opt-in flag; the second needs `mail_manage_enabled`; the third needs `contacts_enabled` and `teams_enabled`.
+
+1. "Find a 30-minute slot next week that works for alex@contoso.com and me, then book it as 'Roadmap sync'."
+2. "Move the newest message from Finance in my Inbox to the Receipts folder, flag it for follow-up, and mark it read."
+3. "Look up Priya in my contacts, then summarise the last Teams chat I had with her and draft a reply I can paste."
+
 ## Local binary override
 
 Set `OUTLOOK_MCP_PLUGIN_BIN` to the path of an outlook-local-mcp binary to run that binary. The override bypasses the download and the digest verification. Use it only with a binary that you built or verified.
